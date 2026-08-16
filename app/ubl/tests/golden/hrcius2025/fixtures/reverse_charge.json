@@ -1,0 +1,35 @@
+{
+  "document_number": "RC-2026-001",
+  "issue_date": "2026-05-15",
+  "supplier": {
+    "name": "Dobavljač d.o.o.",
+    "oib": "36619131370",
+    "address": {"street": "Ulica 1", "city": "Zagreb", "postal_zone": "10000"}
+  },
+  "customer": {
+    "name": "Kupac d.o.o.",
+    "oib": "11111111119",
+    "address": {"street": "Ulica 2", "city": "Zagreb", "postal_zone": "10000"}
+  },
+  "lines": [
+    {
+      "line_id": "1",
+      "quantity": "1",
+      "line_extension_amount": "1000.00",
+      "item_name": "Građevinske usluge",
+      "tax_category": "AE",
+      "tax_name": "HR:PP",
+      "tax_percent": "0",
+      "unit_price": "1000.00"
+    }
+  ],
+  "tax_subtotals": [
+    {"taxable_amount": "1000.00", "tax_amount": "0.00", "category_id": "AE", "percent": "0"}
+  ],
+  "totals": {
+    "line_extension_amount": "1000.00",
+    "tax_exclusive_amount": "1000.00",
+    "tax_inclusive_amount": "1000.00",
+    "payable_amount": "1000.00"
+  }
+}

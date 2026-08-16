@@ -1,0 +1,9 @@
+{
+  "fields": {
+    "101": "15000.00",
+    "103": "0.00"
+  },
+  "must_match_zp_totals": true,
+  "active_version": 2,
+  "note": "Nakon ispravka — ZP v2 i PDV moraju oba pokazati 15000 na 101"
+}

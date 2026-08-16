@@ -1,0 +1,76 @@
+{% extends "admin/change_form.html" %}
+{% block after_related_objects %}
+{{ block.super }}
+{% if pdv_integrity %}
+<div class="module" style="margin-top: 1rem;">
+  <h2>Integritet PDV drafta (v{{ original.version }})</h2>
+  <p>
+    Payload:
+    {% if pdv_integrity.payload_file_ok %}
+      <span style="color:#0a7d32;">✓</span>
+    {% else %}
+      <span style="color:#ba2121;">✗</span>
+    {% endif %}
+    &nbsp;|&nbsp;
+    Unsigned XML:
+    {% if pdv_integrity.xml_file_ok %}
+      <span style="color:#0a7d32;">✓</span>
+    {% else %}
+      <span style="color:#ba2121;">✗</span>
+    {% endif %}
+    &nbsp;|&nbsp;
+    Polja:
+    {% if pdv_integrity.fields_match %}
+      <span style="color:#0a7d32;">MATCH</span>
+    {% else %}
+      <span style="color:#ba2121;">MISMATCH</span>
+    {% endif %}
+    &nbsp;|&nbsp;
+    Bytes:
+    {% if pdv_integrity.xml_bytes_match %}
+      <span style="color:#0a7d32;">MATCH</span>
+    {% else %}
+      <span style="color:#ba2121;">MISMATCH</span>
+    {% endif %}
+    &nbsp;|&nbsp;
+    Status:
+    {% if pdv_integrity.status == 'SYNC' %}
+      <strong style="color:#0a7d32;">SYNC</strong>
+    {% else %}
+      <strong style="color:#ba2121;">OUT OF SYNC</strong>
+    {% endif %}
+  </p>
+  {% if pdv_integrity.differences %}
+  <ul>
+    {% for diff in pdv_integrity.differences|slice:":5" %}
+    <li style="color:#ba2121;">{{ diff.field }}: {{ diff.expected }} ≠ {{ diff.actual }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p>
+    {% if pdv_can_resync %}
+    <form method="post" action="resync-xml/" style="display:inline;" onsubmit="return confirm('Uskladiti unsigned.xml iz payload.json?');">
+      {% csrf_token %}
+      <button type="submit" class="button">Uskladi XML iz payload.json</button>
+    </form>
+    {% endif %}
+    <a href="{% url 'admin:accounting_vatperiod_change' pdv_period_id %}" class="button">Generiraj novi draft (PDV razdoblje)</a>
+  </p>
+  {% if pdv_integrity.status != 'SYNC' %}
+  <p style="color:#ba2121;">
+    Preuzimanje PDV XML-a onemogućeno dok status nije SYNC.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+<div class="module" style="margin-top: 1rem;">
+  <h2>Obrazac PDV-S (EU stjecanje)</h2>
+  <p>
+    PDV-S je zaseban obrazac od Obrazac PDV-a. Generira se iz PDV knjige (box 610/612).
+  </p>
+  <p>
+    <a href="{% url 'accounting:pdv_s_xml_export' original.vat_period_id %}" class="button">Preuzmi PDV-S XML</a>
+    <a href="{% url 'accounting:vat_export' original.vat_period_id %}">PDV-S XLSX (legacy)</a>
+  </p>
+</div>
+{% endblock %}

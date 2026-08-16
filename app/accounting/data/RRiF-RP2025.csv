@@ -1,0 +1,2473 @@
+kljuc;naziv
+0;POTRAŽIVANJA ZA UPISANI KAPITAL I DUGOTRAJNA IMOVINA
+00;POTRAŽIVANJA ZA UPISANI A NEUPLAĆENI KAPITAL
+000;Potraživanja za upisani a neuplaćeni dionički kapital (analitika po upisnicima)
+001;Potraživanja iz ponovljene emisije dionica za upisane a neuplaćene svote kapitala (razrada po emisijama dionica)
+002;Potraživanja za upisani a neuplaćeni kapital u d.o.o. (analitika po članovima društva)
+003;Potraživanja za temeljni ulog komanditora
+004;Potraživanje za ostale uloge u kapital
+01;NEMATERIJALNA IMOVINA
+010;Izdatci za razvoj
+0100;Izdatci za razvoj projekta (konstruiranje i testiranje prototipova i modela, dizajn alata, naprava i kalupa i sl.
+0101;Izdatci za razvoj proizvoda (uzorci, recepture, troškovi pronalazaka i sl.).
+0102;Izdatci za istraživanje mineralnih blaga (MSFI 6)
+011;Koncesije, patenti, licencije, robne i uslužne marke
+0110;Ulaganje u koncesije i dozvole (za resurse, ceste, ribarenje, linije, sirovine, itd.)
+0111;Ulaganje u patente, žigove i tehnologiju, inovacije, tehničku i tehnološku dokumentaciju za proizvodnju proizvoda ili pružanje usluga
+0112;Ulaganje u licenciju i franšizu
+0113;Robne marke (trgovačko ime, lista kupaca, industrijska prava, marketinška prava, uslužne marke i sl. prava)
+0114;Ulaganje u tržišni udio (otkup prava distribucije za neko područje)
+012;Softver i ostala prava
+0120;Softver
+01200;Ulaganje u računalni softver
+01201;Ulaganje u internetske stranice
+0121;Nematerijalna dugotrajna prava
+01210;Ulaganje u autorska i dr. prava korištenja
+01211;Ulaganje u znanje (know-how), dizajn
+01212;Ulaganje u pravo reproduciranja (npr. filmova, pravo objave u izdavaštvu i sl.)
+01213;Ulaganja na tuđoj imovini radi poboljšanja (nekretnina, opreme i sl.)
+01214;Ulaganje u dugogodišnje pravo uporabe (prema ugovoru) – npr. višegod. plaćeni zakup
+01215;Ulaganje u pravo suvlasništva opreme
+0122;Ostala prava
+01220;Založno pravo i hipoteke (realizirane)
+01221;Pravo angažiranja povećane snage električne energije
+01222;Ostala dugogodišnja prava
+01223;Imovina u operativnom najmu (analitika prema vrsti)
+013;Goodwill
+0130;Goodwill
+014;Ostala nematerijalna imovina
+0140;Pravo građenja, pravo prolaza i sl.
+0141;Filmovi, glazbeni zapisi
+0142;Ostala nematerijalna prava
+015;Predujmovi za nabavu nematerijalne imovine
+0150;Predujmovi za razvoj
+0151;Predujmovi za koncesije
+0152;Predujmovi za patente, licencije i dr.
+0153;Predujmovi za robne ili uslužne marke
+0154;Predujmovi za nabavu softvera
+0155;Predujmovi za nabavu ostalih prava uporabe
+0156;Predujmovi za ostala nematerijalna prava
+016;Kriptovalute
+0160;Bitcoin
+0161;Ethereum
+0162;Ostale kriptovalute
+017;Nematerijalna imovina u pripremi (analitika prema vrsti računa skupine 01)
+018;Vrijednosno usklađenje nematerijalne imovine (analitika prema vrsti računa skupine 01)
+019;Akumulirana amortizacija nematerijalne imovine
+0190;Akumulirana amortizacija izdataka za razvoj
+0191;Akumulirana amortizacija koncesija, patenata, licencija i sl.
+0192;Akumulirana amortizacija robne i uslužne marke
+0193;Akumulirana amortizacija softvera
+0194;Akumulirana amortizacija goodwilla (v. napom. 3.)
+0195;Akumulirana amortizacija ulaganja na tuđoj imovini
+0196;Akumulirana amortizacija imovine u operativnom najmu (MSFI 16)
+0199;Akumulirana amortizacija ostale nematerijalne imovine
+02;MATERIJALNA IMOVINA – NEKRETNINE
+020;Zemljišta
+0200;Građevinsko zemljište (bez zgrada)
+0201;Poljoprivredno zemljište
+0202;Zemljišta ispod građevina
+0203;Zemljište sa supstancijalnom potrošnjom
+0204;Zemljište pod prometnicama, dvorištima, parkiralištima i sl.
+0205;Zemljišta pod dugogodišnjim nasadima, parkovima, vrtovima, šumama i sl.
+0206;Čista neobrađena i nezasađena zemljišta i kamenjari
+0207;Zemljište za eksploataciju kamena, gline, šljunka i pijeska
+0208;Zemljište za odlagalište (materijala, smeća i otpada)
+0209;Zemljišta – ostalo
+021;Zemljišna prava (višegodišnja)
+0210;Zemljište s upisanim pravom građenja (plaćena za više godina)
+0211;Pravo služnosti na zemljištu (plaćena za više godina)
+0212;Zemljišta u zakupu (plaćena za više godina)
+023;Građevinski objekti (za vlastite potrebe)
+0230;Poslovne zgrade, uredi i lokali
+0231;Tvorničke zgrade, hale i radionice
+0232;Zgrade trgovine, hotela, motela, restorana
+0233;Skladišta, silosi, nadstrešnice i garaže, staklenici, sušionice, hladnjače
+0234;Zgrade montažne, barake, mostovi, drvene konstrukcije i sl.
+0235;Ograde (betonske, kamene, metalne i sl.), izlozi, potporni zidovi – brane, športski tereni, šatori, žičare i sl.
+0236;Putovi, parkirališta, staze i dr. građevine (rampe i sl.), nadvožnjaci i dr. betonske ili metalne konstrukcije
+0237;Cjevovodi, vodospremnici, utvrđene obale, kanali, kanalizacija, dalekovodi
+0238;Objekti poljoprivrede i ribarstva
+0239;Ostali građevinski objekti (rudnici, brane) i objekti izvan uporabe
+024;Stanovi za smještaj zaposlenika
+0240;Stanovi za smještaj zaposlenika
+0241;Kuće za smještaj zaposlenika
+0242;Ostale nastambe za zaposlenike
+026;Predujmovi za nabavu nekretnina
+0260;Predujmovi za nabavu zemljišta
+0261;Predujmovi za građevine u nabavi
+027;Nekretnine u pripremi
+0270;Zemljišta u pripremi
+0271;Građevine u pripremi
+028;Vrijednosno usklađenje nekretnina
+0280;Vrijednosno usklađenje zemljišta
+0281;Vrijednosno usklađenje građevina
+029;Akumulirana amortizacija građevina
+0290;Akumulirana amortizacija građevina (analitika prema pojedinim građevinama)
+0291;Akumulirana amortizacija odlagališta otpada, kamenoloma i sl. (MRS 16., t. 58.)
+03;POSTROJENJA, OPREMA, ALATI, INVENTAR I TRANSPORTNA SREDSTVA
+030;Postrojenja
+0300;Tehnička postrojenja, uređaji, spremnici, pogonski motori, platforme i dr.
+0301;Strojevi i alati u svezi sa strojevima u pogonima i radionicama za obradu i preradu
+0302;Energetska postrojenja (kotlovnice, generatori, naponske i solarne ćelije, vjetro-elektrane, toplinske crpke i dr.)
+0303;Rashladna postrojenja
+0304;Pokretna postrojenja (dizala, pokretne stepenice, elevatori, pokretne trake i sl.)
+0305;Automatske autopraonice i sl. oprema
+0306;Mlinska i separatorska postrojenja
+0307;Postrojenje za pakiranje, ambalažu i sl.
+0308;Brodska postrojenja (dizalice, motori)
+0309;Ostala postrojenja i postrojenja izvan uporabe
+031;Oprema
+0310;Uredska oprema (fotokopirni aparati, telefaksi, blagajne, alarmi, klimatizacijski uređaji, hladnjaci, televizori, i dr.)
+0311;Računalna oprema
+0312;Telekomunikacijska oprema (mobiteli, tel. centrale, antene i sl.)
+0313;Oprema trgovine (blagajne, hladnjaci, i dr.)
+0314;Oprema ugostiteljstva, hotela i sl. (aparati, štednjaci, hladnjaci, pokućstvo i sl.)
+0315;Oprema servisa (dizalice, ispitni uređaji, aparati i dr.)
+0316;Oprema za graditeljstvo i montažu (kranovi, bageri, skele, oplate, miješalice, dizalice, valjci i sl.)
+0317;Oprema (aparati) grijanja/hlađenja
+0318;Oprema zaštite na radu i protupožarne zaštite
+0319;Ostala oprema i oprema izvan uporabe
+032;Alati, pogonski inventar i transportna imovina
+0320;Transportna imovina
+03200;Putnička vozila (osobna i putnički kombi) i motor kotači
+032000;Osobni automobili za osobni prijevoz
+032001;Osobni automobili za obavljanje djelatnosti (iznajmljivanje, servisna služba itd.)
+03201;Teretna i vučna vozila, tegljači i kamioni, cisterne i hladnjače
+03202;Priključna transportna sredstva (prikolice)
+03203;Teretna dostavna i kombi vozila
+03204;Auto miješalice, auto crpke za beton, auto dizalice i sl.
+03205;Autobusi
+03206;Zrakoplovi
+03207;Brodovi (veći od 1000 BRT)
+03208;Brodice, jahte i ost. plovila
+03209;Ostala transportna sredstva i uređaji (gusjeničari, el. vozila, viljuškari, vagoni, traktori za vuču, bicikli i dr.)
+0321;Pokućstvo – inventar
+03210;Uredsko pokućstvo, sagovi, zavjese i sl.
+03211;Inventar trgovine (police, pregrade, pultovi)
+03212;Ugostiteljsko i hotelsko pokućstvo i inventar
+03213;Ostalo pokućstvo i inventar
+0322;Pogonski i skladišni inventar (stalaže, zatvoreni ormari, skele, oplate, protupožarni aparati, zaštitna sredstva i sl.)
+0323;Alati, mjerni i kontrolni instrumenti i pomoćna oprema
+0324;Audio i video aparati, kamere, parkir. rampe i sl.
+0325;Reklame (svjetleće), stupovi i sl.
+0326;Inventar ustanova (aparati, kreveti, ormari, stolovi i sl.)
+0327;Ostali inventar (spremnici i dr.)
+0328;Višegodišnja ambalaža
+0329;Alati, inventar i vozila izvan uporabe
+033;Pretporez koji se ne može odbiti (kao dio vrijednosti osobnih automobila)
+0330;50% pretporeza od osobnih automobila (v. napomenu pod 2.)
+0331;50% i 100% pretporeza od osobnih automobila (n. v. veće od 400.000,00 kn koji su nabavljeni do 31. 12. 2018.)
+0332;50% pretporeza od brodova, jahti i dr.
+0333;50% i 100% pretporeza od brodova, jahti i dr. (n.v. veće od 400.000,00 kn koji su nabavljeni do 31. 12. 2018.)
+0334;50% pretporeza kod vozila N1
+034;Poljoprivredna oprema i mehanizacija
+0340;Traktori, kombajni, prikolice, kosilice i sl.
+0341;Radni priključci (plugovi, beračice, freze, prskalice, sabirače i sl.)
+0342;Oprema za mljekarstvo (muzilice, separatori, police, spremnici i sl.)
+0343;Oprema ribarstva (kavezi, mreže, čamci i brodovi, pakirnice)
+0344;Oprema vinogradarstva (bačve, filteri, preše, punionica)
+0345;Oprema voćarstva i maslinarstva
+0346;Oprema stočarstva i pčelarstva
+0347;Oprema za povrtlarstvo i cvjećarstvo (plastenici, sustav prihrane i dr.)
+0348;Oprema za navodnjavanje, grijanje i sl.
+0349;Ostala oprema poljoprivrede
+035;Ostala materijalna imovina
+0350;Umjetnine, slike i sl.
+0351;Arhivski predmeti, makete i sl.
+0352;Knjige, karte, fotografije i sl.
+0353;Oldtimeri (automobili, traktori, kamioni, brodovi i sl.)
+0354;Ostala materijalna imovina
+036;Predujmovi za materijalnu imovinu
+0360;Predujmovi za postrojenja i opremu
+0361;Predujmovi za alate, pogonski inventar i transportnu imovinu
+0364;Predujam za poljoprivrednu opremu
+0367;Predujam za ostalu imovinu
+037;Materijalna imovina u pripremi
+0370;Postrojenja u pripremi
+0371;Oprema u pripremi
+0372;Alati, pogonski inventar u pripremi
+0373;Osobni automobili i transportna sredstva u pripremi
+0374;Poljoprivredna oprema u pripremi
+0375;Ostala imovina u pripremi
+038;Vrijednosno usklađenje postrojenja i opreme
+0380;Vrijednosno usklađenje postrojenja
+0381;Vrijednosno usklađenje opreme
+0382;Vrijednosno usklađenje alata, pogonskog inventara i transportne imovine
+0384;Vrijednosno usklađenje poljoprivredne opreme
+0385;Vrijednosno usklađenje ostale mat. imovine
+039;Akumulirana amortizacija postrojenja i opreme
+0390;Akumulirana amortiz. postrojenja
+0391;Akumulirana amortiz. opreme
+0392;Akumulirana amortiz. alata, pogonskog inventara i transportnih sredstava
+0393;Akumulirana amortiz. osobnih automobila, plovila i zrakoplova (nabavna vrijednost bez PDV-a)
+0394;Akumulirana amortizacija poljoprivredne opreme i mehanizacije
+0395;Akumulirana amortizacija 50% pretporeza od osobnih automobila
+0396;Akumulirana amortiz. 50% i 100% pretporeza od osob. automobila (n. v. veće od 400.000,00 kn koji su nabavljeni do 31. 12. 2018.)
+0397;Akumulirana amortiz. 50% od pretporeza od brodova, jahti i dr. sred. za osobni prijevoz
+0398;Akumulirana amortiz. 50% i 100% pretporeza od brodova, jahti i dr. sred. za osobni prijevoz (n. v. veće od 400.000,00 kn koji su nabavljeni do 31. 12. 2018.)
+0399;Ostala akumulirana amortizacija za opremu
+04;BIOLOŠKA IMOVINA
+040;Biološka imovina – bilje – višegodišnji nasadi
+0400;Voćnjaci
+0401;Vinogradi
+0402;Maslinici
+0403;Plantaže nasada
+0404;Parkovi, zelenila i cvijeće (višegodišnje)
+0405;Ulaganja u ostale višegodišnje nasade
+041;Biološka imovina – životinje – osnovno stado
+0410;Goveda – krave
+0411;Konji
+0412;Mazge, magarci i mule
+0413;Svinje
+0414;Ovce i koze
+0415;Perad
+0416;Ribe
+0417;Pčelinja društva
+0418;Stado divljači
+0419;Ostale nespomenute životinje (psi, ptice i dr.)
+046;Predujmovi za biološku imovinu
+0460;Predujmovi za višegodišnje nasade
+0461;Predujmovi na nabavu životinja
+047;Biološka imovina u pripremi
+0470;Višegodišnji nasadi u pripremi
+0471;Životinje (osnovno stado) u nabavi
+048;Vrijednosno usklađenje biološke imovine
+0480;Vrijednosno usklađenje višegodišnjih nasada
+0481;Vrijednosno usklađenje životinja (osnovnog stada)
+049;Akumulirana amortizacija biološke imovine
+0490;Akumulirana amortiz. višegodišnjih nasada
+0491;Akumulirana amortiz. životinja (osnovnog stada)
+05;ULAGANJA U NEKRETNINE
+050;Ulaganja u nekretnine – zemljišta
+051;Ulaganja u nekretnine – građevine
+0510;Građevine u najmovima (poslovne zgrade, skladišta, stanovi, apartmani, kuće)
+0511;Građevine izvan uporabe (zgrade, skladišta, stanovi, apartmani, kuće)
+056;Predujmovi za ulaganja u nekretnine
+0560;Predujam za ulaganja u zemljište
+0561;Predujam za ulaganje u građevine
+057;Ulaganja u nekretnine u pripremi
+0570;Ulaganja u zemljišta u nabavi
+0571;Ulaganja u građevine u nabavi
+0572;Ulaganja u građevine u izgradnji
+058;Vrijednosno usklađenje ulaganja u nekretnine
+0580;Vrijednosno usklađenje ulaganja u zemljište
+0581;Vrijednosno usklađenje ulaganja u građevine
+059;Akumulirana amortizacija ulaganja u građevine
+06;DUGOTRAJNA FINANCIJSKA IMOVINA (S POVRATOM DUŽIM OD JEDNE GODINE)
+060;Ulaganja u udjele (dionice) i ostale vrijednosne papire poduzetnika unutar grupe
+0600;Ulaganja u udjele (dionice) poduzetnika unutar grupe
+06000;Ulaganje u kapitalne pričuve
+0601;Ulaganja u ostale vrijednosne papire poduzetnika unutar grupe
+061;Dani zajmovi, depoziti i slično poduzetnicima unutar grupe
+0610;Dani dugotrajni zajmovi poduzetnicima unutar grupe
+0611;Dani dugotrajni depoziti poduzetnicima unutar grupe
+0612;Dane kaucije, kapare i slično poduzetnicima unutar grupe
+062;Ulaganja u udjele (dionice) i ostale vrijednosne papire društava povezanih sudjelujućim interesom
+0620;Ulaganja u udjele (dionice) društava povezanih sudjelujućim interesom
+06200;Ulaganje u kapitalne pričuve
+0621;Ulaganja u ostale vrijednosne papire društava povezanih sudjelujućim interesom
+063;Dani zajmovi, depoziti i slično društvima povezanim sudjelujućim interesom
+0630;Dani dugotrajni zajmovi društvima povezanim sudjelujućim interesom
+0631;Dani dugotrajni depoziti društvima povezanim sudjelujućim interesom
+0632;Dane kaucije, kapare i slično društvima povezanim sudjelujućim interesom
+064;Ulaganja u vrijednosne papire (dugotrajne)
+0640;Ulaganja u mjenice, zadužnice (kupljene)
+0641;Ulaganja u državne obveznice
+0642;Dugotrajna ulaganja u obveznice društva
+0643;Dugotrajna ulaganja u blagajničke zapise
+0644;Dugotrajna ulaganja u opcije, certifikate i sl.
+0645;Ulaganja u robne ugovore
+0646;Ulaganja u ostale vrijednosne papire (HSFI 9)
+06460;Ulaganja u udjele (dionice) raspoložive za prodaju
+06461;Vrijednosni papiri po amortiziranom trošku
+0647;Ulaganje u vrijednosne papire (MSFI 9)
+06470;Ulaganja u udjele (dionice) kroz ostali sveobuhvatni dobitak
+06471;Vrijednosni papiri po amortiziranom trošku
+0648;Ulaganja u udjele (dionice) povezanih osoba (koje nisu grupa ni sudjelujući interesi)
+06480;Ulaganje u kapitalne pričuve
+0649;Nezarađeni prihodi u financijskim instrumentima
+065;Dani zajmovi, depoziti i sl.
+0650;Dani dugotrajni zajmovi
+06500;Dani zajmovi vanjskim pravnim osobama (nepovezanim)
+06501;Dani zajmovi vanjskim fizičkim osobama – obrtnicima
+06502;Dani zajmovi kooperantima
+06503;Dani zajmovi zaposlenicima
+06504;Oročenja u bankama
+06505;Financijski zajmovi dani u inozemstvo (nepovezanim osobama)
+06506;Dani zajmovi povezanim osobama (koji nisu grupa ni društva povezana sudjelujućim interesom)
+06509;Ostali dugotrajni zajmovi
+0651;Depoziti dugotrajni
+06510;Depoziti iz poslovnih aktivnosti
+06511;Depoziti kod osiguravajućih društava
+06512;Depoziti u poslovnim bankama
+06513;Depoziti na carini (garancija špeditera)
+06514;Sudski depoziti
+0652;Kaucije i kapare
+06520;Kaucije za obveze
+06521;Kaucije iz kupoprodajnih poslova
+06522;Kaucije za plaćanja
+06523;Dane kapare i osiguranja
+066;Ulaganja koja se obračunavaju metodom udjela
+0660;Ostala ulaganja (udjeli) (zajedničko ulaganje ili dugotrajno ulaganje)
+0661;Ulaganje zajednički kontrolirano društvo s više od 20% udjela
+067;Ostala dugotrajna financijska imovina
+0670;Ulaganja u investicijske fondove (s rokom dužim od 1 god.)
+0671;Derivativna imovina
+0672;Ulaganja u investicijsko zlato
+0673;Ostala nespomenuta dugoročna ulaganja
+068;Vrijednosno usklađenje financijske imovine – dugotrajne (analitika prema oblicima imovine)
+069;Nezarađene kamate u kreditima i sl.
+0690;Ispravak vrijednosti obveznica i sl. za diskont/premiju
+07;POTRAŽIVANJA (DULJA OD JEDNE GODINE)
+070;Potraživanja od poduzetnika unutar grupe
+0700;Potraživanja od poduzetnika unutar grupe za isporučene robe i usluge
+0701;Ostala potraživanja unutar grupe
+07010;Potraživanja s temelja realiziranih jamstava i sl.
+071;Potraživanja od društava povezanih sudjelujućim interesom
+0710;Potraživanja od društava povezanih sudjelujućim interesom za isporučene robe i usluge
+0711;Ostala potraživanja od društava povezanih sudjelujućim interesom
+07110;Potraživanja s temelja realiziranih jamstava i sl.
+072;Potraživanja od kupaca – dugotrajna
+0720;Potraživanja s osnove prodaje na robni kredit
+0721;Potraživanja s osnove prodaje na robni kredit u inozemstvu
+0722;Potraživanja za prodane usluge na kredit
+0723;Potraživanje za dugotr. imovinu prodanu na kredit
+0724;Potraživanja za prodani udjel na kredit
+0725;Potraživanja za prodaju na potrošački kredit
+0726;Potraživanje za prodaju uz obročnu otplatu
+0729;Ostala potraživanja iz prodaje na kredit
+073;Potraživanja iz faktoringa
+074;Potraživanja za jamčevine
+0740;Potraživanja za jamčevine iz operativnog lizinga
+0741;Jamstvo za dobro izvedene radove
+0742;Jamčevine iz natječaja
+0743;Jamčevine za štete
+075;Potraživanja u sporu i rizična potraživanja
+076;Potraživanja za predujmove za usluge
+077;Ostala potraživanja – dugotrajna
+0770;Potraživanja od radnika
+0771;Potraživanja od članova društva
+0772;Potraživanja iz ortaštva
+0773;Potraživanja iz predstečajne nagodbe
+0774;Dodatni troškovi stjecanja ugovora s kupcem (MSFI 15)
+0775;Dodatni troškovi ispunjanja ugovora s kupcem
+078;Vrijednosno usklađivanje dugotrajnih potraživanja
+079;Potraživanja za nezarađenu kamatu
+08;ODGOĐENA POREZNA IMOVINA
+080;Odgođena privremena razlika poreza na dobitak (analitika po godinama)
+0800;Odgođena porezna imovina s osnove poreznog gubitka
+0801;Odgođena porezna imovina s osnove povećane amortizacije
+0802;Odgođena porezna imovina s osnove otpisa potraživanja
+0803;Odgođena porezna imovina s osnove drugih troškova
+0804;Odgođena porezna imovina s osnove fer vrijednosti dionica raspoloživih za prodaju
+081;Ostala odgođena porezna imovina
+1;NOVAC, KRATKOTRAJNA FINANCIJSKA IMOVINA, KRATKOTRAJNA POTRAŽIVANJA, TROŠKOVI I PRIHOD BUDUĆEG RAZDOBLJA
+10;NOVAC U BANKAMA I BLAGAJNAMA
+100;Transakcijski računi u bankama
+1000;Transakcijski račun u banci (analitika po računima u bankama i štedionicama)
+1004;Račun društva u stečaju
+1005;Novčani račun u predstečajnom postupku
+1006;Novčani račun okvirnog kredita
+1007;Poseban račun u banci
+1008;Račun društva u osnivanju
+1009;Transakcijski prijelazni račun
+101;Otvoreni akreditiv u domaćoj banci
+102;Blagajne
+1020;Glavna blagajna (uključivo i plemenitih metala)
+1021;Blagajna vrijednosnica (poštanskih, taksenih maraka i dr. vrijednosnica)
+1022;Blagajna prodavaonice
+10220;Novac u blagajni
+10221;Kuponi (bonovi) u blagajni
+10222;Napojnice naplaćene u prodavaonici
+1023;Blagajna servisa
+1024;Blagajna recepcije (šanka)
+10241;Napojnice naplaćene u ugostiteljstvu
+1025;Blagajna radne jedinice
+1028;Blagajna za ostalo
+1029;Prijelazni račun blagajne prodavaonice
+103;Devizni računi
+1030;Devizni račun u domaćoj banci (analitika po devizama)
+1031;Devizni račun u inozemnoj banci (u EU)
+1032;Devizni račun reeksportnih poslova
+1034;Devizni račun investicijskih radova
+1035;Devizni račun poslovne jedinice u inozemstvu
+1036;Devizni račun vlasničkih ulaganja
+1037;Nerezidentski devizni račun
+1038;Devizni račun terminskih poslova
+1039;Prijelazni devizni račun
+104;Otvoreni akreditiv u stranim valutama
+1040;Otvoreni devizni akreditiv u domaćoj banci
+1041;Otvoreni akreditiv u inozemnoj banci
+1042;Escrow račun
+105;Devizna blagajna
+1050;Glavna devizna blagajna
+1051;Devizna blagajna za službena putovanja u inozemstvo
+1052;Devizna blagajna za troškove prijevoza robe u inozemstvo
+1053;Devizna blagajna za mjenjačke poslove
+1055;Devizna blagajna za razne isplate
+106;Novac za kupnju deviza
+108;Ostala novčana sredstva
+109;Vrijednosno usklađenje depozita u bankama
+11;FINANCIJSKA IMOVINA (KRATKOTRAJNA)
+110;Ulaganja u udjele (dionice) i ostale vrijednosne papire poduzetnika unutar grupe
+1100;Ulaganja u udjele (dionice) poduzetnika unutar grupe
+1101;Ulaganja u ostale vrijednosne papire poduzetnika unutar grupe
+111;Dani zajmovi, depoziti i slično poduzetnicima unutar grupe
+1110;Dani zajmovi poduzetnicima unutar grupe
+1111;Dani depoziti poduzetnicima unutar grupe
+1112;Dane kaucije, kapare i slično poduzetnicima unutar grupe
+1113;Realizirana jamstva poduz. unutar grupe
+112;Ulaganja u udjele (dionice) i ostale vrijednosne papire društava povezanih sudjelujućim interesom
+1120;Ulaganja u udjele (dionice) društava povezanih sudjelujućim interesom
+1121;Ulaganja u ostale vrijednosne papire društava povezanih sudjelujućim interesom
+113;Dani zajmovi, depoziti i slično društvima povezanim sudjelujućim interesom
+1130;Dani zajmovi društvima povezanim sudjelujućim interesom
+1131;Dani depoziti društvima povezanim sudjelujućim interesom
+1132;Dane kaucije, kapare i slično društvima povezanim sudjelujućim interesom
+1133;Realizirana jamstva u društv. sa sud. interesima
+114;Ulaganja u vrijednosne papire
+1140;Čekovi (inozemni)
+1141;Mjenice
+1142;Komercijalni zapisi
+11420;Komercijalni zapisi
+11429;Diskont kod ulaganja u komercijale zapise
+1143;Obveznice
+1144;Blagajnički zapisi
+1145;Zadužnice (iskupljene) – tražbina s temelja jamstva
+1146;Ulaganja u vrijednosne papire (HSFI 9)
+11460;Ulaganja u udjele (dionice) namijenjene trgovanju
+11461;Ulaganja u ostale vrijednosne papire
+1147;Ulaganja u vrijednosne papire (MSFI 9)
+11470;Ulaganja u udjele (dionice) kroz račun dobiti i gubitka
+11471;Ulaganja u ostale vrijednosne papire
+1148;Ulaganja u udjele i dionice povezanih osoba koji nisu grupa ni sudjelujući interesi
+1149;Ostali vrijednosni papiri
+115;Dani zajmovi, depoziti i sl.
+1150;Dani kratkotrajni zajmovi
+11500;Zajmovi poduzetnicima
+11501;Zajmovi ortacima
+11502;Zajmovi obrtnicima
+11503;Zajmovi podružnicama
+11504;Zajmovi ustanovama
+11505;Zajmovi dani u inozemstvo
+11506;Zajmovi članovima uprave i zaposlenicima
+11507;Zajmovi dani OPG-ima ili zadrugarima
+11508;Zajmovi povezanim osobama koje nisu grupa ni društva povezana sudjelujućim interesom
+11509;Ostali kratkotrajni zajmovi (npr. građanima)
+1151;Depoziti (do jedne godine)
+11510;Depoziti u bankama
+11511;Depoziti u osiguravajućim društvima
+11512;Depoziti u inozemnim financijskim institucijama
+11513;Depoziti za ostale poslovne aktivnosti
+1152;Kaucije i jamčevine (do jedne godine)
+11520;Kaucije na aukcijama (dražbama)
+11521;Kaucije za robu
+11522;Kaucije za ambalažu
+11523;Dane jamčevine za natječaje
+11524;Potraživanja za kapare (čl. 303. ZOO-a)
+11525;Polozi gotovine za ostale poslovne aktivnosti
+11526;Potraživanja iz realiziranih danih jamstava
+116;Potraživanja iz ulaganja u investicijske fondove
+1160;Kratkotrajno ulaganje u novčane fondove
+1161;Kratkotrajno ulaganje u investicijske (dioničke) i dr. fondove
+117;Ostala financijska imovina
+1170;Otkup kratkoročnih potraživanja (faktoring)
+1171;Ulaganje u kratkotrajne eskontne poslove
+1172;Potraživanja za više uplaćeno po kreditnoj kartici
+1173;Potraživanja za isplate avaliranih ili indosiranih mjenica
+1174;Potraživanja po isplaćenim garancijama
+1175;Potraživanja iz preuzetog duga (čl. 96. ZOO)
+1176;Potraživanje po asignacijama, novacijama i sl.
+1177;Ulaganje u investicijsko zlato (kratkoročno)
+1178;Ostala financijska imovina
+118;Potraživanja u sporu (npr. utužena, u predstečaju ili u stečaju i sl. iz fin. imovine)
+119;Vrijednosno usklađivanje financijske imovine – kratkotrajne (analitika po otpisima iz ove skupine računa)
+12;POTRAŽIVANJA (KRATKOTRAJNA)
+120;Potraživanja od kupaca
+1200;Potraživanja od kupaca dobara
+1201;Potraživanja od kupaca usluga (servisne, građenje i popravci, najmovi, ustupanje radne snage, kapaciteta i dr.)
+1202;Potraživanja za prodaju prava
+1203;Kupci građani i prodaja na potrošački kredit
+1204;Kupci imovinskih sredstava, inventara, materijala, otpadaka i sl.
+1205;Potraživanja od kupaca za prodanu robu iz komisije
+1206;Kupci zastupničke (komisijske) i franšizne prodaje
+1207;Potraživanja za prodaju na kartice
+12070;Potraživanja za prodaju na kreditne kartice
+12071;Potraživanja za napojnice naplaćene kreditnim karticama
+12072;Potraživanja za prodaju na ostale kartice
+1208;Potraživanja od kupaca povezanih osoba koje nisu grupa ni društva povezana sudjelujućim interesom
+1209;Potraživanja za nefakturiranu isporuku dobara ili usluga
+121;Kupci iz EU i iz trećih zemalja
+1210;Kupci dobara iz EU
+1211;Kupci dobara iz trećih zemalja
+1212;Kupci usluga iz EU
+1213;Kupci usluga iz trećih zemalja
+1214;Kupci prava iz EU
+1215;Kupci prava iz trećih zemalja
+1216;Potraživanja od kupaca povezanih osoba iz EU koje nisu grupa ni društva povezana sudjelujućim interesom
+1217;Potraživanja od kupaca povezanih osoba iz trećih zemalja koje nisu grupa ni društva povezana sudjelujućim interesom
+122;Potraživanja od poduzetnika unutar grupe
+1220;Potraživanja od poduzetnika unutar grupe za isporučene robe i usluge
+1221;Ostala potraživanja od poduzetnika unutar grupe
+12210;Potraživanja za dividendu – dobitak
+12211;Potraživanja za kamatu
+12212;Ostala potraživanja
+123;Potraživanja od društava povezanih sudjelujućim interesom
+1230;Potraživanja od društava povezanih sudjelujućim interesom za isporučene robe i usluge
+1231;Ostala potraživanja od društava povezanih sudjelujućim interesom
+12310;Potraživanja za dividendu – dobitak
+12311;Potraživanja za kamatu
+12312;Ostala potraživanja
+124;Potraživanja za kamate
+1240;Potraživanja za ugovorene kamate (koje nisu pripisane glavnici)
+1241;Potraživanja za zatezne kamate (koje nisu pripisane glavnici)
+1242;Potraživanja za kamate po nagodbama
+1243;Potraživanje za kamatu iz danih zajmova
+1245;Kamate iz ostalih tražbina
+1246;Potraživanja za kamate od povezanih osoba (koje nisu grupa ni sudjelujući interesi)
+125;Potraživanja za predujmove za usluge (koje nisu u svezi sa zalihama i dugotr. imov.)
+1250;Potraživanja za predujmljene usluge s PDV-om
+1251;Potraživanja za predujmljene usluge bez PDV-a (npr. graditeljske)
+126;Potraživanja iz vanjskotrgovačkog poslovanja (s osnove uvoza odnosno izvoza za tuđi račun)
+1260;Potraživanja po poslovima uvoza za tuđi račun
+1261;Potraživanja od izvoznika
+127;Potraživanja s osnove ostalih aktivnosti
+1270;Potraživanja s osnove prodaje udjela i dionica
+1271;Potraživanja za nakladno odobrene popuste (bonifikacije, cassa sconto, rabat i sl.)
+1272;Potraživanja za predujam za kupnju dionica i udjela
+1273;Potraživanja za dobitak – dividendu
+1274;Potraživanja za povrat PDV-a iz EU
+1275;Potraživanja za odobrene državne potpore
+1276;Potraživanja za PDV iz naknadno odobrenog popusta
+1277;Potraživanja s temelja troškova koje nadoknađuje davatelj jamstva (proizvođač)
+1278;Potraživanja iz zajedničkog poslovanje (prihod)
+1279;Potraživanja za povrat PDV-a iz trećih zemalja
+128;Ostala kratkoročna potraživanja
+1280;Potraživanja iz odštetnih zahtjeva (od osiguravajućih društava, iz nagodbi i tužbi)
+1281;Potraživanja za udjel u dobitku – prihodu u investicijskom fondu
+1282;Potraživanja za tantijeme (nadoknade za korištenje patenta, znaka i autorskih prava)
+1283;Potraživanja stečena cesijom, asignacijom i preuzimanjem duga od prodaje
+1284;Potraživanja za nadoknadu troškova iz jamstva
+1285;Potraživanja od kooperanata, zadrugara, OPG-a, ustanove
+1286;Potraživanja od članova društva za pokriće gubitka
+1287;Potraživanja za dana jamstva i činidbe
+1288;Potraživanja za poreze iz poslovnih odnosa
+1289;Ostala potraživanja
+12890;Potraživanja za povratnu naknadu
+129;Vrijednosno usklađenje potraživanja
+1290;Vrijednosno usklađenje potraživanja od kupaca
+1291;Vrijednosno usklađenje potraživanja od povezanih društava
+1292;Vrijednosno usklađenje od poduzetnika iz sudjelujućih interesa
+1293;Vrijednosno usklađenje kamata
+1294;Vrijednosno usklađenje za dane predujmove za usluge
+1295;Vrijednosno usklađenje ostalih potraživanja (računi 126 do 128)
+13;POTRAŽIVANJA OD ZAPOSLENIH I OSTALA POTRAŽIVANJA (KRATKOTRAJNA)
+130;Potraživanja od zaposlenih
+1300;Potraživanja od zaposlenih za više isplaćenu plaću
+1301;Potraživanja za isplaćeni predujam za službeni put
+1302;Potraživanja za dane novčane svote za nabave u gotovini (za tržišni nakup, za karnete i dr.)
+1303;Potraživanja za manjkove i učinjene štete (s PDV-om)
+1304;Potraživanja za prehranu, kazne, za korištenje odmarališta i sl.
+1305;Potraživanja od zaposlenih za manje plaćene poreze i doprinose
+1306;Potraživanja od zaposlenika za plaćene privatne troškove (npr. po službenoj kred. kartici)
+1307;Potraživanja od zaposlenika za primitak u naravi
+1309;Ostala potraživanja od zaposlenih
+131;Potraživanja od vanjskih suradnika
+1310;Potraživanja za predujmljene honorare
+1311;Potraživanja za isplaćene svote
+1319;Ostala potraživanja od vanjskih suradnika
+133;Potraživanja od članova poduzetnika
+1330;Potraživanja od članova društva za predujmljeni dobitak – dividendu (+ porez 12%)
+1331;Potraživanja od članova društva za privatne troškove
+1332;Potraživanja od članova ustanove
+1333;Potraživanja od članova zadruge
+1334;Potraživanje od obrtnika (dobitaša)
+1335;Potraživanja od prodaje članu društva
+134;Potraživanja u sporu i rizična potraživanja (iz skupine 12 i 13)
+1340;Potraživanja od kupaca u sporu za glavnicu
+1341;Potraživanja od kupaca u sporu za kamate
+1342;Potraživanja od kupaca za troškove iz sporova
+1343;Potraživanja u sporu od ostalih subjekata
+135;Potraživanja za sredstva u slobodnoj zoni
+136;Potraživanja za prodaju na potrošački kredit
+137;Potraživanja od poslovnih jedinica u inozemstvu
+1370;Potraživanja za isporučena dobra i usluge
+1371;Potraživanja za doznake novca, za dobitak i dr.
+138;Ostala poslovna potraživanja
+1380;Potraživanja za naknadno odobreni popust
+1381;Potraživanja od ortaka
+1382;Potraživanja od zastupnika
+1383;Potraživanja iz prodaje vlastitog udjela (dionica)
+1389;Ostala poslovna potraživanja
+139;Vrijednosno usklađenje potraživanja od zaposlenih, članova društva i ostalih potraživanja
+14;POTRAŽIVANJA OD DRŽAVE ZA POREZE, CARINU I DOPRINOSE
+140;Porez na dodanu vrijednost
+1400;Pretporez po primljenim isporukama i predujmovima u RH
+14001;Pretporez po ulaznim računima
+140010;Pretporez – 5%
+140011;Pretporez – 13%
+140012;Pretporez – 25%
+140013;Pretporez – 23%
+14002;Pretporez iz predujmova
+140020;Pretporez iz predujmova – 5%
+140021;Pretporez iz predujmova – 13%
+140022;Pretporez iz predujmova – 25%
+140023;Pretporez iz predujmova – 23%
+14003;Ispravci pretporeza
+140030;Ispravak pretporeza zbog izlaska iz sustava PDV-a
+140031;Ispravak pretporeza zbog prenamjene dobara (oslobođene isporuke)
+140032;Ispravak pretporeza zbog promjene postotka priznavanja pretporeza – usklađenje
+140033;Ispravak pretporeza zbog ulaska u sustav PDV-a
+1401;Pretporez iz prenesene porezne obveze u tuzemstvu – 25%
+14010;Pretporez od predujmova iz prenesene porezne obveze – 25%
+14011;Pretporez po ulaznim računima iz prenesene porezne obveze – 25%
+1402;Pretporez od stjecanja dobara unutar EU
+14020;Pretporez od stjecanja dobara iz EU – 5%
+14021;Pretporez od stjecanja dobara iz EU – 13%
+14022;Pretporez od stjecanja dobara iz EU – 25%
+1403;Pretporez od primljenih usluga iz EU
+14030;Pretporez od primljenih usluga iz EU – 5%
+14031;Pretporez od primljenih usluga iz EU – 13%
+14032;Pretporez od primljenih usluga iz EU – 25%
+1404;Pretporez od primljenih isporuka dobara i usluga od poreznih obveznika bez sjedišta u RH
+14040;Pretporez od poreznih obveznika bez sjedišta u RH – 5%
+14041;Pretporez od poreznih obveznika bez sjedišta u RH – 13%
+14042;Pretporez od poreznih obveznika bez sjedišta u RH – 25%
+1405;PDV pri uvozu dobara
+14050;PDV pri uvozu dobara – 5%
+14051;PDV pri uvozu dobara – 13%
+14052;PDV pri uvozu dobara – 25%
+1406;Pretporez stečen po ugovoru o asignaciji ili iz preknjižavanja
+1407;Potraživanja za razliku većeg pretporeza od obveza u razdoblju oporezivanja
+1408;Pretporez koji još nije moguće priznati
+14080;Pretporez za koji nije stečen uvjet za priznavanje
+140800;Pretporez za koji nije stečen uvjet priznavanja – 5%
+140801;Pretporez za koji nije stečen uvjet priznavanja – 13%
+140802;Pretporez za koji nije stečen uvjet priznavanja – 25%
+1409;Pretporez u drugim zemljama u kojima je porezni obveznik registriran za potrebe PDV-a (moguća analitika po zemljama)
+14090;Pretporez u Sloveniji
+140900;Pretporez po primljenim isporukama dobara
+140901;Pretporez po primljenim isporukama usluga
+140902;Potraživanja za razliku većeg pretporeza od obveza
+14091;Pretporez u Austriji
+140910;Pretporez po primljenim isporukama dobara
+140911;Pretporez po primljenim isporukama usluga
+140912;Potraživanja za razliku većeg pretporeza od obveza
+141;Potraživanja za porez na dohodak iz plaća i drugih primanja
+1410;Potraživanja za porez na dohodak iz plaća
+14100;Za republički
+14101;Za lokalni
+1411;Potraživanja za prirez iz plaća (do 31. 12. 2023.)
+1412;Potraživanja za porez na dohodak iz autorskih prava, ugovora o djelu, dohodaka članova nadzornog odbora i drugih dohodaka
+1413;Potraživanja za porez na stipendije i nagrade učenika i studenta
+1414;Potraživanja za poreze iz drugih dohodaka
+1415;Potraživanja za više plaćeni porez na dohodak od kamata
+1417;Potraživanja za više plaćeni porez na dohodak od kapitala
+1419;Potraživanje za više plaćene ostale poreze na dohodak
+142;Potraživanja za više plaćene doprinose iz plaća i na plaće
+1420;Potraživanja za više plaćene doprinose za MO iz plaće
+1421;Potraživanja od MO za više plaćeni doprinos za beneficirani staž
+1422;Potraživanja za više plaćeni doprinos za zdravstveno osiguranje na plaće
+1423;Potraživanja za više plaćeni dopr. za zdrav. osigur. za slučaj ozljede na radu i prof. bolesti
+1424;Potraživanja za više plaćeni doprinos za zapošljavanje na plaće
+1429;Potraživanja za ostale nespomenute doprinose
+143;Potraživanja za porez na dobitak i po odbitku
+1430;Potraživanja za plaćene predujmove poreza na dobitak
+1431;Potraživanje za više plaćeni porez na dobitak po godišnjoj prijavi
+1432;Potraživanja za više plaćeni porez po odbitku (na inozemne usluge)
+1433;Potraživanja za porez na dobitak stečen po ugovoru o cesiji ili iz preknjižavanja
+1434;Porez na dobitak plaćen u inozemstvu
+1435;Potraživanja za porez po tonaži broda
+144;Potraživanja za posebne poreze, trošarine i druge poreze od države
+1440;Potraživanja za poseban porez na motorna vozila (PPMV)
+1441;Potraživanja za poseban porez na kavu
+1442;Potraživanja za poseban porez na bezalkoholna pića
+1443;Potraživanja za trošarinu na alkohol i alkoholna pića
+1444;Potraživanja za trošarinu na električnu energiju i energente
+1445;Potraživanja za trošarinu na duhanske proizvode duhanske prerađevine
+1446;Potraživanja za trošarinu na energente – naftni derivati i naknade za ceste
+1447;Potraživanja za 3% poreza na promet nekretnina
+1448;Potraživanja za upravnu pristojbu
+145;Potraživanja za plaćenu ili više plaćenu članarinu TZ
+146;Potraživanja za članarine komori (HGK ili HOK i dr.)
+147;Potraživanja za carinu i više plaćene carinske pristojbe
+148;Potraživanja za županijski i općinski (gradski) porez
+1480;Potraživanja za više plaćeni porez na cestovna motorna vozila i plovne objekte
+1481;Potraživanja za porez na kuće za odmor i korištenje javnih površina
+1482;Potraživanja za porez na reklamu
+1483;Potraživanja za porez na potrošnju u ugostiteljstvu
+1484;Potraživanja za plaćeni porez na priređivanje zabavnih i športskih priredbi
+1485;Potraživanja za plaćeni porez na nasljedstva i darove
+1486;Potraživanja za više plaćeni porez na imovinu
+1487;Potraživanja za ostale poreze županije (grada), općine
+149;Potraživanja za ostale nespomenute poreze, doprinose, takse i pristojbe
+1490;Potraživanja za više plaćenu nadoknadu za šume
+1491;Potraživanje za sred. za komunalnu izgradnju
+1492;Potraživanja za više plaćene kazne i sl.
+1493;Potraživanja za turističku pristojbu
+1494;Potraživanja za više uplaćene naknade za iskorištavanje mineralnih sirovina
+1495;Potraživanja za više plaćene poreze na koncesije
+1496;Potraživanja za spomeničku rentu
+1497;Potraživanje od Fonda za zaštitu okoliša (ambalažu)
+1499;Potraživanja za ostala više plaćena davanja
+15;OSTALA POTRAŽIVANJA OD DRŽAVNIH I DRUGIH INSTITUCIJA
+150;Potraživanje za nadoknade bolovanja od HZZO
+151;Potraživanja od mirovinskog osiguranja
+152;Potraživanja od lokalne samouprave
+153;Potraživanje za regrese, premije, stimulacije i državne potpore
+154;Potraživanje od FZOEU
+1540;Potraživanja od FZOEU za uslugu otkupa ambalaže
+1541;Potraživanja od FZOEU za povratnu naknadu
+155;Ostala potraživanja od državnih institucija
+156;Potraživanja za više plaćenu naknadu s temelja invaliditeta
+159;Vrijednosno usklađenje potraživanja od države i drugih institucija
+19;PLAĆENI TROŠKOVI BUDUĆEG RAZDOBLJA I OBRAČUNANI BUDUĆI PRIHODI
+190;Unaprijed plaćeni troškovi
+1900;Unaprijed plaćeni troškovi održavanja, opreme, postrojenja i građevina
+1901;Unaprijed plaćena zakupnina iz operativnog – poslovnog najma
+19010;Unaprijed plaćena zakupnina
+19011;Unaprijed plaćeni a nepriznati PDV na zakupninu (osob. automobila)
+1902;Unaprijed plaćeni troškovi reklame, propagande i sajmova
+1903;Unaprijed plaćeni troškovi energije za sljedeće razdoblje
+1904;Unaprijed plaćeni troškovi osiguranja imovine i osoba koje rade na opasnim poslovima ili putnika u prometu i sl.
+1905;Unaprijed plaćene kamate na bankovna jamstava i sl.
+1906;Unaprijed plaćeni troškovi reprezentacije
+1907;Unaprijed plaćene pretplate na službena glasila i stručne časopise
+1908;Unaprijed isplaćene plaće za buduće razdoblje
+1909;Unaprijed plaćeni ostali troškovi poslovanja (troškovi prijevoza, bankovne usluge, zdravstvena zaštita, autorski honorari, rad po ugovoru i sl.)
+191;Obračunani prihodi (budućeg razdoblja)
+192;Unaprijed plaćeni ovisni troškovi nabave (koji nisu na 651)
+193;Troškovi kamata iz budućeg razdoblja
+194;Unaprijed plaćeni troškovi koncesija (za razdoblje do 12 mj.)
+195;Unaprijed plaćene franšize, trgovačko znakovlje, prava i sl. (do 12 mj.)
+196;Unaprijed plaćene licencije i patenti (do 12 mj.)
+197;Derivativ – instrument zaštite
+199;Ostali plaćeni troškovi budućeg razdoblja
+1990;Unaprijed plaćene provizije
+1999;Ostala aktivna vremenska razgraničenja
+2;KRATKOROČNE I DUGOROČNE OBVEZE, DUGOROČNA REZERVIRANJA, ODGOĐENO PLAĆANJE I PRIHODI BUDUĆEG RAZDOBLJA
+20;KRATKOROČNE OBVEZE PREMA PODUZETNICIMA UNUTAR GRUPE I S OSNOVE UDJELA U REZULTATU (DO JEDNE GODINE)
+200;Obveze prema poduzetnicima unutar grupe
+2000;Obveze prema poduzetnicima unutar grupe
+20000;Obveze prema poduzetnicima unutar grupe za primljene robe i usluge
+20001;Obveze za raspoređeni dobitak prema poduzetnicima unutar grupe
+20002;Obveze za kamatu prema poduzetnicima unutar grupe
+20003;Obveze za predujmove prema poduzetnicima unutar grupe
+20004;Ostale obveze prema poduzetnicima unutar grupe
+20005;Obveze po realiziranim jamstvima unutar grupe
+2001;Obveze za zajmove, depozite i slično poduzetnika unutar grupe
+20010;Obveze za zajmove poduzetnika unutar grupe
+20011;Obveze za depozite poduzetnika unutar grupe
+20012;Obveze za kaucije, kapare i slično poduzetnika unutar grupe
+201;Obveze s osnove udjela u rezultatu
+2010;Obveze s osnove udjela u dobitku (analitika prema članovima društva)
+2011;Obveze za dividende dioničarima
+2012;Obveze za dobitke društava s udjelom do 20 % u kapitalu
+2013;Obveze prema zadrugarima iz rezultata
+2014;Obveze iz dobitka prema tajnim članovima
+2015;Obveze za dobitak obrtnika dobitaša
+2016;Ostale obveze s osnove udjela u dobitku
+21;KRATKOROČNE FINANCIJSKE OBVEZE
+210;Obveze za izdane čekove
+211;Obveze za izdane mjenice
+212;Obveze po izdanim vrijednosnim papirima
+2120;Obveze po izdanim komercijalnim zapisima
+2121;Obveze po izdanim obveznicama
+2122;Obveze po izdanim zadužnicama
+2123;Obveze po ostalim kratkoročnim vrijednosnim papirima
+2124;Obveze po realiziranim jamstvima
+2128;Obveze za kamate sadržane u vrijed. papirima
+213;Obveze prema društvima povezanim sudjelujućim interesom
+2130;Obveze prema društvima povezanim sudjelujućim interesom
+21300;Obveze prema društvima povezanim sudjelujućim interesom za primljene robe i usluge
+21301;Obveze za raspoređeni dobitak prema društvima povezanim sudjelujućim interesom
+21302;Obveze za kamatu prema društvima povezanim sudjelujućim interesom
+21303;Obveze za predujmove prema društvima povezanim sudjelujućim interesom
+21304;Ostale obveze prema društvima povezanim sudjelujućim interesom
+2131;Obveze za zajmove, depozite i slično društava povezanih sudjelujućim interesom
+21310;Obveze za zajmove društava povezanih sudjelujućim interesom
+21311;Obveze za depozite društava povezanih sudjelujućim interesom
+21312;Obveze za kaucije, kapare i slično društava povezanih sudjelujućim interesom
+21313;Obveze po realiziranim jamstvima iz sudj. interesa
+214;Obveze s osnove zajmova, depozita i sl.
+2140;Obveze za financijske zajmove od društava
+2141;Obveze za zajmove od ustanova, zadruga i sl.
+2142;Obveze za kratkoročne zajmove iz inozemstva
+2143;Obveze za dio dospjelih dugoročnih zajmova koji se trebaju platiti u roku 12 mj.
+2144;Obveze za zajmove prema građanima
+2145;Obveze za zajmove članova društva
+2146;Obveze po kontokorentnom računu
+2147;Obveze za depozite, jamčevine, kapare i kaucije
+2148;Obveze za zajmove prema povezanim osobama koje nisu ni grupa ni društva povezana sudjelujućim interesom
+2149;Ostali kratkoročni zajmovi i sl.
+215;Obveze prema bankama i drugim financijskim institucijama
+2150;Obveze za kratkoročne kredite u banci (analitika po bankama a unutar banke po ugovorima o kreditu)
+2151;Obveze za kratkoročne kredite u osiguravajućim društvima (analitika po društvima i kreditima)
+2152;Obveze prema ostalim kreditnim institucijama (štedionicama, mirovinskom fondu i dr.)
+2153;Kratkoročne obveze za najmove
+21530;Kratkoročne obveze za operativne najmove
+21531;Kratkoročne obveze za financijske najmove
+2154;Obveze prema kreditnim institucijama i bankama u inozemstvu
+2155;Obveze prema bankama po naplaćenim garancijama
+2156;Obveze po isplaćenom akreditivu
+2157;Obveze za prekoračenje na računu (okvirni kredit)
+2158;Obveze za kamate prema bankama i financijskim institucijama
+2159;Ostale obveze prema kreditnim institucijama
+216;Obveze prema izdavateljima kreditnih kartica (analitika prema kartičarima)
+217;Obveze iz eskontnih poslova
+2170;Obveze s temelja eskontiranih mjenica
+2171;Ostale obveze iz eskonta vrijednosnih papira
+2172;Obveze iz otkupa tražbina – faktoringa
+218;Obveze s osnove dugotrajne imovine namijenjene prodaji (analitika prema izvorima)
+22;OBVEZE PREMA DOBAVLJAČIMA, ZA PREDUJMOVE I OSTALE OBVEZE
+220;Obveze prema dobavljačima u zemlji (analitika prema dobavljačima)
+2200;Dobavljači dobara
+2201;Dobavljači usluga
+2202;Dobavljači opreme, postrojenja i nekretnina
+2203;Dobavljači nematerijalne imovine
+2204;Dobavljači za najmove
+2205;Dobavljači iz ortačkog ugovora
+2206;Dobavljači zadruge, ustanove i dr.
+2208;Dobavljači povezane osobe koje nisu grupa ni društva povezana sudjelujućim interesom
+221;Dobavljači iz EU i inozemstva (analitika prema dobavljačima)
+2210;Dobavljači dobara iz EU
+2211;Dobavljači dobara iz trećih zemalja
+2212;Dobavljači usluga iz EU
+2213;Dobavljači usluga iz trećih zemalja
+2214;Dobavljači prava intelektualnog vlasništva, istraživanja tržišta i dr.
+2215;Dobavljači prava na franšizu, uporabu imena i sl.
+2216;Dobavljači povezane osobe iz EU koji nisu grupa ni društva povezana sudjelujućim interesom
+2217;Dobavljači povezane osobe iz trećih zemalja koji nisu grupa ni društva povezana sudjelujućim interesom
+2218;Dobavljači računalnih programa
+2219;Dobavljači otpremničkih i dr. usluga iz inozemstva
+222;Dobavljači fizičke osobe
+2220;Dobavljači obrtnici i slobodna zanimanja
+2221;Dobavljači OPG-i (za isporučene osnovne proizvode poljodjelstva, ribarstva i šumarstva)
+2222;Dobavljači za isporučenu osobnu imovinu
+2223;Obveze s osnove autorskih prava, inovacija, patenata i sl.
+2224;Obveze s osnove ugovora o djelu, i akviziterstva i posredovanja
+2225;Obveze prema studentima i učenicima za rad preko studentskog servisa
+2226;Dobavljači kooperanti – fizičke osobe
+2227;Dobavljači fizičke osobe iz EU
+2228;Dobavljači bilježnici, odvjetnici i sl.
+2229;Ostali dobavljači – fizičke osobe
+223;Dobavljači komunalnih usluga
+2230;Obveze za energetske isporuke
+2231;Obveze za usluge odvodnje i odvoza smeća
+2232;Obveze za ostale komunalne usluge
+224;Obveze za nefakturirane a preuzete isporuke robe i usluge
+225;Obveze za predujmove
+2250;Primljeni predujmovi za koje su izdani računi s PDV-om
+2251;Primljeni predujmovi koji nisu pod PDV-om
+2252;Primljeni predujmovi iz inozemstva
+2253;Obveze za predujmove građana
+2254;Predujmovi za građevinske usluge (s prijenosom porezne obveze)
+2255;Ostale obveze za predujmove
+23;OBVEZE PREMA ZAPOSLENIMA I OSTALE OBVEZE
+230;Obveze prema zaposlenicima
+2300;Obveze za neto-plaće
+2301;Nadoknade plaća koje se refundiraju (od državnih institucija, od HZZO, od lokalne samouprave)
+2302;Obveze za nadoknade troškova (dnevnice, dnevnice za rad na terenu, nadoknade troškova službenog puta, uključivo i kilometraža i dr. – veza s 460)
+2303;Obveze za nadoknade troškova i naknade (prijevoz na posao i s posla, naknada za odvojeni život, naknade za smještaj i prehranu radnika, skrb djeteta radnika, troškove turist. usluga i dr. – veza s 461)
+2304;Obveze za prigodne nagrade zaposlenicima i nagrade za radne rezultate te darove djeci (veza s 462 – dio)
+2305;Obveze prema zaposlenima s temelja otpremnine, jubilarne nagrade, nadoknade za odvojeni život, pomoći obitelji umrlog posloprimca, premije zdrav. osig. (veza s 462 – dio)
+2306;Obveze za obustave iz neto-plaća i nadoknada plaća
+23060;Obveze za obustave iz neto-plaće za isplate kredita i pozajmica
+23061;Obveze za obustave iz neto-plaća i nadoknada za sudske zabrane, kazne i sl.
+23062;Obveze iz ovrha na neto-plaći
+23063;Obveze za obustave iz neto-plaća i nadoknada plaća za članarine, i dr.
+23064;Obveze za obustave za privatne troškove
+2307;Obveze prema zaposlenima za zatezne kamate i sl.
+2308;Obveza prema zaposlenima za naknadu šteta: zbog ozljede na radu, neiskorištenog godišnjeg odmora i sl.
+2309;Ostale obveze prema zaposlenicima
+23090;Obveze za obračunanu bruto-plaću iz prošle poslovne godine (koje nisu isplaćene i XIII. plaća)
+23091;Obveze prema zaposlenicima za napojnice
+231;Kratkoročne obveze iz nabava i potpora
+2310;Obveze s temelja tekuće nabave u gotovini
+2311;Obveze prema vanjskim članovima uprave, nadzornog odbora, prokuristima, stečajnim upraviteljima i sl.
+2312;Obveze za preuzeta plaćanja temeljem ugovora o cesiji, asignaciji i preuzimanjem duga
+2313;Obveze za ugovorene penale, kazne i sl.
+2314;Obveze za darovanja (do 2% od ukupnog prihoda)
+2315;Obveze za nadoknadu troškova (refundacije)
+2316;Obveze za naknadno odobrene bonifikacije, cassa sconto i druge popuste
+2317;Obveze za stipendije
+2318;Obveze s osnove povrata robe
+2319;Ostale kratkoročne obveze (npr. prema vanjskim suradnicima)
+232;Obveze za kamate (analitika prema dužnicima i vrstama obveza prema nepovezanim društvima)
+2320;Obveze za ugovorenu kamatu
+2321;Obveze za zateznu kamatu
+2322;Obveze za kamate na zajmove poduzetnika
+2323;Obveze za kamate po sudskim sporovima
+2324;Obveze za kamate s temelja poreza
+2325;Obveze za kamate prema građanima
+233;Društvene i članske obveze
+2330;Obveze društva prema članu (članovima) društva
+2331;Obveze za isplate iz kapitalnih pričuva
+2332;Obveze za isplate iz smanjenja temeljnog kapitala
+2333;Obveze člana (članova) društva prema društvu
+234;Obveze prema osiguravajućim društvima
+2340;Obveze iz osiguranja imovine i osoba
+2341;Obveze za životna osiguranja
+2342;Obveze za III. stup mirovinskog osiguranja
+2343;Obveze za premije zdravstvenog osiguranja
+2344;Obveze za dopunsko zdravstveno osiguranje
+235;Obveze iz komisijskih, konsignacijskih i zajedničkih poslova
+2350;Obveze po obračunu prodaje
+2351;Obveze iz zastupničke prodaje
+236;Obveze iz vanjskotrgovačkog poslovanja
+2360;Obveze prema uvozniku (ili naručitelju)
+2361;Obveze po poslovima izvoza za tuđi račun
+237;Obveze prema poslovnim jedinicama u inozemstvu
+2370;Obveze prema P.J. u inozemstvu
+2371;Obveze prema podružnicama u inozemstvu
+238;Obveze iz stjecanja udjela
+2380;Obveze za uplaćeni a neupisani temeljni kapital
+2381;Obveze iz kupnje poslovnog udjela – dionica
+239;Ostale kratkoročne obveze
+2390;Obveze prema odštetnim zahtjevima
+2391;Obveze za poreze po poreznom nadzoru
+2392;Obveze za PDV iz poslovnih odnosa
+2393;Obveze za komunalnu uslugu i naknadu
+23930;Obveza za komunalnu uslugu (čl. 53. Zakona o komunalnom gospodarstvu)
+23931;Obveza za komunalnu naknadu (čl. 91. Zakona o komunalnom gospodarstvu)
+23932;Obveza za financiranje gradnje komunalne infrastrukture iz cijene usluge (čl. 54. Zakona o komunalnom gospodarstvu)
+2394;Obveze iz primjene valutne klauzule
+2395;Obveze s osnove sudskih presuda
+2396;Obveze iz ortaštva ili zajedničkog poslovanja
+2397;Obveze za tuđa sredstva
+2398;Obveze za izdane vrijednosne kupone (bonove)
+23980;Obveze za izdane jednonamjenske vrijednosne kupone
+23981;Obveze za izdane višenamjenske vrijednosne kupone
+2399;Ostale nespomenute obveze
+23990;Obveze prema brokerima za kupljene vrijednosne papire
+23991;Obveze iz faktoringa za unovčenje budućih ugovora (učinaka)
+23992;Ostale obveze za isplatu
+23993;Obveze za danu napojnicu
+23994;Obveze za troškove izborne promidžbe i donacije (prema Zakonu o financiranju političkih aktivnosti, izborne promidžbe i referenduma – Nar. nov., br. 29/19. i 98/19.)
+24;KRATKOROČNE OBVEZE ZA POREZE, DOPRINOSE I SLIČNA DAVANJA
+240;Obveze za porez na dodanu vrijednost
+2400;Obveze za PDV
+24001;Obveza za PDV po isporukama
+240010;Obveza za PDV – 5%
+240011;Obveza za PDV – 13%
+240012;Obveza za PDV – 25%
+240013;Obveza za PDV – 23%
+24002;Obveza za PDV za primljene predujmove
+240020;Obveza za PDV za predujam – 5%
+240021;Obveza za PDV za predujam – 13%
+240022;Obveza za PDV za predujam – 25%
+240023;Obveza za PDV za predujam – 23%
+24003;Obveza za PDV po nezaračunanim isporukama
+240030;Obveza za PDV po nezaračunanim isporukama – 5%
+240031;Obveza za PDV po nezaračunanim isporukama – 13%
+240032;Obveza za PDV po nezaračunanim isporukama – 25%
+240033;Obveza za PDV po nezaračunanim isporukama – 23%
+24004;Obveza za PDV s osnove vlastite potrošnje – 25%, 13% ili 5%
+24005;Obveza za ispravljeni PDV zbog prenamjene dobara
+24006;Obračunana a nedospjela obveza za PDV
+2401;Obveza za PDV iz prenesene porezne obveze iz tuzemstva – 25%
+24010;Obveza PDV-a po predujmu iz prenesene porezne obveze – 25%
+24011;Obveza PDV-a po isporukama iz prenesene porezne obveze – 25%
+2402;Obveze za PDV za stjecanje dobara iz EU
+24020;Obveze za PDV za stjecanje dobara iz EU – 5%
+24021;Obveze za PDV za stjecanje dobara iz EU – 13%
+24022;Obveze za PDV za stjecanje dobara iz EU – 25%
+2403;Obveze za PDV za primljene usluge iz EU
+24030;Obveze za PDV za primljene usluge iz EU – 5%
+24031;Obveze za PDV za primljene usluge iz EU – 13%
+24032;Obveze za PDV za primljene usluge iz EU – 25%
+2404;Obveza PDV-a od poreznih obveznika bez sjedišta u RH
+24040;Obveza PDV-a za primljena dobra i usluge od poreznih obveznika bez sjedišta u RH – 5%
+24041;Obveza PDV-a za primljena dobra i usluge od poreznih obveznika bez sjedišta u RH – 13%
+24042;Obveza PDV-a za primljena dobra i usluge od poreznih obveznika bez sjedišta u RH – 25%
+2405;Obveza za obračunani PDV pri uvozu
+24050;Obveza za obračunani PDV – 5%
+24051;Obveza za obračunani PDV- 13%
+24052;Obveza za obračunani PDV – 25%
+2406;Obveze za PDV koje se ne izvještavaju u obrascu PDV-a
+24060;Obveza za PDV po rješenju PU
+2407;Obveza za razliku poreza i pretporeza u razdoblju oporezivanja
+2408;Povrat PDV-a iz putničkog prometa fizičkim osobama iz inozemstva
+2409;Obveza za PDV u drugim zemljama u kojima je porezni obveznik registriran za potrebe PDV-a (moguća analitika po zemljama)
+24090;Obveza za PDV u Sloveniji
+240900;Obveza za isporuke dobara (moguća analitika po stopama)
+240901;Obveza za isporuke usluga (moguća analitika po stopama)
+240902;Obveza za razliku poreza i pretporeza
+24091;Obveza za PDV u Austriji
+240910;Obveza za isporuke dobara (moguća analitika po stopama)
+240911;Obveza za isporuke usluga (moguća analitika po stopama)
+240912;Obveza za razliku poreza i pretporeza, itd.
+24092;Obveza za PDV u …
+241;Obveze za porez na dohodak
+2410;Obveze za porez na dohodak iz plaća i primitaka izjednačenih s plaćom
+24100;Za republički porez
+24101;Za lokalni porez
+2411;Obveze za prirez iz plaća i primitaka izjednačenih s plaćama (do 31. 12. 2023.)
+2412;Obveze za porez na drugi dohodak (iz autorskih honorara, ugovora o djelu, dohodaka članova nadzornog odbora i dr.)
+2413;Obveze za porez iz stipendija i nagrada učenika na praksi
+2414;Obveze za porez za ostale dohotke
+2417;Obveza za porez na dohodak od kapitala (36%) za izuzimanja zaposlenika
+242;Obveze za doprinose za osiguranja
+2420;Doprinos za MO iz plaća (I. stup)
+2421;Doprinos za MO iz plaća (II. stup – analitika prema fondovima)
+2422;Doprinos za MO za beneficirani staž (I. i II. stup)
+2423;Doprinos za zdravstveno osiguranje na plaće
+2424;Poseban doprinos za zdravstveno osiguranje na plaće za ozljede na radu i prof. bolesti
+2426;Doprinos za zapošljavanje na plaću
+2427;Doprinosi za osiguranja na druge dohotke
+24270;Doprinos za MO I. stup
+24271;Doprinos za MO II. stup
+24272;Doprinos za zdravstveno osiguranje na honorar
+2428;Doprinos HZZO-u na službena putovanja u inozemstvo
+2429;Obveze za ostale nespomenute doprinose koji se plaćaju na dohotke
+243;Obveze za porez na dobitak, dohodak od kapitala i porez po odbitku
+2430;Obveze za porez na dobitak
+2431;Obveze za porez na dohotke od kapitala
+24310;Porez na dohodak od kapitala na izuzimanja ili privatni život članova društva i dioničara (36%)
+24311;Porez na dohodak od kapitala na isplate dobitka ili dividendi (12%)
+24312;Porez na dohodak od kapitala na kamate (na zajmove fizičkih osoba = 12%)
+24313;Porez na dohodak od kapitala s osnove opcijskih dionica (24%)
+2432;Obveze za porez po odbitku (na inozemne usluge intelektualnog vlasništva, na kamate inozemnim nebankarskim pravnim osobama – 15% i naknade za nastupe inozemnih izvođača – umjetnika, zabavljača 10% – čl. 31. st. 4. i 6. Zakona o porezu na dobit)
+2433;Obveze za porez po odbitku za isplate pravnim osobama s područja država "poreznih utočišta" i nekooperativnih država – stopa 25 % (čl. 31., st. 10. Zakona o porezu na dobit)
+2434;Obveze za porez na kapitalni dobitak
+2435;Obveza za PD po rješenju poreznog nadzora
+2436;Obveza za porez po tonaži broda
+244;Obveze za posebne poreze, trošarine i druge poreze prema državi
+2440;Obveza za posebni porez na motorna vozila (PPMV)
+2441;Obveza za posebni porez na kavu
+2442;Obveza za posebni porez na bezalkoholna pića
+2443;Obveza za trošarinu na alkohol i alkoholna pića
+2444;Obveza za trošarinu na energente i el. energiju
+2445;Obveze za trošarinu na duhanske proizvode i duhanske prerađevine
+2447;Obveza za 3% poreza na promet nekretnina
+2448;Obveze za upravnu pristojbu
+245;Obveze za članarinu turističkim zajednicama
+246;Obveze za članarinu komori
+2461;Obveze za paušal HOK-u
+2462;Obveze za članarinu granskoj ili strukovnoj komori
+247;Obveze za carinu i carinske pristojbe
+2470;Obveze za carinu
+2471;Obveze za carinu prema mjernoj jedinici (prelevmani)
+2472;Obveze za carinske pristojbe i takse
+2473;Ostale obveze prema carini
+248;Obveze za lokalne poreze i druga davanja
+2481;Obveza za porez na potrošnju u ugostiteljstvu
+2482;Obveza za porez na cestovna motorna vozila
+2483;Obveze za naknadu za nezapošljavanje osoba s invaliditetom
+2484;Obveze za ostale poreze županiji, gradu ili općini
+249;Ostale obveze javnih davanja
+2490;Obveze za nadoknadu za šume
+2491;Obveze prema lokalnoj samoupravi za financiranje komunalne izgradnje
+24910;Obveze iz akumulirana invest. sredstva L.S.
+24911;Obveze iz prenamjene zemljišta, legalizaciju i sl.
+2492;Obveze za zakonske kazne
+2493;Obveze za turističku pristojbu
+2494;Obveze za naknade za iskorištav. mineral. sirovina
+2495;Obveze za koncesije
+2496;Obveze za spomeničku rentu
+2497;Obveze za naknade za ambalažu
+2498;Obveze za poreze po reprogramu MF PU
+2499;Ostale obveze za ostala javna davanja
+25;DUGOROČNE OBVEZE (ZA DUŽE OD JEDNE GODINE)
+250;Obveze prema poduzetnicima unutar grupe
+2500;Obveze prema poduzetnicima unutar grupe
+25000;Obveze prema poduzetnicima unutar grupe za primljene robe i usluge
+25001;Ostale dugoročne obveze prema poduzetnicima unutar grupe
+2501;Obveze za zajmove, depozite i slično poduzetnika unutar grupe
+25010;Obveze za zajmove poduzetnika unutar grupe
+25011;Obveze za depozite poduzetnika unutar grupe
+25012;Obveze za kaucije, kapare i slično poduzetnika unutar grupe
+25013;Obveze po dugoročnim jamstvima (realiziranim) unutar grupe
+251;Obveze za zajmove, depozite i sl.
+2510;Obveze za financijske zajmove
+2511;Obveze za dugoročne hipotekarne zajmove prema društvima
+2512;Obveze za dugoročne zajmove prema građanima
+2513;Obveze za dugoročne zajmove članova društva
+2514;Obveze za dugoročne zajmove iz inozemstva
+2515;Obveze za depozite
+2516;Obveze za kapare
+2517;Obveze s osnove jamstva (realiziranih)
+2518;Obveze za zajmove prema povezanim osobama koji nisu grupa ni društva povezana sudjelujućim interesom
+2519;Ostale obveze za dugoročne zajmove
+252;Obveze prema bankama i dr. financijskim institucijama
+2520;Dugoročni financijski krediti banaka (analitika po bankama a unutar toga po sklopljenim ugovorima o kreditu)
+2521;Dugoročni krediti od osiguravajućih društava (analitika po društvima a unutar toga po sklopljenim ugovorima)
+2522;Dugoročni krediti od ostalih domaćih kreditnih institucija (fonda, i dr.)
+2523;Dugoročni krediti od inozemnih banaka i drugih inozemnih kreditnih institucija
+2529;Dugoročne obveze za kamate
+253;Dugoročne obveze iz financijskog i operativnog lizinga
+2530;Financijski najam vozila, brodova i dr.
+2531;Povratni financijski najam (npr. nekretnina brodova, tramvaja, vlakova i dr.)
+2532;Operativni najam vozila, zrakoplova i brodova (za obveznike MSFI-ja 16)
+2533;Operativni najam ostale opreme (za obveznike MSFI-ja 16)
+2534;Financijski najam opreme
+2535;Dugoročne obveze za prava
+254;Obveze za predujmove
+2540;Obveze za dugoročne predujmove (avanse) za izgradnju objekata i postrojenja
+2541;Obveze za dugoročne predujmove za isporuke zaliha
+2542;Ostale dugoročne obveze za predujmove
+255;Obveze prema dobavljačima (neisplaćene dugoročne obveze prema vjerovnicima s osnove poslovanja)
+2550;Obveze prema dobavljačima s rokom plaćanja duljim od godine dana (npr. kod izgradnje)
+2551;Obveze prema dobavljačima iz inozemstva (dugoročne)
+2552;Obveze prema dobavljačima iz ostalih poslovnih aktivnosti
+2553;Obveze prema dobavljačima za zadržani dio iz jamstva
+2554;Dugoročne obveze za najmove
+256;Obveze po vrijednosnim papirima (dugoročnim)
+2560;Obveze za izdane dugoročne obveznice
+2561;Obveze za dugoročne komercijalne vrijednosne papire
+2562;Obveze za dugoročne mjenice
+2563;Obveze po ostalim dugoroč. vrijednos. papirima
+2568;Obveze za kamate iz obveznica
+2569;Diskont na vrijednosne papire (kao razlika do nominalne vrijednosti)
+257;Obveze prema društvima povezanim sudjelujućim interesom
+2570;Obveze prema društvima povezanim sudjelujućim interesom
+25700;Obveze prema društvima povezanim sudjelujućim interesom za primljene robe i usluge
+25701;Ostale obveze prema društvima povezanim sudjelujućim interesom
+2571;Obveze za zajmove, depozite i slično društava povezanih sudjelujućim interesom
+25710;Obveze za zajmove društava povezanih sudjelujućim interesom
+25711;Obveze za depozite društava povezanih sudjelujućim interesom
+25712;Obveze za kaucije, kapare i slično društava povezanih sudjelujućim interesom
+25713;Obveze po jamstvima (realiziranim) iz sudj. int.
+258;Obveze prema Državi (realizirana jamstva, krediti, plaćene koncesije)
+259;Ostale dugoročne obveze
+2590;Obveze prema zakladama, komorama i sl.
+2591;Dugoročne obveze za porez
+2592;Dugoročne obveze za socijalno osiguranje
+2593;Obveze za dugoročne jamčevine
+2594;Dugoročne obveze iz ortaštva ili zajedničkog poslovanja
+2599;Ostale dugoročne obveze
+26;ODGOĐENI POREZI
+260;Odgođena porezna obveza
+2600;Odgođena privremena razlika porezne obveze (analitika po godinama − HSFI t. 12.22. i MRS 12, t. 5.)
+28;DUGOROČNA REZERVIRANJA ZA RIZIKE I TROŠKOVE
+280;Rezerviranja za otpremnine i mirovine
+2800;Rezerviranja za otpremnine
+2801;Rezerviranja za mirovine
+281;Rezerviranja za porezne obveze
+2810;Dugor. rezerv. za odg. plać. poreza i dopr.
+282;Rezerviranja za započete sudske sporove
+2820;Dugoročna rezerviranja za gubitke po započetim sudskim sporovima
+283;Rezerviranja za troškove obnavljanja prirodnih bogatstava
+2830;Dugoročna rezerviranja za obnovu prirodnog bogatstva
+284;Rezerviranja za troškove u jamstvenim rokovima
+2840;Dugoročna rezerviranja za troškove izdanih jamstava za prodana dobra
+285;Druga rezerviranja
+2850;Dugor. rezerv. za neiskorištene god. odmore (MRS 19, t. 14. i HSFI 13) – vidi i račun 298
+2851;Dugoročno rezerviranje za restrukturiranje (MRS 37 i HSFI t. 16.22.)
+2852;Rezerviranje za ugovore s poteškoćama (MRS 37, t. 66. i HSFI t. 16.21.)
+2853;Dugoročna rezerviranja za jubilarne nagrade
+2854;Ostala dugoročna rezerviranja za rizike i dr. očekivane troškove
+29;ODGOĐENO PLAĆANJE TROŠKOVA I PRIHOD BUDUĆEG RAZDOBLJA
+290;Odgođeno plaćanje troškova
+2900;Obračunani troškovi za koje nije primljena faktura (telefon, grijanje, el. energija, plin, voda i sl.)
+2901;Obračunana najamnina iz operativnog (poslovnog) najma
+2902;Obračunani troškovi tekućeg održavanja
+2903;Obračunani troškovi reklame, propagande i sajmova
+2904;Obračunane a neplaćene usluge korištene u obračunskom razdoblju
+2905;Obračunani rad po ugovoru o djelu, autor. hon.
+2906;Obračunani kalo, rastep, kvar i lom
+2907;Obračunani troškovi premije osiguranja
+2908;Uračunani troškovi službenih glasila i stručnih časopisa
+2909;Obračunani ostali troškovi poslovanja (troškovi prijevoza, bankovne usluge i platni promet, reprezentacija i dr.)
+291;Obračunani troškovi korištenih prava
+2910;Obračunani troškovi franšiza, korištenih trgovačkih znakova, prava i sl.
+2911;Obračunani troškovi licencija
+2912;Obračunani troškovi autorskih prava
+2913;Odgođeno plaćanje troškova za ostala prava
+292;Obračunani troškovi nabave i izrade dobara
+2920;Obračunani ovisni troškovi nabave (za koje nisu primljeni računi) – prijevoz, osiguranje, špedicija i dr. vanjski troškovi
+2921;Obračunani trošak plaće
+2922;Obračunani opći troškovi proizvodnje
+293;Obračunani prihodi budućeg razdoblja
+2930;Odgođeni prihodi radi neizvjesnih troškova
+2931;Obračunani prihodi budućeg razdoblja koji su rezultat primjene računovodstvene politike
+2932;Odgođeno priznavanje prihoda kad se predviđa povrat robe
+2933;Odgođeni prihodi iz otkupa tražbine (faktoring koji nije zarađen)
+2934;Odgođeni prihodi od kamata iz financijskog lizinga
+2935;Odgođeni prihodi iz operativnog lizinga
+2936;Obračunane (anticipativne) kamate na dane zajmove i zatezne kamate (za buduće razdoblje)
+2937;Unaprijed obračunane ili naplaćene školarine
+2938;Odgođeni prihodi iz ortaštva
+2939;Ostali odgođeni prihodi budućeg razdoblja (npr. ugovorna obveza, nagrada za vjernost kupaca)
+294;Odgođeni prihodi iz državnih potpora (HSFI t. 15.37 i MRS 20, t. 12. i 24.)
+2940;Odgođeni prihodi iz državnih i lokalnih potpora za dugotrajnu nematerijalnu i materijalnu imovinu (analitike po namjenskim primitcima iz proračuna – po investicijama)
+2941;Odgođeni prihodi za D. I. iz fondova EU
+2942;Odgođeni prihodi iz potpora za zapošljavanje
+2943;Odgođeno priznavanje prihoda za unaprijed naplaćene subvencije i potpore
+2944;Odgođeni prihodi ostalih potpora
+295;Odgođeno priznavanje prihoda
+2950;Razgraničeni višak prihoda od prodaje i povratnog financijskog najma
+2951;Odgođeni prihodi od neiskorištenih popusta (MSFI 15, t. 73. – 80.)
+2952;Odgođeni prihod od prodaje na malo za produženo jamstvo
+296;Odgođeni prihod s osnove nefakturiranih isporuka dobara i usluga
+297;Nerealizirani dobitci iz financijske imovine (HSFI 9 i MSFI 9)
+298;Odgođeni fakturirani prihod za koji nije nastala isporuka
+299;Ostala pasivna vremenska razgraničenja
+2990;Ostala pasivna vremenska razgraničenja troškova
+3;ZALIHE SIROVINA I MATERIJALA, REZERVNIH DIJELOVA I SITNOG INVENTARA
+30;OBRAČUN TROŠKOVA KUPNJE ZALIHA
+300;Kupovna cijena dobavljača
+3000;Fakturna cijena sirovina i materijala na putu
+3001;Fakturna cijena sirovina i materijala
+3002;Fakturna cijena rezervnih dijelova
+3003;Fakturna cijena sitnog inventara, autoguma, rez. dijelova i ambalaže
+3005;Materijal i dijelovi u preuzimanju (nema dokumentacije)
+301;Ovisni troškovi nabave (u svezi s dovođenjem na zalihu)
+3010;Troškovi transporta
+3011;Troškovi ukrcaja i iskrcaja (fakturirani)
+3012;Transportno osiguranje i čuvanje
+3013;Posebni troškovi pakiranja – ambalaže
+3014;Troškovi vlastitog transporta
+3015;Troškovi vlastitog ukrcaja i iskrcaja
+3016;Troškovi špeditera
+3017;Troškovi atesta i kontrole
+3018;Troškovi dorade i oplemenjivanja za vrijeme dovođenja na zalihu
+3019;Ostali ovisni troškovi nabave
+302;Carina i druge uvozne pristojbe
+303;Posebni porezi (trošarine) koji se ne mogu odbiti
+309;Obračun troškova kupnje
+3090;Obračun nabave sirovina i materijala, dijelova i sitnog inventara koji se skladišti
+3091;Obračun nabave sirovina i materijala i dijelova koji izravno terete troškove
+31;SIROVINE I MATERIJAL NA ZALIHI
+310;Sirovine i materijal u skladištu
+3100;Zalihe sirovina i materijala
+3101;Zalihe goriva i maziva
+3102;Poluproizvodi za ugradnju ili proizvodnju
+3103;Uredski materijal i pribor
+3104;Zalihe materijala s temelja povezane proizvodnje
+3105;Zalihe ambalažnog materijala
+3106;Zalihe materijala kod kooperanata
+3107;Materijal na zalihi u javnom ili drugom skladištu
+3108;Zalihe pića, hrane i dr. u ugostiteljstvu i hotelijerstvu
+3109;Zalihe otpadnog i rashodovanog materijala
+311;Materijal u doradi, obradi i manipulaciji
+3110;Materijal u doradi, obradi i oplemenjivanju
+3111;Materijal u manipulaciji i na putu
+3112;Troškovi dorade, obrade i oplemenjivanja
+312;Materijal na doradi kod ortaka
+313;Zalihe materijala za poljoprivredu
+3130;Zalihe sjemena i sadnog materijala
+3131;Zalihe komponenti za proizvodnju
+318;Odstupanje od cijene zaliha
+319;Vrijednosno usklađenje zaliha sirovina i materijala
+32;ZALIHE REZERVNIH DIJELOVA
+320;Rezervni dijelovi na zalihi
+3200;Rezervni dijelovi za servisne usluge
+3201;Dijelovi i sklopovi za ugradnju (u proizvode)
+3202;Rezervni dijelovi za tekuće i investicijsko održavanje
+3203;Zalihe polovnih rezervnih dijelova
+3204;Zalihe otpadaka rezervnih dijelova
+328;Odstupanje od cijene rez. dijelova na zalihi
+329;Vrijednosno usklađenje zaliha rezervnih dijelova
+35;ZALIHE SITNOG INVENTARA I AUTOGUMA
+350;Sitan inventar na zalihi
+3500;Sitan inventar na zalihi (analitika prema vrstama: alati, mjerni instrumenti, pribori, ostala sredstva rada male vrijednosti, radna i zaštitna odjeća, protupožarna i sanitetska sredstva, i dr.)
+351;Ambalaža na zalihi (samo vlastita i višekratna, analitika prema vrstama)
+352;Autogume na zalihi
+358;Odstupanje od cijene
+359;Vrijednosno usklađenje zaliha
+36;ZALIHE SITNOG INVENTARA I AUTOGUMA U UPORABI
+360;Sitan inventar u uporabi
+361;Ambalaža u uporabi
+362;Autogume u uporabi
+363;Otpis sitnog inventara
+364;Otpis ambalaže
+365;Otpis autoguma
+369;Vrijednosno usklađenje sitnog inventara, ambalaže i autoguma
+37;PREDUJMOVI DOBAVLJAČIMA SIROVINA I MATERIJALA, REZERVNIH DIJELOVA, SITNOG INVENTARA I AUTOGUMA
+370;Predujmovi dobavljačima materijala
+371;Predujmovi dobavljačima rezervnih dijelova
+372;Predujmovi dobavljačima sitnog inventara
+373;Predujmovi dani uvozniku za nabavu sirovina i materijala, dijelova i inventara
+374;Predujmovi inozemnim dobavljačima
+379;Vrijednosno usklađenje danih predujmova
+4;TROŠKOVI PREMA VRSTAMA, FINANCIJSKI I OSTALI RASHODI
+40;MATERIJALNI TROŠKOVI
+400;Troškovi sirovina i materijala (za proizvodnju dobara i usluga)
+4000;Osnovni materijali i sirovine
+4001;Dijelovi i sklopovi
+4002;Poluproizvodi za ugradnju
+4003;Pomoćni materijali (mazivo, ljepila, svrdla, pile, noževi, brusne ploče i dr.)
+4004;Potrošni materijal za čišćenje i održavanje
+4005;Materijal za HTZ zaštitu, radna i zaštitna odjeća i obuća
+4006;Materijal pogonske administracije i menadžmenta (uredski potrošni i sl.)
+4007;Troškovi oblikovanja proizvoda za posebne kupce
+4008;Materijali u pomoćnoj djelatnosti (za restoran i dr.)
+4009;Ostali izravni i opći troškovi pogona – uslužne jedinice (HSFI t. 10.17 i MRS 2, t. 10. do 19.)
+401;Materijalni troškovi administracije, uprave i prodaje
+4010;Uredski materijal (papir, registratori, olovke, tiskanice, toneri, USB stickovi, ulošci, kalendari, rokovnici, kuverte, kutije za otpremu i sl.)
+4011;Materijal i sredstva za čišćenje i održavanje
+4012;Troškovi otpisa uredskog sitnog inventara
+4013;Ambalažni materijal, vrpce za blagajne, blokovi papira, pisači, naljepnice, etikete i dr.
+4014;Voda (izvorska) za piće u uredima
+4015;Ostali napitci (sokovi, kava, čaj) za potrebe zaposlenika s PDV-om
+4016;Uniformirana radna odjeća i obuća
+4017;Troškovi ukrasnog bilja i ukrasa (za blagdane)
+4018;Ostali materijalni troškovi ureda i trgovine
+402;Materijalni troškovi istraživanja, razvoja i uzoraka
+4020;Troškovi projekta za temeljna istraživanja proizvoda
+4021;Troškovi razvoja prototipova
+4022;Troškovi ostalih aktivnosti razvoja
+4023;Troškovi uzoraka
+403;Troškovi ambalaže
+4030;Troškovi neodvojive ambalaže u proizvodnji (boce, limenke, kutije i dr.)
+4031;Troškovi paleta, gajbi i sl.
+404;Trošak sitnog inventara, ambalaže i autoguma
+4040;Troškovi uredskog sitnog inventara
+4041;Troškovi radioničkog sitnog inventara
+4042;Troškovi ambalaže (povratne, posebne) – otpis
+4043;Troškovi autoguma (za kamione, autobuse, teretna vozila i strojeve)
+4044;Troškovi autoguma (neto + PDV – 50%) za slučaj plaće u naravi
+4045;50% troška autoguma za osobne automobile i dr. sredstva za osobni prijevoz
+4046;50% troška autoguma za osobne automobile i dr. sred. za osob. prijevoz (s PDV-om)
+405;Rezervni dijelovi i materijal za održavanje
+4050;Potrošeni rezervni dijelovi za popravak vlastite opreme
+4051;Materijal za održavanje opreme i objekata
+4052;Trošak rez. dijelova za slučaj plaće u naravi
+4055;50% troškova rezervnih dijelova i materijala za popravak automob., plovila i zrakopl. za osobni prijevoz
+4056;50% troška rezervnih dijelova i materijala za održavanje automobila i dr. za osobni prijevoz – s 50% PDV-a
+4057;Troškovi zamjene u jamstvenom roku
+4058;Potrošeni vlastiti proizvodi i roba za održavanje
+4059;Ostali troškovi rezervnih dijelova
+406;Potrošena energija u proizvodnji dobara i usluga
+4060;Električna energija
+4061;Plin
+4062;Mazut i ulje za loženje
+4063;Dizelsko gorivo, benzin i motorno ulje (za stroj. i sl.)
+4064;Trošak goriva za teretna vozila (kamione, autobuse, strojeve, brodove i sl.)
+4065;Troškovi grijanja (drva, briketi, para)
+4068;Trošak CO2 (ekološki porez)
+4069;Ostali troškovi energije u proizvodnji
+407;Potrošena energija u administraciji, upravi i prodaji
+4070;Trošak električne energije
+4071;Plin
+4074;Gorivo za osob. automobile za slučaj plaće s 50% PDV-a
+4075;50% troškova diesela i benzina za pogon automobila, plovila i zrakoplova za osobni prijevoz
+4076;50% goriva za osobni prijevoz s 50% PDV-a
+4077;Trošak goriva za teretna vozila, strojeve i brodove
+4078;Troškovi energije za pogon el. automobila
+4079;Ostali troškovi energije (grijanje, drva, briketi)
+408;Troškovi zemljišta za izgradnju
+4080;Trošak zemljišta za tržišnu izgradnju
+4081;Trošak p.n.n. za zemljište za tržišnu izgradnju
+4082;Trošak građ. dozvole i komunaln. naknade objekta za tržište
+409;Odstupanja od standardnog troška
+41;OSTALI VANJSKI TROŠKOVI (TROŠKOVI USLUGA)
+410;Troškovi prijevoza, telekoma i sl.
+4100;Troškovi telefona, interneta i sl.
+4101;Poštanski troškovi
+4102;Prijevozne usluge u cestovnom prometu
+4103;Prijevozne usluge željeznicom
+4104;Prijevozne usluge brodara i trajekta
+4105;Prijevozne usluge zrakoplova
+4106;Troškovi specijalnih prijevoza
+4107;Usluge taksi – prijevoza
+4108;Usluge dostave i logistike
+4109;Ostale usluge prijevoza
+41090;Troškovi vinjete, ENC-a, autoceste i sl.
+41091;Usluga prijevoza radnika na posao i s posla
+411;Troškovi vanjskih usluga pri izradi dobara i obavljanju usluga
+4110;Usluge dorade (oplemenjivanja), izrade, prerade i sl. u proizvodnji i izgradnji
+4111;Usluge kooperanata na zajedničkim uslugama prema trećima
+4112;Usluge studentskog i omladinskog servisa i na izradi proizvoda
+4113;Usluge pripreme teksta za tisak, za web. i sl.
+4114;Grafičke usluge tiska i uveza
+4115;Usluge hotela i smještaja radnika na terenu
+4116;Usluge za iznajmljeni kapacitet
+4117;Usluge rada vanjskog osoblja
+4118;Usluge izrade ili popravka po ugovoru o djelu
+4119;Ostale vanjske usluge na izradi dobara i proizvodnih usluga
+41190;Usluge cateringa, muzike i sl. radi pružanja usluge drugima
+412;Usluge održavanja i zaštite (servisne usluge)
+4120;Nabavljene usluge tekućeg održavanja (bez vlastitog materijala i dijelova)
+4121;Nabavljene usluge za investicijsko održavanje i popravke (bez vlastitog materijala i dijelova)
+4122;Usluge održavanja teretnih vozila
+4123;Usluge održavanja softvera i web stranica
+4124;Usluge popravka prodanih a neispravnih dobara u jamstvenom roku
+4125;Usluge održavanja osobnih automobila
+41250;50% usluga servisa za održavanje automobila, plovila i zrakoplova koji služe za osobni prijevoz poduzetnika i zaposlenih
+41251;50% usluga održavanja prijevoznih sredstava za osobni prijevoz (s PDV-om)
+41252;Servis osob. automob. za slučaj plaće u naravi
+4126;Usluge pranja, čišćenja i glačanja
+4127;Usluge zaštite na radu i održavanja okoliša
+4128;Usluge zaštitara na čuvanju imovine i osoba
+4129;Ostale servisne usluge i usluge osoba
+413;Usluge registracije prijevoznih sredstava i troškovi dozvola
+4130;50% troška registracije osobnih automobila, plovila i zrakoplova za prijevoz osoba poduzetnika (osim osiguranja)
+4131;50% troška registracije sred. za osobni prijevoz (s 50% PDV-a) (osim troškova osiguranja)
+4132;Troškovi registracije (neto + PDV) – plaća u naravi
+4133;Trošak registracije dostavnih i teret. vozila i autobusa (sveukupno) i automob. bez poreznog ograničenja
+4134;Troškovi registracije plovila
+4135;Troškovi registracije zrakoplova
+4136;Troškovi dozvola za prometne smjerove
+4137;Troškovi koncesija, licencija i dr. prava na prijevoz
+4138;Troškovi god. nadoknade za ceste, takse i sl.
+4139;Ostali troškovi registracije prometala
+414;Usluge zakupa – lizinga
+4140;Zakupnine – najamnine nekretnina
+4141;Zakupnine opreme
+4142;Usluge operativnog (poslovnog) lizinga opreme
+4143;50% usluga operativnog lizinga automobila, brodova i zrakoplova za osobni prijevoz
+4144;50% usluga operativnog lizinga sred. za osobni prijevoz (s 50% PDV-a)
+4145;Usluge operat. najma osob. automob. za slučaj plaće
+4146;50% rent-á-car usluge prijevoza osoba
+4147;50% rent-á-car usluga prijevoza osoba (s 50% PDV-a)
+4148;Rent-á-car za prijevoz tereta
+4149;Troškovi ostalih najmova
+41490;Usluge najma informatičke opreme
+41491;Usluga najma softvera
+41492;Usluge najma fotokopirnih aparata
+41493;Usluge web sjedišta (hosting)
+41494;50% ostalih troškova lizinga (osiguranje, porez na CMV)
+41495;50% ostalih troškova lizinga s 50% PDV-a (osiguranje, porez na CMV)
+415;Usluge promidžbe, sponzorstva i troškovi sajmova
+4150;Troškovi promidžbe putem tiskovina, TV, plakata i sl.
+4151;Usluge promidžbenih agencija
+4152;Troškovi promidžbe u inozemstvu
+4153;Trošak sponzoriranja športa i kulture u cilju promidžbe
+4154;Usluge unapređenja prodaje
+4155;Usluge istraživanja tržišta
+4156;Usluge sajmova (nadoknada za prostor)
+4157;Usluge oblikovanja i uređenja izložbenog i prodajnog prostora
+4158;Troškovi promidžbe najmom medija (stranica portala i sl.)
+4159;Ostali troškovi promidžbe (osim reprezentacije, dnevnica na službenom putu i sl.)
+416;Intelektualne i osobne usluge
+4160;Troškovi drugih dohodaka (ugovora o djelu, akvizitera, trgov. putnika, konzultanata)
+4161;Autorski honorari (pisana, govorna, prijevodi i dr.)
+4162;Usluge specijalističkog obrazovanja, znanstvenoistraživačke usluge, usluge informacija i sl.
+4163;Konzultantske i savjetničke usluge
+4164;Knjigovodstvene usluge
+4165;Usluge poreznih savjetnika
+4166;Usluge revizije i procjene vrijednosti poduzeća, due diligence i sl.
+4167;Odvjetničke, bilježničke i usluge izrade pravnih akata
+4168;Naknade za korištenje prava intelektualnog vlasništva (licencije, ind. prava., robni znak i sl.)
+4169;Usluge vještačenja, administrativne usluge (npr. prijepis), i dr. intelektualne usluge
+417;Troškovi komunalnih i sličnih usluga
+4170;Komunalna naknada
+4171;Odvoz smeća i fekalija
+4172;Voda i odvodnja
+4173;Održavanje zelenila
+4174;Usluge tržnica
+4175;Garažiranje i parkiranje vozila
+4176;Deratizacija i dezinfekcijske usluge
+4177;Dimnjačarske i ekološke usluge
+4178;Veterinarske, sanitarne i usluge zbrinjavanja otpada
+4179;Ostale komunalne usluge
+418;Usluge reprezentacije – ugošćivanja
+4180;50% vanjskih usluga ugošćenja (reprezentacije) (s 50% PDV-a) – porezno priznato
+4181;50% vanjskih usluga ugošćenja (reprezentacije) (s 50% PDV-a) – porezno nepriznato
+4182;50% reprezentacije – poklona danih poslovnim partnerima (s 50% PDV-a) po ulaznim računima dobavljača – porezno priznato
+4183;50% reprezentacije – poklona danih poslovnim partnerima (s 50% PDV-a) po ulaznim računima dobavljača – porezno nepriznato
+419;Troškovi ostalih vanjskih usluga
+4190;Usluge kontrole kakvoće i atestiranja dobara
+4191;Usluge studentskog servisa
+4192;Hotelske usluge (u agencijskim poslovima)
+4193;Vanjskotrgovačke usluge
+4194;Špediterske usluge pri uvozu i izvozu i sl.
+4195;Troškovi oglašavanja u tisku za slobodna radna mjesta, objava fin. izvješća i sl. (osim promidžbe)
+4196;Troškovi korištenja javnih skladišta, luka, pristaništa, hlađenja i sl.
+4197;Trošak autoputa, tunela i mostarina
+4198;Troškovi posredovanja pri nabavi ili prodaji dobara i usluga
+4199;Ostali nespomenuti vanjski troškovi – usluge
+41990;Troškovi fotokopiranja i dr. grafičke usluge
+41991;Usluge agenata i detektiva
+41992;Troškovi usluge slaganja robe na policama i sl.
+41993;Usluge pozicioniranja proizvoda u trgovačkim lancima
+41994;Korištene usluge ugošćenja glazbe, organizacija eventa i sl. (v. pod 4.)
+41995;Troškovi usluga za održivo poslovanje
+41996;Troškovi ostalih usluga
+41997;Usluge vođenja društvenih mreža
+42;TROŠKOVI OSOBLJA – PLAĆE
+420;Neto plaće i nadoknade
+4200;Troškovi neto plaća uprave i prodaje
+4201;Troškovi neto plaća proizvodnje
+4202;Ostali povremeni primitci
+4203;Dodatna plaća (13. plaća), dodatak uz mjesečnu plaću do ukupno 1.200,00 eura godišnje
+4204;Bonusi i opcijske dionice
+421;Troškovi poreza iz plaća
+4210;Uprava i prodaja
+4211;Proizvodnja
+4212;Ostali povremeni primitci
+422;Troškovi doprinosa iz plaća
+4220;Uprava i prodaja
+4221;Proizvodnja
+4222;Ostali povremeni primitci
+423;Doprinosi na plaće
+4230;Uprava i prodaja
+4231;Proizvodnja
+4232;Ostali povremeni primitci
+4235;Doprinosi za beneficirani radni staž
+424;Bruto plaće (privremeno v. napomenu pod 2)
+429;Odstupanje od standardnog troška plaće
+43;AMORTIZACIJA
+430;Amortizacija nematerijalne imovine
+4300;Amortizacija izdataka za razvoj
+4301;Amortizacija koncesije, patenata i dr. prava
+4302;Amortizacija softvera i ost. prava
+4303;Amortizacija goodwilla
+4304;Amortizacija prava korištenja imovine u operativnom najmu
+4305;Amortizacija ostale nematerijalne imovine
+431;Amortizacija materijalne imovine
+4310;Amortizacija građevina
+4311;Amortizacija postrojenja
+4312;Amortizacija opreme
+4313;Amortizacija alata i inventara
+4314;Amortizacija transportnih sredstava
+4315;Amortizacija brodova
+4316;Amortizacija poljoprivredne opreme
+4319;Amortizacija ostale mater. imovine
+432;Amortizacija osobnih automobila i dr. sredstava za osobni prijevoz
+4320;50% amortizacije osob. aut. i dr. sred. prijevoza
+4321;50% amortizacije osob. aut. i dr. sred. prijevoza
+4322;Dio amortizacije osob. aut. i dr. sred. prijevoza u vrijednosti iznad 54.000,00 eura
+4323;Amortizacija (otpis) nepriznatog PDV-a
+4324;Amortiz. osob. aut. za sluč. plaće (neto + nepriznati PDV)
+433;Amortizacija objekata i opreme uprave i prodaje
+4330;Amortizacija građevinskih objekata
+4331;Amortizacija računala, računalne opreme i programa te računalne mreže
+4332;Amortizacija osobnih automobila
+4333;Amortizacija ostale opreme (pokućstvo, telefonija i dr.)
+434;Povećana amortizacija s temelja revalorizacije
+435;Amortizacija biološke imovine (vinogradi, voćnjaci, osnovno stado i sl.)
+436;Amortizacija iznad porezno dopuštene
+439;Odstupanje od standardnog troška amortizacije
+44;VRIJEDNOSNO USKLAĐENJE DUGOTRAJNE I KRATKOTRAJNE IMOVINE
+440;Vrijednosno usklađenje dugotrajne nematerijalne imovine (018)
+4400;Vrijednosno usklađenje prava i dr.
+4401;Vrijednosno usklađenje goodwill
+4402;Vrijednosno usklađenje ostale nemat. imov.
+4403;Vrijednosno usklađenje kriptovaluta
+4405;Vrijednosno usklađenje porezno nepriznato
+441;Vrijednosno usklađenje dugotrajne materijalne imovine
+4410;Vrijednosno usklađenje nekretnina (028)
+4411;Vrijednosno usklađenje postrojenja, opreme, alata, pogonskog inventara i transportne imovine (038)
+4412;Vrijednosno usklađenje biološke imovine (048)
+4413;Vrijednosno usklađenje ulaganja u nekretnine (058)
+4414;Vrijednosno usklađenje ostale mater. imovine
+4415;Vrijednosno usklađenje porezno nepriznato
+442;Vrijednosno usklađenje dugotrajnih potraživanja (veza sa 078)
+444;Vrijednosno usklađenje depozita u bankama, mjenica, čekova i sl. (109 i dio 119)
+445;Vrijednosno usklađenje kratkotrajnih potraživanja
+4450;Vrijednosna usklađenja potraživanja od kupaca koja nisu naplaćena dulje od 60 dana od dospijeća (veza s 129)
+4451;Vrijednosna usklađenja kratkoročnih potraživanja od kupaca i drugih koja su utužena (prije zastare, koja su u ovršnom postupku, otvoren je stečaj, nagodba i sl. – dio 129, 139 i 159) i svote do 665,00 eura
+4452;Vrijednosna usklađenja zastarjelih potraživanja (dio sa 129, 139 i 159) – porezno nepriznata
+446;Vrijednosno usklađenje zaliha (veza s 319, 329, 359 i 369)
+447;Vrijednosno usklađenje danih predujmova (veza s 379)
+448;Vrijednosno usklađenje potraživanja iz predstečajne nagodbe
+449;Otpis zaliha materijala
+45;REZERVIRANJA (V. SKUPINU 28)
+450;Troškovi dugoročnog rezerviranja za mirovine, otpremnine i sl. obveze (čl. 11. st. 2. ZoPD-a)
+4500;Dugoročno rezerviranje za mirovine i sl. obveze
+4501;Dugoročno rezerviranje za otpremnine i sl. obveze
+4502;Rezerviranje za neiskorišteni godišnji odmor (čl. 11. st. 5. ZoPD-a i MRS 19) – vidi rač. 298
+451;Rezerviranja za porezne obveze
+452;Troškovi dugoročnog rezerviranja za gubitke po započetim sudskim sporovima (čl. 11. st. 2. ZoPD-a)
+453;Troškovi dugoročnog rezerviranja za obnovu prirodnog bogatstva (čl. 11. st. 2. ZoPD-a)
+454;Troškovi dugoročnog rezerviranja za rizike u jamstvenom (garancijskom) roku (čl. 11. st. 2. ZoPD-a)
+455;Troškovi dugoročnog rezerviranja za restrukturiranje poduzeća (MRS 37, t. 72. i HSFI t. 16.22)
+456;Troškovi rezerviranja po štetnim ugovorima (HSFI 16.21.)
+457;Troškovi ostalih dugoročnih rezerviranja i troškovi rizika
+46;OSTALI TROŠKOVI POSLOVANJA
+460;Dnevnice za službena putovanja i putni troškovi
+4600;Dnevnice za službena putovanja
+4601;Dnevnice za službena putovanja u inozemstvu
+4602;Troškovi vlastitog automobila na službenom putu
+4603;Troškovi prijevoza na službenom putu
+4604;Dnevnice za rad na terenu i pomorski dodatak
+4605;Doprinos za zdravstveno osiguranje na službena putovanja u inozemstvo
+4606;Troškovi noćenja i prehrane na službenom putu (po računu hotela i dr.)
+4607;Ostali troškovi na službenom putu (trošak autoceste, tunela, parkiranja, trajekta i dr.)
+4608;Troškovi službenog puta vanjskih suradnika (bruto s porezima i doprinosima)
+461;Nadoknade troškova, dodatci i stipendije
+4610;Troškovi prijevoza na posao i s posla
+4611;Trošak loko-vožnje (nadoknada za uporabu privatnog automobila u poslovne svrhe)
+4612;Nadoknade za odvojeni život
+4613;Stipendije, nagrade učenicima i studentima
+46130;Stipendije i nagrade učenicima i studentima do neoporezivih svota
+46131;Stipendije i nagrade učenicima i studentima iznad neoporezivih svota
+46132;Stipendije i nagrade športašima
+4614;Novčane paušalne naknade za podmirivanje troškova prehrane (do 100,00 eura mj. odnosno 1.200,00 eura god.)
+4615;Troškovi prehrane radnika na temelju vjerodostojne dokumentacije (računi, obračuni, evidencije i sl.)
+4616;Troškovi smještaja radnika na temelju vjerodostojne dokumentacije (računi, obračuni, evidencije i sl.)
+4617;Naknade za troškove redovne skrbi djece radnika na temelju vjerodostojne dokumentacije (ugovor, račun, uplatnica i sl.)
+4618;Naknade za podmirivanje troškova ugostiteljskih, turističkih usluga i drugih usluga namijenjenih odmoru radnika (do 400,00 eura godišnje)
+4619;Naknade i dodaci iznad neoporezivih svota
+462;Otpremnine, darovi, nagrade za radne rezultate, potpore, premije osiguranja i jubilarne nagrade
+4620;Otpremnine prilikom odlaska u mirovinu (do 1.500,00 eura) i jubilarne nagrade (prema stažu)
+4621;Otpremnine zbog poslovno uvjetovanih otkaza i osobno uvjetovanih otkaza te otpremnine zbog ozljede na radu ili prof. bolesti
+4622;Prigodne nagrade (božićnice, uskrsnice i sl. do 700,00 eura godišnje), darovi u naravi (do 133,00 eura godišnje), darovi djeci (do 140,00 eura godišnje)
+4623;Nagrade za radne rezultate (do 1.200,00 eura godišnje)
+4624;Potpore za novorođenče (do 1.500,00 eura godišnje)
+4625;Potpore zbog invalidnosti radnika (do 600,00 eura godišnje), potpore za slučaj smrti radnika (do 1.200,00 eura godišnje), potpore u slučaju smrti užeg člana obitelji (do 600,00 eura godišnje) te potpore kod neprekidnog bolovanja (do 600,00 eura godišnje)
+4626;Premije dobrovoljnog mirovinskog osiguranja (do 67,00 eura mjesečno odnosno 804,00 eura godišnje)
+4627;Premije dopunskog i dodatnog zdravstvenog osiguranja (do 500,00 eura godišnje)
+4628;Ostali darovi. potpore i naknade
+46280;Dar za zdravstvene potrebe
+46281;Potpora djetetu umrlog radnika
+46282;Potpore za elementarne nepogode
+46283;Novčane paušalne naknade za podmirivanje troškova radnika za rad od kuće (do 4,00 eura po danu odnosno do 70,00 eura mjesečno)
+46284;Ostale potpore
+4629;Potpore i pomoći iznad neoporezivih svota
+463;Troškovi reprezentacije i promidžbe (interne)
+4630;50% troškova reprezentacije u darovima (robi i proizvodima ) s PDV-om
+4631;50% troškova vlastitih usluga za reprezentaciju s PDV-om
+4632;50% troškova reprezentacije od uporabe vlastitih brodova, automobila, nekretnina i sl. s PDV-om
+4633;50% od svih neto-troškova reprezentacije (vlastitih) s PDV-om
+4635;Troškovi promidžbe (u katalozima, letcima, nagradne igre)
+4636;Uzorci proizvoda dani kupcima radi procjene i nabave (čl. 11. st. 2. Pravilnika o PDV)
+4637;Troškovi promidžbe u dobrima (do 22,00 eura pojedinačno → "nije za prodaju" predmeti sa znakom tvrtke kao npr. čaše, pepeljare, olovke, stolnjaci, podmetači, privjesci, prospekti, katalozi, vrećice i sl.) – čl. 11. st. 4. Pravilnika o PDV-u
+4638;Darovi male vrijednosti (do 22,00 eura bez PDV-a – čl. 7. st. 4. ZoPDV i čl. 11. st. 3. Pravilnika o PDV) – tromjesečno
+464;Premije osiguranja
+4640;Troškovi osiguranja dugotrajne materijalne i nematerijalne imovine
+4641;Premije osiguranja osoba (opasni poslovi, prenošenje novca, putnici i sl.)
+4642;Premije osiguranja prometnih sredstava (uključivo i kasko)
+4643;Transportno osiguranje dobara
+4644;Premije osiguranja zaliha, nasada, usjeva i sl.
+4645;Troškovi premija životnog osiguranja (ugovaratelj i korisnik je trgovačko društvo)
+4646;Premije za dokup mirovine zaposlenicima MRS 19 t. 43. i 44.
+4647;Premije za ostale oblike osiguranja (novca i dr.)
+4649;Ostale premije osiguranja
+465;Bankovne usluge i troškovi platnog prometa
+4650;Troškovi platnog prometa
+4651;Troškovi provizija (pri kupnji deviza, brokeru i dr.)
+4652;Bankovne usluge (za inozemni platni promet, tečajnu maržu i sl.)
+4653;Troškovi provizija izdavatelja kreditnih kartica
+4654;Troškovi obrade kredita
+4655;Troškovi akreditiva
+4656;Troškovi bankovne garancije
+4657;Troškovi iz derivativa
+4659;Ostali bankovni troškovi
+466;Članarine, nadoknade i slična davanja
+4660;Članarine komori (HGK ili HOK) i dopr. za javne ovlasti
+4661;Članarine udrugama i strukovnim komorama
+4662;Nadoknada za općekorisnu funkciju šuma
+4663;Članarina turističkoj zajednici
+4664;Nadoknada za korištenje mineralnih sirovina
+4665;Pričuva za održavanje zgrade (Zakon o vlasništvu… – Nar. nov., br. 91/96. do 94/17.)
+4666;Dozvole za korištenje autocesta, atesta, certifikata i sl.
+4667;Naknade za koncesije i sl. prava
+4668;Spomenička renta
+4669;Ostala davanja
+467;Porezi koji ne ovise o dobitku i pristojbe
+4670;Porez (imovinski) na cestovna vozila, plovila i zrakoplove
+4671;Naknade Fondu za zaštitu okoliša i energetsku učinkovitost za ambalažu (prema materijalu, po jed. proizv., povratna ambalaža)
+4672;Porez na nekretnine
+4673;Trošak poreza koji je ugovorno preuzet pri prodaji (npr. 3% p.p.n.)
+4674;Trošak PDV-a koji se ne može priznati
+4675;Porez po odbitku
+4676;Troškovi naknadno utvrđenih poreza (npr. PDV, posebni i dr. porezi, porezi po usklađenju, osim poreza na dobitak)
+4677;Ostali porezi i pristojbe
+468;Troškovi prava korištenja (osim najmova) i troškovi članova uprave
+4680;Troškovi koncesije
+4681;Troškovi franšiza, know-howa, patenata, uporabe imena, znaka, prava na proizv. postupak, formulu, nacrt i dr.
+4682;Trošak HRT pretplate
+4683;Troškovi prava uporabe računalnih programa i troškovi autorskih (izdavačkih) prava
+4684;Ostali troškovi prava korištenja
+4685;Nadoknade članovima nadzornog odbora
+4686;Nadoknade vanjskim članovima uprave
+4687;Nadoknade stečajnim upraviteljima
+4688;Nadoknade prokuristima, članovima skupštine društva i dr.
+4689;Ostale nadoknade članovima uprave
+469;Ostali troškovi poslovanja – nematerijalni
+4690;Troškovi obrazovanja i izobrazbe zaposlenika (stručno obrazovanje, seminari, simpoziji, stručni ispiti, stručno usavršavanje, prekvalifikacije, stručni i specijalistički studij, doktorati, učenje jezika i sl.)
+46900;Opće obrazovanje
+46901;Posebno obrazovanje
+4691;Troškovi za priručnike, časopise i stručnu literaturu
+4692;Troškovi službenih glasila
+4693;Sudski troškovi i pristojbe (biljezi i sl.)
+4694;Troškovi zdravstvenog nadzora i kontrola proizvoda, robe, usluge i sl.
+4695;Troškovi obveznih liječničkih pregleda i troškovi cijepljenja
+4696;Troškovi sistematskih kontrolnih liječničkih pregleda zaposlenika
+4697;Troškovi osnivanja (bilježnik, sud, odvjetnik i sl.)
+4698;Troškovi ZAMP-a, opomena i dr.
+4699;Ostali nespomenuti nematerijalni troškovi (ulaznice za sajmove i dr.)
+47;FINANCIJSKI RASHODI
+470;Kamate s poduzetnicima unutar grupe
+4700;Ugovorene kamate unutar grupe
+4701;Zatezne kamate unutar grupe
+4702;Kamate – porezno nepriznate unutar grupe
+4703;Kamate koje se uračunavaju u zalihe unutar grupe (MRS 23, t.11. i HSFI 10, t. 10.22.)
+471;Tečajne razlike i drugi rashodi s poduzetnicima unutar grupe
+4710;Tečajne razlike iz odnosa s poduzetnicima unutar grupe
+4711;Rashodi financiranja, troškovi popusta i naknadnih odobrenja s poduzetnicima unutar grupe
+4712;Rashodi od valutne klauzule s poduzetnicima unutar grupe
+472;Ostali troškovi s poduzetnicima unutar grupe
+4720;Troškovi popusta i naknadnih odobrenja s poduzetnicima unutar grupe
+4721;Ostali troškovi s poduzetnicima unutar grupe
+473;Kamate iz odnosa s nepovezanim poduzetnicima
+4730;Kamate na kredite banaka
+4731;Kamate iz lizinških poslova
+4732;Kamate na zajmove pravnih osoba
+4733;Kamata na pozajmice članova društva i dioničara
+4734;Kamate na zajmove od fizičkih osoba
+4735;Diskontne kamate po mjenicama i dr. vrijednosnim papirima
+474;Zatezne kamate
+4740;Zatezne kamate iz trgovačkih ugovora
+4741;Zatezne kamate na poreze, doprinose i dr. davanja
+4742;Zatezne kamate između povezanih osoba (por. neprizn.)
+4743;Zatezne kamate po sudskim presudama
+4744;Ostale zatezne kamate
+475;Tečajne razlike iz odnosa s nepovezanim poduzetnicima
+4750;Negativne tečajne razlike iz obveza za nabave u inozemstvu
+4751;Negativne tečajne razlike iz kreditnih obveza
+4752;Negativne tečajne razlike iz potraživanja u inozemstvu
+4753;Negativne tečajne razlike za ostalo (npr. iz blagajničkog poslovanja, razlika između kupovnog i srednjeg tečaja banke i dr.)
+4754;Negativne tečajne razlike nastale na stanjima deviznog računa i devizne blagajne
+476;Gubitci iz ulaganja u dionice, udjele, obveznice i dr. vrijednosne papire (koji su prodani ispod troška nabave – čl. 10. ZoPD)
+477;Troškovi diskonta, nagodbi i nadoknada
+4770;Troškovi diskonta pri prodaji potraživanja (faktoring)
+4771;Troškovi iz financijskih nagodbi
+4772;Nadoknada ortaku za udio u prihodu (dobitku)
+4773;Ostali troškovi
+478;Nerealizirani gubitci (rashodi) od financ. imovine
+4780;Nerealizirani gubitci (rashodi) od financijske imovine
+4781;Troškovi smanjenja fin. imovine zbog ugovora o poteškoćama
+4782;Vrijednosna usklađenja financijske imovine
+4783;Nerealizirane tečajne razlike
+479;Ostali financijski troškovi
+4790;Rashodi s osnove valutne klauzule po obvezama i kreditima
+4791;Rashodi s osnove usklađenja obveza temeljem valutne i sl. klauzule (prema dobavljačima, za predujmove i sl.)
+4792;Troškovi valutne klauzule iz tražbina ili obveza
+4793;Troškovi burzovnih usluga, emisije vrijednosnih papira i sl.
+4794;Troškovi carine inozemnog financijskog i operativnog lizinga
+4795;Trošak zbog neplaćanja duga (40,00 eura – čl. 13. ZoFPiPN)
+4796;Trošak članarine za kreditne i sl. kartice
+4797;Troškovi ovršnog postupka
+4799;Ostali nespomenuti financijski troškovi
+48;OSTALI POSLOVNI RASHODI
+480;Trošak naknadnih popusta, sniženja, reklamacija i troškovi uzoraka
+4800;Naknadno odobreni popusti i odobrenja
+4801;Troškovi nagodbe (razlike iz sniženja)
+4802;Troškovi nenadoknađenih jamstava za prodana dobra
+4803;Troškovi naknadnih reklamacija
+4804;Troškovi uzoraka zbog kontrole i pregleda, izlaganje radi prodaje i sl.
+481;Otpisi vrijednosno neusklađenih potraživanja
+4810;Otpisi nenaplaćenih jamstava i drugih osiguranja
+4811;Izravni otpisi nenaplaćenih potraživanja od kupaca i drugih koja nisu vrijednosno usklađena
+48110;Porezno priznat otpis
+48111;Porezno nepriznat otpis
+4812;Troškovi ostalih otpisa
+4813;Troškovi otpisa dugova fizičkim osobama prema Zakonu o otpisu dugova fizičkim osobama (Nar. nov., br. 62/18.)
+482;Rashodi – otpisi nematerijalne i materijalne imovine
+4820;Neamortizirana vrijednost rashodovane, uništene ili otuđene dugotrajne imovine
+4821;Otpisi imovine izvan uporabe – rashod
+4822;Gubitak od prodane dug. imov. koja se ne amortizira
+4823;Gubitak od prodaje ost. dug. mat. i nemat. imovine
+4824;Otpisi materijala i robe – rashod
+483;Manjkovi i provalne krađe na zalihama i drugim sredstvima
+4830;Manjkovi uslijed više sile (provalna krađa, elementarna nepogoda)
+4831;Dopušteni manjkovi – kalo, rastep, kvar i lom na zalihama prema odlukama HGK, HOK ili internim aktima
+4832;Prekomjerni manjkovi na zalihama (kalo, rastep, kvar i lom) iznad normativa + PDV, prema odlukama HGK, HOK ili interno – skrivene isplate (čl. 7. st. 5. ZoPD-a)
+4833;Manjkovi novca i vrijednosnih papira
+4834;Manjkovi na teret odgovorne osobe
+4835;Manjkovi dugotrajne imovine
+4839;Ostali manjkovi iz imovine
+484;Kazne, penali, nadoknade šteta i troškovi iz ugovora
+4840;Troškovi kazni za prijestupe i prekršaje i sl. (čl. 7. st. 1. t. 7. ZoPD-a)
+4841;Troškovi prisilne naplate poreza i dr. davanja (čl. 7. st. 1. t. 6. ZoPD-a)
+4842;Penali, ležarine, dangubnine
+4843;Nadoknade šteta iz radnog odnosa (npr. za neiskorišteni godišnji odmor, zbog ozljede na radu, odštetne rente i sl.)
+4844;Nadoknade štete – troškovi po nagodbama i sudskim presudama – tužbama
+4845;Ugovorene i zakonske kazne i penali zbog neizvršenja, propusta i sl.
+4846;Troškovi preuzetih obveza iz ugovora
+4847;Kazne za parkiranje
+4848;Naknade (kazne) zbog nezapošljavanja osoba s invaliditetom
+4849;Ostali izdatci za štete
+485;Naknadno utvrđeni troškovi poslovanja
+4850;Naknadno utvrđeni troškovi – računi iz prethodnih godina
+4851;Troškovi naknadnih razlika iz nabava
+4852;Ispravak pogrešaka prethodnih razdoblja
+486;Darovanje do 2 % od ukupnog prihoda
+4860;Darovanje za općekorisne namjene (darovi u novcu ili naravi do 2 % od ukupnog prihoda prethodne ili tekuće godine za kulturu, znanost, odgoj i obrazovanje, zdravstvo, humanitarne, športske, vjerske, ekološke i dr. svrhe – npr. samostalnim umjetnicima, domaćim udrugama i dr. osobama – čl. 7. st. 7. ZoPD-a)
+4861;Darovanje za zdravstvene potrebe (darovanje vanjskih osoba do 2 % od UP prethodne ili tekuće godine za operativne zahvate, liječenja, nabavu lijekova, ortopedskih pomagala i dr. što nije pokriveno osiguranjem – čl. 7. st. 8. ZoPD-a)
+4862;Darovanja iznad 2% za svrhe utvrđene strateškim projektima prema posebnim propisima ili strategiji nadležnih ministarstva
+487;Darovanja iznad 2 % od UP i dr. darovanja
+4870;Porezno nepriznata darovanja iznad 2% UP (za svrhe iznad dopuštenih s računa 486) i darovanja inozemnih udruga, ustanova i sl. (čl. 7. st. 1. t. 10. ZoPD-a)
+4871;Darovi (milodari), potpore i dotacije bez protučinidbe primatelja, te dr. izdatci koji nisu u svezi s ostvarivanjem dobitka (+PDV, osim na novac – čl. 7. st. 1. t. 13. ZoPD-a)
+4872;Darovanje političkih stranaka i nezavisnih kandidata
+488;Troškovi iz drugih aktivnosti (izvan osnovne djelatnosti)
+4880;Troškovi iz ortačkog ugovora
+4881;Troškovi iz posredovanja
+489;Ostali troškovi – rashodi
+4890;Rashodi utvrđeni u postupku nadzora (čl. 7. st. 1. t. 11. ZoPD-a) kao: – skrivene isplate dobitka – izuzimanje dioničara članova društva i fizičkih osoba (obrtnika) i s njima povez. osobama
+4891;Troškovi koji nisu izravno u svezi s ostvarivanjem dobitka (čl. 7. st. 1. t. 13. ZoPD-a – red. br. 24 PD, npr. amortiz. imov. koja ne služi obavljanju djelatnosti, dodjela vlastitih dionica – udjela i dr.) – porezno nepriznati
+4892;Troškovi povlastica i dr. oblici imovinskih koristi (čl. 7. st.1. t.9. ZoPD-a) – porezno nepriznati
+4893;Izuzimanja dioničara i članova društva na koja se obračunava 36% poreza na dohodak – porezno priznata
+4894;Troškovi nastali zbog preračunavanja i zaokruživanja (uvođenje eura)
+4899;Ostali nespomenuti poslovni rashodi
+49;RASPORED TROŠKOVA
+490;Raspored troškova za obračun proizvoda i usluga (prema HSFI 10 i MRS-u 2 i MRS-u 11) – uskladištivi troškovi (na račune 60, 62 i 63)
+491;Raspored troškova za pokriće upravnih, administrativnih, prodajnih i drugih troškova (na račune 70, 71 i 720)
+5;MJESTA I NOSITELJI TROŠKOVA – U PROIZVODNO-USLUŽNIM DJELATNOSTIMA
+50;GLAVNA MJESTA U PROIZVODNJI
+500;Pogon I
+5001;Izravni troškovi materijala (u računovodstvu troškovima razrada po radnim nalozima ili po procesima u proizvodnji)
+5002;Izravni troškovi rada
+5003;Opći fiksni troškovi proizvodnje (Razrada: amortizacija, održavanje, poslovodstvo pogona, drugi fiksni troškovi pogona)
+5004;Opći varijabilni troškovi proizvodnje (Razrada: neizravni troškovi materijala u proizvodnji, energija utrošena u proizvodnju, neizravni troškovi plaća u proizvodnji, drugi varijabilni troškovi pogona)
+501;Pogon II
+502;Pogon III...
+505;Izravni troškovi proizvoda (usluge) – radni nalog
+51;ODRŽAVANJE
+510;Radionica "A"
+5100;Izravni troškovi materijala i pričuvnih dijelova (po radnom nalogu, jedinici usluge i slično)
+5101;Izravni troškovi rada
+5102;Opći fiksni troškovi radionice
+5103;Opći varijabilni troškovi radionice
+5104;Drugi opći troškovi radionice
+511;Radionica "B" (Izrada kao i kod radionice "A")
+512;Itd.
+52;TRANSPORT
+520;Jedinica za prijevoz
+5200;Izravni troškovi pogonskog goriva (razrada po vozilu)
+5201;Izravni troškovi materijala (razrada po vozilu)
+5202;Izravni troškovi plaća (razrada po vozilu)
+5203;Opći fiksni troškovi jedinice za osobni prijevoz
+5204;Opći varijabilni troškovi jedinice za osobni prijevoz
+521;Jedinica teretni prijevoz
+5210;Izravni troškovi pogonskog goriva (razrada po vozilu)
+5211;Izravni troškovi materijala (razrada po vozilu)
+5212;Izravni troškovi plaća (razrada po vozilu)
+5213;Opći fiksni troškovi jedinice teretni prijevoz
+5214;Opći varijabilni troškovi jedinice teretni prijevoz
+522;Druge jedinice prijevoza (Razrada analogno za prethodne jedinice.)
+53;TROŠKOVI UPRAVE I ADMINISTRACIJE
+530;Materijal u troškovima uprave i administracije
+531;Plaće, troškovi uprave i administracije
+532;Amortizacija u troškovima prodaje
+535;Drugi troškovi uprave i administracije (razrada prema potrebama društva, na primjer: dnevnice, bankovni troškovi, osiguranje, reprezentacija itd.)
+54;TROŠKOVI PRODAJE
+540;Materijal u troškovima prodaje
+541;Plaće u troškovima prodaje
+542;Amortizacija u troškovima prodaje
+543;Zakupnine prodajnih prostora
+545;Drugi troškovi prodaje (razrada npr. troškovi opreme prodanih proizvoda, troškovi fakturiranja, troškovi propagande i slično)
+5;MJESTA I NOSITELJI TROŠKOVA – U DJELATNOSTI TRGOVINE
+50;TROŠKOVI UPRAVE I ADMINISTRACIJA
+500;Materijal u troškovima uprave i administracije
+501;Plaće u troškovima uprave i prodaje
+502;Amortizacija u troškovima uprave i administracije
+505;Drugi troškovi uprave i prodaje (razrada npr. dnevnica, osiguranje, bankovni troškovi, reprezentacija itd.)
+51;TROŠKOVI PRODAJE
+510;Materijal u troškovima prodaje
+511;Plaće u troškovima prodaje
+512;Amortizacija u troškovima prodaje
+513;Zakupnine u troškovima prodaje
+515;Drugi troškovi prodaje (razrada npr. otpreme pošiljaka, fakturiranje, propaganda, naplata ambalaža, omotni papir, troškovi izvoza, troškovi posredništva itd.)
+59;RASPORED TROŠKOVA
+590;Raspored troškova na zalihe proizvodnje i usluga
+591;Raspored troškova u rashode na teret prihoda
+5910;Raspored troškova uprave i administracije
+5911;Raspored troškova uprave
+6;PROIZVODNJA, BIOLOŠKA IMOVINA, GOTOVI PROIZVODI, ROBA I DUGOTRAJNA IMOVINA NAMIJENJENA PRODAJI
+60;PROIZVODNJA – TROŠKOVI KONVERZIJE
+600;Proizvodnja u tijeku (razrada po serijama, nositeljima troškova, mjestima, pogonima, radnim nalozima i sl.)
+601;Gradnja u tijeku (analitika po objektima)
+602;Vrijednost usluga (u tijeku ili nedovršenih na datum bilance – MRS 2, t. 16.)
+603;Vanjska proizvodnja (kooperacija i dr.)
+604;Proizvodnja u inozemstvu (dorada)
+605;Proizvodnja u doradi i manipulaciji
+606;Obustavljena proizvodnja
+607;Proizvodnja u tijeku iz ortačkog ugovora
+609;Vrijednosno usklađivanje proizvodnje – usluga
+61;NEDOVRŠENI PROIZVODI I POLUPROIZVODI
+610;Zalihe poluproizvoda (analitika prema osnovnim skupinama ili po stupnju dovršenosti)
+611;Nedovršeni proizvodi i poluproizvodi (analitika po vrstama proizvoda)
+619;Vrijednosno usklađivanje nedovršenih proizvoda i poluproizvoda
+62;BIOLOŠKA IMOVINA
+620;Zalihe biološke proizvodnje u toku
+6200;Poljoprivredna biljna proizvodnja
+6201;Uzgoj (tov) životinja
+621;Zaliha biološke imovine za prodaju
+629;Vrijednosno usklađivanje biološke imovine
+63;ZALIHE GOTOVIH PROIZVODA
+630;Gotovi proizvodi na skladištu (razrada za svako skladište a unutar toga po skupinama, tipovima, vrstama i sl. te poljoprivredni gotovi proizvodi)
+631;Gotovi proizvodi u javnom skladištu, silosu i dr.
+632;Gotovi proizvodi dani u komisijsku prodaju
+633;Gotovi proizvodi dani u konsignacijsku prodaju
+634;Gotovi proizvodi u doradi, obradi i manipulaciji
+635;Gotovi proizvodi na putu
+636;Zalihe nekurentnih proizvoda i otpadaka
+637;Gotovi proizvodi u izložbenim prostorima
+638;Gotovi proizvodi iz ortaštava
+639;Vrijednosno usklađivanje zaliha gotovih proizvoda
+64;GOTOVI PROIZVODI U VLASTITIM PRODAVAONICAMA
+640;Gotovi proizvodi u prodaji u vlastitim prodavaonicama (analitika po prodavaonicama)
+641;Uračunani PDV u vrijednosti proizvoda
+648;Uračunana marža u prodajnoj cijeni gotovih proizvoda
+649;Vrijednosno usklađivanje gotovih proizvoda u prodavaonicama
+65;OBRAČUN TROŠKOVA NABAVE ROBE – TROŠKOVI KUPNJE
+650;Kupovna cijena robe od dobavljača
+651;Ostali troškovi nabave u svezi s dovođenjem robe na zalihu
+6510;Troškovi transporta
+6511;Troškovi ukrcaja i iskrcaja (fakturirani)
+6512;Transportno osiguranje
+6513;Troškovi posebnog pakiranja – ambalaže
+6514;Troškovi vlastitog transporta (ne više od tarife javnog prijevoza) dovođenja robe na prodajnu lokaciju
+6515;Troškovi oblikovanja za posebne kupce
+6516;Troškovi čuvanja i rukovanja (u fazi nabave)
+6517;Špediterski i bankarski troškovi
+6518;Nadoknada uvozniku za uslugu uvoza
+6519;Ostali troškovi kupnje (pregledi, atesti i dr. troškovi u svezi s dovođenjem robe na zalihu – HSFI 10 i MRS 2)
+652;Carina i druge uvozne pristojbe za robu
+653;Posebni porezi i trošarine (analitika)
+659;Obračun nabave – trošak kupnje
+66;ROBA
+660;Roba u skladištu
+6600;Roba u vlastitom veleprodajnom skladištu (analitika po skladištima)
+6601;Zaliha otpadaka od robe
+661;Roba u tuđem skladištu i izlozima
+6610;Roba u tuđem skladištu
+6611;Roba u tuđim silosima, hladnjačama i sl.
+6612;Roba u izložbenim prostorima
+662;Roba dana u komisijsku ili konsignacijsku prodaju
+663;Roba u prodavaonicama
+6630;Roba u prodavaonici (po prodajnoj cijeni − analitika po prodavaonicama), ili
+66300;Roba u prodavaonici A s PDV-om 25%
+66301;Roba u prodavaonici A s PDV-om 13%
+66302;Roba u prodavaonici A s PDV-om 5%, itd.
+664;Uračunani porezi u robi
+6640;Uračunani PDV (analitika po prodajnim mjestima i poreznim stopama)
+665;Roba u poreznom skladištu ili u slobodnoj zoni
+6650;Roba u poreznom skladištu
+6651;Roba u slobodnoj zoni
+666;Roba u doradi, obradi i manipulaciji
+6660;Vrijednost robe u doradi
+6661;Troškovi u svezi s doradom
+667;Roba na putu
+668;Uračunana razlika u cijeni robe
+6680;Razlika u cijeni robe na skladištu (analitički po skupinama robe s istom maržom)
+6681;Uračunana marža robe u prodavaonici
+669;Vrijednosno usklađivanje zaliha robe
+6690;Vrijednosno usklađenje zbog pada cijena, smanjenja uporabljivosti i sl.
+6691;Prepravljene cijene robe zbog monetarnih oscilacija
+67;PREDUJMOVI ZA NABAVU ROBE
+670;Dani predujmovi za nabavu robe
+671;Dani predujmovi uvozniku za nabavu robe
+672;Dani predujmovi za robu povezanom društvu
+673;Dani predujmovi za nabavu bioloških proizvoda
+679;Vrijednosno usklađenje danih predujmova za robu
+68;NEKRETNINE I UMJETNINE ZA TRGOVANJE
+680;Nabavna vrijednost nekretnina za preprodaju (s porezom na promet)
+681;Troškovi dodatnog uređenja – dorade
+682;Umjetnine u prodaji
+683;Nekretnine za prodaju (uređene)
+684;Oldtimeri za trgovanje
+685;Uračunani PDV u umjetninama i oldtimerima
+687;Predujmovi za kupnju nekretnina i sl. radi daljnje prodaje
+688;Uračunana razlika u cijeni nekretnina i umjetnina za daljnju prodaju
+689;Vrijednosno usklađivanje nekretnina i umjetnina i sl. u prometu i predujmova
+69;DUGOTRAJNA IMOVINA NAMIJENJENA PRODAJI
+690;Nematerijalna imovina namijenjena prodaji
+691;Materijalna imovina namijenjena za prodaju
+6910;Skupina imovine za prodaju (npr. pogon, poslov. jedinica i sl. )
+6911;Dugotrajna mat. imovina namijenjena prodaji
+699;Vrijednosno usklađenje dugotrajne imovine namijenjena prodaji
+7;POKRIĆE RASHODA I PRIHODI RAZDOBLJA
+70;TROŠKOVI PRODANIH ZALIHA PROIZVODA I USLUGA
+700;Trošak zaliha prodanih proizvoda (60, 62, 63 i 64)
+701;Troškovi realiziranih usluga (490 i 601)
+702;Troškovi neiskorištenog kapaciteta (HSFI t. 10.20. i MRS 2 t. 13)
+703;Troškovi materijala i otpadaka (31, 32, 35 i 36)
+7030;Troškovi nabavne vrijednosti prodanih materijala, dijelova, inventara i otpadaka
+7031;Troškovi manjkova materijala, dijelova i inventara kojom se tereti odgovorna osoba
+7032;Troškovi od interno uporabljenog materijala, dijelova i inventara
+704;Rashodi zaliha proizvodnje (HSFI 10 i MRS 2)
+7040;Dopušteni manjkovi – tehnološki kalo, rastep, kvar i lom i škart u proizvodnji (sa skupina 60, 62, 63 i 64) – porezno priznati
+7041;Prekomjerni manjkovi – tehnološki kalo, rastep, kvar, lom i škart u proizvodnji (60, 62, 63 i 64 – HSFI t. 10.21. i MRS 2, t. 14.) a porezno dopušteni po očevidu i sl. – porezno priznati
+7042;Prekomjerni manjkovi proizvoda s PDV-om (HSFI t. 10.2. i MRS 2, t. 16.) – porezno nepriznati
+7043;Razlika višeg troška proizvodnje od neto-vrijednosti koja se može realizirati (HSFI t. 10.35. i MRS 2, t. 28. do 33.)
+7044;Troškovi isporučenih proizvoda u jamstvenom roku (zamjena)
+7045;Otpis proizvodnje u tijeku
+7046;Manjak gotovih proizvoda na teret odgovorne osobe
+705;Greškom neiskazani rashodi proteklih razdoblja
+706;Gubitci iz ugovora o izgradnji (MRS 11, t. 36.)
+707;Troškovi iz ugovora o ortaštvu
+708;Troškovi iz zajedničkog poslovanja (HSFI 2.41)
+709;Troškovi vrijednosnog usklađenja proizvodnje u tijeku (609), poluproizvoda (629) i zaliha gotovih proizvoda (639 i 649)
+71;TROŠKOVI PRODANE ROBE
+710;Nabavna vrijednost prodane robe
+7100;Nabavna vrijednost prodane robe u tuzemstvu
+7101;Nabavna vrijednost prodane robe u EU
+7102;Nabavna vrijednost prodane robe u trostranom poslu u EU
+7103;Nabavna vrijednost prodane robe u inozemstvo (treće zemlje)
+7104;Nabavna vrijednost prodane robe u tranzitu (domaćem)
+7105;Nabavna vrijednost prodane robe u poslov. jed.
+711;Nabavna vrijednost prodanih nekretnina i umjetnina
+712;Troškovi dugotr. imov. namijenjeni prodaji (neto)
+713;Troškovi kala, rastepa, kvara i loma na robi i otpisi robe
+7130;Kalo, rastep, kvar i lom u dopuštenoj visini prema Pravilniku HGK – porezno priznati
+7131;Manjkovi uslijed više sile (provalne krađe, poplava, požar, potres i sl.) – porezno priznati
+7132;Manjkovi i otpisi trgovačke robe po očevidu PU i sl. – porezno priznati
+7133;Prekomjerni kalo, rastep, kvar i lom + PDV – porezno nepriznati
+7134;Manjak robe na teret odgovorne osobe
+7135;Trošak otpisa robe
+714;Troškovi zamjene robe u jamstvenom roku
+715;Pogreškom neiskazani rashodi prodane robe u proteklim razdobljima u trgovini
+718;Troškovi vrijednosnog usklađenja trgovačke robe i predujmova (669, 679, 689)
+719;Troškovi vrijednosnog usklađenja dugotrajne imovine namijenjene prodaji (699)
+72;TROŠKOVI UPRAVE, ADMINISTRACIJE I OSTALI RASHODI
+720;Troškovi uprave, prodaje, administracije (491)
+721;Trošak materijala, usluga i rada iz uslužne djelatnosti
+722;Ostali poslovni rashodi – nespomenuti
+7220;Troškovi dostavljenih izdanja u NSB
+73;OSTALI POSLOVNI RASHODI
+730;Rashodi od prodaje dugotrajne imovine (HSFI 8 t. 8.35.)
+731;Otpisi od otuđenja imovine koji su nastali neočekivano i u visokoj vrijednosti (HSFI 4 t. 4.7. i MRS 10, t. 9.)
+732;Gubitci zbog izvlaštenja ili zbog prirodnih katastrofa na važnom dijelu imovine
+733;Rashodi iz ostalih rijetkih i neobičnih događaja ili transakcija
+734;Izvanredne kazne, penali, odštete, naknadno utvrđ. obveze i sl.
+735;Nerealizirani gubitci
+736;Troškovi vraćene robe prodane u prethodnim god.
+737;Gubitci od procjene biološke imovine
+738;Gubitci od procjene poljoprivrednih proizvoda
+739;Otpis nedovršene investicije u D.M. i N. I.
+74;UDIO U DOBITKU I GUBITKU DRUŠTAVA POVEZANIH SUDJELUJUĆIM INTERESOM I OD ZAJEDNIČKIH POTHVATA
+740;Udio u dobitku društava povezanih sudjelujućim interesom i od zajedničkih pothvata
+7400;Udio u dobitku od društava povezanih sudjelujućim interesom
+7401;Udio u dobitku od zajedničkih pothvata
+745;Udio u gubitku od društava povezanih sudjelujućim interesom i od zajedničkih pothvata
+7450;Udio u gubitku od društava povezanih sudjelujućim interesom
+7451;Udio u gubitku od zajedničkih pothvata
+75;PRIHODI OD PRODAJE PROIZVODA I USLUGA
+750;Prihodi od prodaje proizvoda (analitika po proizvodima ili profitnim centrima)
+7500;Prihodi od prodaje proizvoda od redovne prodaje
+7501;Prihodi od prodaje proizvoda na kredit ili otplatu
+7502;Prihodi od prodaje poljoprivrednih proizvoda
+7503;Prodaja u vlastitim prodavaonicama
+7504;Prihodi od prodaje stanova i dr. građevina
+7505;Prihodi od prodaje poluproizvoda i nedovršenih proizvoda
+7506;Prihodi ostvareni u posl. jed. na području posebne držav. skrbi i u Vukovaru
+7507;Prihod od prodaje otpadaka i sekundarnih sirovina
+7508;Prihodi iz zajedničkog poslovanja
+751;Prihodi od prodaje usluga
+7510;Prihodi od servisnih usluga, usluga popravaka i sl. usluga
+7511;Prihodi od hotela i restorana
+7512;Prihodi od intelektualnih usluga
+7513;Prihodi od knjigovodstvenih, usluga poreznog savjetovanja, revizorskih, konzultantskih i dr. usluga
+7514;Prihodi od usluga prijevoza
+7515;Prihodi od komunalnih usluga
+7516;Prihodi od promidžbenih usluga
+7517;Prihodi od usluga zaštite i čuvanja
+7518;Prihodi od programskih usluga
+7519;Prihodi od prodaje ostalih usluga
+752;Prihodi od graditeljskih usluga – iz ugovora o izgradnji (građevina)
+753;Prihodi od prodaje dobara u inozemstvo
+7530;Prihodi od prodaje dobara u EU
+7531;Prihodi od prodaje dobara u "treće" zemlje
+754;Prihodi od prodaje usluga u inozemstvo
+7540;Prihodi od prodaje usluga u EU
+75400;Prihodi od turističkih usluga
+75401;Prihodi od internetskih usluga i sl.
+7541;Prihodi od prodaje usluga u "treće" zemlje
+7542;Prihodi iz međunarodne plovidbe brodovima (čl. 26. st. 10. ZoPD-a)
+7543;Prihodi od isporuka poslovnim jedinicama u inozemstvo
+7544;Prihodi od ostalih usluga u inozemstvu
+755;Prihodi s osnove upotrebe proizvoda i usluga za vlastite potrebe
+7550;Prihodi s osnove upotrebe vlastitih proizvoda i usluga za investicije
+7551;Prihodi s osnove upotrebe vlastitih proizvoda i usluga za sitan inventar, materijal, ambalažu i autogume
+7552;Prihodi s osnove upotrebe vlastitih proizvodnih usluga (npr. iz graditeljstva, transporta i sl.)
+7553;Prihodi s osnove upotrebe vlastitih proizvoda i usluga za potrebe reprezentacije i promidžbe
+7554;Prihodi s osnove upotrebe vlastitih proizvoda i usluga za ostale potrebe
+7555;Prihodi s osnove upotrebe ugostiteljskih usluga za vlastite potrebe
+7556;Prihodi s osnove uporabe osobnih automobila (plaća u naravi)
+7557;Prihodi s osnove uporabe vlastite imovine za tekuće i investicijsko održavanje
+756;Prihodi od zakupa i najmova
+7560;Prihodi od zakupa nekretnine
+7561;Prihodi od najmova opreme i dr. stvari
+757;Prihodi iz ortaštva
+758;Ostali prihodi od ostale prodaje
+759;Prihodi od prodaje proizvoda i usluga poduzetnicima unutar grupe
+76;PRIHODI OD PRODAJE TRGOVAČKE ROBE
+760;Prihodi od prodaje robe
+7600;Prihodi od prodaje robe na veliko (analitika po prodajnim mjestima)
+7601;Prihodi od prodaje uvezene robe na veliko
+7602;Prihodi od prodaje robe u tranzitu
+7603;Prihodi od prodaje robe na malo (analitika po prodav.)
+7604;Prihodi od prodaje robe u povezanim društvima
+7605;Prihodi od prodaje robe dane u komisiju ili konsignaciju
+7606;Prihodi od prodaje u poslov. jed. na području posebne držav. skrbi i Vukovaru
+7608;Prihodi od prometa nekretnina
+7609;Prihodi od interne prodaje
+761;Prihodi od prodaje robe u inozemstvu
+7610;Prihodi od prodaje robe u EU
+7611;Prihodi od prodaje robe u "treće" zemlje
+762;Prihodi od trgovačkih usluga
+7620;Prihodi od provizija (iz komisije, zastupanja i sl.)
+7621;Prihodi od franšiza i robnih znakova
+7622;Prihodi od usluge posredovanja
+7623;Prihodi od davanja mišljenja
+763;Prihodi od prodaje nekurentne robe (robe u kvaru, oštećenju, demodirana i sl.)
+764;Prihodi od prodaje robe na robni kredit
+765;Prihodi s osnove upotrebe robe za vlastite potrebe
+7650;Prihodi s osnove upotrebe robe za investicije
+7651;Prihodi s osnove upotrebe robe za sitan inventar, ambalažu i autogume
+7652;Prihodi s osnove upotrebe robe za potrebe reprezentacije i promidžbe
+7653;Prihodi s osnove upotrebe robe za ostale potrebe
+767;Prihodi od preprodaje nekretnina i umjetnina
+768;Ostali prihodi od prodaje roba i trgovačkih usluga
+7680;Prihodi od prikupljanja ambalaže
+7681;Prihodi od zbrinjavanja otpada
+7682;Prihodi od prodaje korisnog otpada
+769;Prihodi od prodaje trgovačke robe poduzetnicima unutar grupe
+77;FINANCIJSKI PRIHODI
+770;Prihodi od ulaganja u udjele (dionice) i ostala financijska ulaganja poduzetnika unutar grupe, prihodi od kamata, tečajnih razlika i ostali financijski prihodi s poduzetnicima unutar grupe
+7700;Prihodi od ulaganja u udjele (dionice) poduzetnika unutar grupe
+7701;Prihodi od ostalih dugotrajnih financijskih ulaganja i zajmova poduzetnicima unutar grupe
+7702;Prihodi od kamata s poduzetnicima unutar grupe
+7703;Prihodi od tečajnih razlika s poduzetnicima unutar grupe
+7704;Ostali financijski prihodi s poduzetnicima unutar grupe
+771;Prihodi od kamata
+7710;Prihodi od redovnih kamata
+7711;Prihodi od zateznih kamata
+7712;Prihodi od kamata iz financijske imovine i dr.
+7713;Kamate na depozite i jamčevine
+772;Prihodi od tečajnih razlika i ostali prihodi
+7720;Pozitivne tečajne razlike iz tražbina i stanja deviza na računu
+7721;Pozitivne tečajne razlike iz nižih obveza prema inozemstvu
+7722;Prihodi iz ugovorene ili realizirane valutne klauzule
+7723;Ostali prihodi
+773;Prihodi od dividende i dobitaka iz udjela
+7730;Prihodi od dividendi
+7731;Prihodi od udjela u dobitku u d.o.o. i dr.
+7732;Prihodi od dobitaka poslov. jed. i podružnica u inozemstvu
+774;Prihodi od ostalih dugotrajnih financijskih ulaganja i zajmova
+7740;Prihodi iz udjela u investicijskim i dr. fondovima
+7741;Dobitci od prodaje dionica i udjela (s nepovez. društvima) i dr. vrijed. papira
+7742;Prihodi od primjene valutne (indeksne) klauzule
+7743;Prihodi od otpisanih zajmova
+7744;Prihodi od prodaje ostale financijske imovine
+775;Prihodi od ulaganja u udjele (dionice) društava povezanih sudjelujućim interesom
+776;Nerealizirani dobitci (prihodi) od financijske imovine
+7760;Prihodi iz procjene fin. imovine namijenjene za trgovanje kroz RDG
+7761;Dobitci iz promjene fer vrijednosti ulaganja u nekretnine (HSFI 7 i MRS 40)
+7762;Dobitci iz promjene vrijednosti ostale imovine
+777;Prihodi negativnog goodwilla
+778;Prihodi od financijskih naknada
+7780;Prihod od paušalnih naknada (zbog neplaćanja)
+7781;Prihodi od ovršne naknade
+779;Ostali financijski prihodi
+7790;Prihodi iz burzovnih transakcija
+7791;Prihodi iz faktoringa, forwarda, opcija i sl.
+7792;Prihodi od neplaćenih obveza – davanja (za šume, poreze, članarine, naknade i dr.)
+7793;Prihodi iz fin. lizinga
+7794;Prihodi od naplate životnog osiguranja
+7795;Prihodi od fer vrijednosti obveza
+7796;Prihodi od prestanka financijskih obveza
+78;OSTALI POSLOVNI PRIHODI
+780;Prihodi od otpisa obveza i popusta
+7800;Otpisi obveza prema dobavljačima, obveza za primljene predujmove i sl.
+7801;Otpis obveza prema kreditorima
+7802;Otpis obveza prema zaposlenicima
+7803;Prihodi od zastare obveza
+7804;Prihodi od otpisa obveza prema Zakonu o uvođenju eura
+7805;Prihodi od ostalih obveza
+7806;Prihodi od naknadnih odobrenja – sniženja i popusta od dobavljača i dr.
+7807;Prihodi od naplaćenih otpisanih potraživanja
+7808;Prihodi od otpisa obveza po predstečajnoj nagodbi
+7809;Prihodi od otpisa obveza prema poduzetnicima unutar grupe
+781;Prihodi od rezidualnih imovinskih stavki, viškova i procjena
+7810;Prihodi od prodaje otpisanih i rashodovanih sredstava rada (alata, opreme i sl.)
+7811;Prihodi od prodaje dugotrajne materijalne imovine (iz uporabe, a amortizirane)
+7812;Prihodi od prodaje dugotr. nemater. imovine (trgov. znak, patent i dr.) – iz uporabe i amortiz.
+7813;Prihodi od ranije otpisanih zaliha po novoj procjeni (HSFI t. 10.38. i MRS 2, t. 33.)
+7814;Inventurni i dr. po procjeni viškovi na robi, proizvodima i zalihama sirovina, materijala, dijelova i dugotrajne imovine
+7815;Viškovi u blagajni (novac, vrijed. papiri i dr.)
+7816;Viškovi iz neidentificiranih novčanih doznaka u tekućem poslovanju
+7817;Prihodi od prodaje ulaganja u nekretnine (MRS 40. t. 69.)
+7818;Prihodi od procjene prometa (utrška) po nalazu poreznog nadzora
+7819;Prihodi od prodaje dugotrajne imovine unutar grupe
+782;Prihodi od ukidanja rezerviranja i naknadno naplaćeni prihodi
+7820;Prihod od ukidanja dugoročnih rezerviranja
+7821;Naknadno utvrđeni prihodi
+7822;Ukidanje pasiv. vrem. razgraničenja
+7824;Prihodi od ukidanja troškova od kojih se odustalo
+7825;Prihodi od naknadno naplaćenih jamstava – garancija
+7826;Prihodi od naknadno naplaćenih potraživanja iz prethodnih godina
+7827;Prihodi od naplate iz ugovora po naknadnim priznanjima iz prošlih godina
+7828;Prihodi od naknadno naplaćenih reklamacija
+7829;Prihodi naknadni iz programa vjernosti kupaca (veza 293)
+7829;Prihodi od zaprimanja dobara koja su prodana u prethodnom obračunskom razdoblju
+783;Prihodi od refundacije, dotacija, subvencija i nadoknada
+7830;Prihodi od refundacije za rad radnika
+7831;Prihodi od naknada šteta iz tekućeg poslovanja
+7832;Prihodi od subvencija
+7833;Prihodi od dotacija i pomoći
+7834;Prihodi s osnove besplatnog primitka opreme, nekretnina, zaliha i potraživanja
+7835;Prihodi od naknada za jamstva
+7836;Prihodi od prefakturiranih troškova (npr. komunalnih, premija osiguranja i dr.)
+7837;Prihodi za pokriće gubitka
+7838;Prihodi za manjkove od odgovornih osoba
+7839;Prihodi od dotacija i nadoknada od poduzetnika unutar grupe
+784;Prihodi od ukidanja gubitaka i revalorizacija
+7840;Prihodi od ukidanja gubitka vrijed. usklađ. zaliha
+7841;Prihodi od ukidanja pričuve fer vrijednosti kod prodaje financijske imovine
+7842;Prihodi od ukidanja gubitka od procjene dugotrajne imovine (MRS 36)
+7843;Prihodi od procijenjene vrijednosti otpada i dr. zaliha
+7844;Prihodi od procjene kratkotrajne imovine
+7845;Prihodi od ukidanja fer vrijednosti
+785;Ostali poslovni prihodi
+7850;Prihodi s osnove povrata poreza i trošarina
+78500;Prihodi s osnove ispravka pretporeza
+78501;Prihodi s osnove povrata PPMV-a
+78502;Prihodi s osnove povrata trošarine za dizelska goriva
+7851;Prihodi od ugovorenih i naplaćenih penala zbog neizvršenja roka u isporuci
+7852;Prihodi od nagrada za proizvod, uslugu, oblik i sl.
+7853;Prihodi od (nevraćenih) kaucija i depozita
+7854;Prihodi od kapara, odustatnina i sl.
+7855;Prihodi od vraćenih premija osiguranja
+7856;Prihodi od financijskog inženjeringa (npr. projektiranje, financiranje i izgr. objekata, kupnja i prodaja poduzeća i sl.) i provizija
+7857;Prihodi od prodaje prava (patenata, licencija, koncesija, rente, imena, znaka i sl.)
+7858;Prihodi od naplate šteta uništene imovine (požarom, poplavom i dr. višom silom)
+7859;Ostali prihodi i prihodi od naplate šteta
+78590;Prihodi od naplate šteta (npr. zbog oduzete imovine i zlouporabe znaka, imena i dr.)
+78591;Prihodi nastali od preračunavanja i zaokruživanja zbog uvođenja eura
+78592;Prihodi od posebne naknade štete zbog zakašnjenja u plaćanju (40,00 eura po računu)
+786;Prihodi od državnih potpora (HSFI 15 i MRS 20)
+7860;Prihodi od državnih potpora za pokriće troškova
+7861;Prihodi od državnih potpora za investicije (imovinu)
+7862;Prihodi od državnih potpora za ostale određene namjene
+7863;Prihod od potpora za ublažavanje negativnih posljedica u slučaju posebnih okolnosti
+7864;Prihod od potpora male vrijednosti
+7865;Prihod od potpora za umanjenje cijene električne energije
+7866;Prihodi od potpora za plin
+787;Dobitci od procjene poljoprivrednih proizvoda i biološke imovine (HSFI 17, t. 17.12 i MRS 41)
+7870;Dobitci od prirasta biološke imovine
+7871;Dobitci od procjene biološke imovine
+7872;Dobitci od procjene poljoprivrednih proizvoda
+788;Prodaja značajnog dijela imovine (poduzeća, pogona, gosp. cjeline)
+789;Ostali prihodi (npr. veliki besplatni primitak, prihod koji nije proizašao iz redovitog poslovanja)
+7890;Prihod od izvanredne prodaje dijela imovine
+7891;Prihod od dugotrajne materijalne imovine namijenjene prodaji
+7892;Prihod od izvansudskih nagodbi
+7893;Izvanredni prihodi od naknada šteta
+7894;Ostali nepredviđeni prihodi
+79;RAZLIKA PRIHODA I RASHODA FINANCIJSKE GODINE
+790;Razlika prihoda i rashoda (iz cjelokupnog poslovanja)
+8;FINANCIJSKI REZULTAT POSLOVANJA
+80;DOBITAK ILI GUBITAK RAZDOBLJA
+800;Dobitak prije oporezivanja
+801;Gubitak prije oporezivanja
+803;Porez na dobitak (gubitak)
+804;Dobitak ili gubitak razdoblja
+8040;Dobitak razdoblja (poslije poreza)
+8041;Gubitak razdoblja
+81;DOBITAK ILI GUBITAK PREKINUTOG POSLOVANJA PRIJE OPOREZIVANJA (KORISTI SAMO PODUZETNIK OBVEZNIK PRIMJENE MSFI-JA KOJI IMA PREKINUTO POSLOVANJE)
+810;Dobitak prekinutog poslovanja prije oporezivanja
+811;Gubitak prekinutog poslovanja prije oporezivanja
+812;Porez na dobitak (gubitak) prekinutog poslovanja
+813;Dobit ili gubitak prekinutog poslovanja
+8130;Dobitak prekinutog poslovanja za razdoblje (poslije poreza)
+8131;Gubitak prekinutog poslovanja za razdoblje
+82;DOBITAK ILI GUBITAK UKUPNOG POSLOVANJA PRIJE OPOREZIVANJA (KORISTI SAMO PODUZETNIK OBVEZNIK PRIMJENE MSFI-JA KOJI IMA PREKINUTO POSLOVANJE)
+820;Dobitak prije oporezivanja
+821;Gubitak prije oporezivanja
+822;Porez na dobitak (gubitak)
+823;Dobitak ili gubitak razdoblja
+8230;Dobitak razdoblja (poslije poreza)
+8231;Gubitak razdoblja
+83;DOBITAK ILI GUBITAK RAZDOBLJA KOJI PRIPADA DRUGIMA
+830;Dobitak pripisan imateljima kapitala matice
+831;Gubitak koji tereti imatelje kapitala matice
+832;Dobitak pripisan manjinskom interesu
+833;Gubitak koji tereti manjinski interes
+9;KAPITAL I PRIČUVE TE IZVANBILANČNI ZAPISI
+90;TEMELJNI – (UPISANI) KAPITAL
+900;Upisani temeljni kapital koji je plaćen
+9000;Upisani temeljni kapital članova d.o.o. (analitika po članovima)
+9001;Temeljni dionički kapital (obične dionice)
+9002;Temeljni dionički kapital (povlaštene dionice)
+9003;Temeljni kapital iz predstečajne nagodbe
+9004;Temeljni kapital j.d.o.o.-a
+9008;Temeljni kapital iz reinvestiranog dobitka (čl. 6. st. 1. t. 6. Zakona o PD i čl. 12.a Pravilnika o PD) – analitika po članovima i godinama upisa
+901;Upisani temeljni kapital manjinskih članova
+902;Upisani kapital koji nije plaćen
+9020;Upisani temeljni kapital koji je pozvan za uplatu (analitika po upisnicima)
+9021;Odobreni temeljni kapital
+903;Kapital (ulozi) članova javnog trgovačkog društva
+904;Kapital (ulozi) komanditora komanditnog društva
+905;Državni kapital u udjelima
+906;Kapital članova zadruge
+91;KAPITALNE PRIČUVE
+910;Uplaćeni udjeli – dionice iznad svote temeljnog kapitala
+911;Kapitalne pričuve iz dodatnih uplata radi stjecanja posebnih prava u društvu (ili zamjenjivih obveznica)
+912;Kapitalne pričuve iz uplata dodatnih činidbi
+913;Kapitalne pričuve iz ostatka pri smanjenju temeljnog kapitala
+914;Kapitalne pričuve iz drugih izvora
+915;Kapitalni dobitak od vlastitih udjela – dionica
+916;Kapitalni dobitak na prodane emitirane dionice
+917;Kapitalne pričuve iz ulaganja tajnog člana društva (čl. 148. ZTD-a)
+918;Kapitalni gubitci iz vlastitih dionica i udjela
+919;Kapital iz ulaganja obrtnika dobitaša
+92;PRIČUVE IZ DOBITKA
+920;Zakonske pričuve
+9200;Pričuve prema ZTD
+9201;Pričuve za povećanje temeljnog kapitala
+9202;Pričuve za pokriće gubitka
+9204;Pričuve u j.d.o.o. za povećanje t.k. (čl. 390. a) ZTD-a)
+9205;Pričuve u zadruzi (čl. 37. st. 2. Zakona o zadrugama)
+9206;Posebne pričuve za pokriće neotpisanih troškova razvoja
+9207;Posebne pričuve za pokriće dobitka u sudjelujućim interesima
+921;Pričuve za vlastite dionice i udjele (čl. 233. i 406.a ZTD-a)
+9210;Pričuve za opcijske dionice za zaposlenike
+9211;Pričuve za otkupljene dionice radi obeštećenja dioničara
+9212;Pričuve za otkup dionica da bi se spriječila šteta i dr.
+9213;Pričuve za vlastite (trezorske) dionice
+9214;Pričuve za vlastite udjele u d.o.o.
+922;Vlastite dionice i udjeli (odbitna – dugovna stavka)
+9220;Otkupljene vlastite dionice
+9221;Otkupljeni vlastiti udjeli
+9222;Vlastite dionice za opcijsku namjenu
+9223;Isplata – amortizacija udjela po tržišnoj vrijednosti (čl. 419. ZTD-a)
+923;Statutarne pričuve
+9230;Pričuve za održavanje financijske stabilnosti društva, za razvojne aktivnosti i sl.
+9231;Pričuve za restrukturiranje
+9232;Pričuve radi održavanja boniteta strukture izvora financiranja
+924;Ostale pričuve
+9240;Pričuve za pokriće gubitka u poslovanju
+9241;Pričuve za nagrade i sl.
+9242;Slobodne pričuve iz neraspoređenog dobitka
+9243;Pričuve za nerealizirane dobitke iz udjela
+9244;Pričuve za razvoj zadruge
+93;REVALORIZACIJSKE PRIČUVE I PRIČUVE FER VRIJEDNOSTI
+930;Revalorizacijske pričuve s osnove revalorizacije dugotrajne materijalne i nematerijalne imovine
+9300;Revalorizacijske pričuve iz procjene dugotrajne nematerijalne i materijalne imovine (HSFI t. 6.36. i MRS 16, t. 39. i MRS 38, t. 85.) (analitika prema revaloriziranim imovinskim stavkama)
+9301;Revalorizacijske pričuve iz razdoblja od 2001. do 2004.
+9302;Revalorizacijske pričuve nastale do kraja 2000.
+931;Pričuve fer vrijednosti
+9310;Pričuve iz utvrđivanja fer vrijednosti financijske imovine raspoložive za prodaju
+9312;Pričuve iz učinkovite zaštite novčanog toka
+9313;Pričuve iz učinkovitog dijela zaštite neto ulaganja u inozemstvu
+932;Tečajne razlike iz preračuna inozemnog poslovanja
+933;Udio u ostaloj sveobuhvatnoj dobiti/gubitku društava povezanih sudjelujućim interesom
+934;Aktuarski dobici/gubici po planovima definiranih primanja
+935;Ostale nevlasničke promjene kapitala
+94;ZADRŽANI DOBITAK ILI PRENESENI GUBITAK
+940;Zadržani dobitak (iz prethodnih godina)
+9400;Zadržani dobitci ostvareni do kraja 2000.
+94000;Zadržani dobitak članova društva (analitika po članovima)
+94001;Zadržani dobitak – neisplaćena dividenda
+94002;Zadržani dobitak koji se izuzima od isplate (npr. za investicije u imovinu)
+94003;Zadržani dobitak koji čeka raspored
+94004;Zadržani dobitak za privatne troškove članova društva
+94005;Zadržani dobitak za manjinske članove društva
+94006;Zadržani dobitak tajnog člana društva
+9401;Zadržani dobitak iz 2001. do 2004.
+94010;Zadržani dobitak članova društva (analitika po članovima – dioničarima)
+9402;Zadržani dobitak iz 2005. do 2011.
+94020;Zadržani dobitak (analitika po članovima – dioničarima)
+94021;Neraspoređeni zadržani dobitak
+9403;Zadržani dobitak iz 2012. i poslije
+9405;Zadržani dobitak za posebnu namjenu – npr. za namjeru stjecanja vlastitih udjela (prema odluci skupštine društva) – iz 201_. god.
+9406;Zadržani dobitak oblikovan iz realizirane rev. pričuve
+9407;Zadržani dobitak po prijedlogu uprave i N.O.
+9408;Zadržani dobitak iz negativnog goodwilla
+941;Preneseni gubitak (kumuliran u prethodnim godinama – analitika po članovima)
+9410;Preneseni gubitak (iz godine 200_.)
+9411;Preneseni gubitak (iz godine 201_.)
+9417;Gubitak (dio) koji je iznad kapitala
+95;DOBITAK ILI GUBITAK POSLOVNE GODINE
+950;Dobitak poslovne godine
+9500;Dobitak financijske godine (neraspoređen)
+9501;Dobitak za isplate i izuzimanja u tijeku godine (analitika po članovima) – radi pokrića
+9502;Dobitak – dividenda financijske godine (analitika prema članovima društva – dioničarima)
+9504;Dobitak koji se privremeno ne isplaćuje po prijedlogu uprave i N.O.
+9505;Dobitak za manjinske članove društva
+9506;Dobitak za tajnog člana društva
+9507;Dobitak za nagrade zaposlenicima
+9509;Dobitak iz privremenih razlika (odgođeni porezi)
+951;Gubitak poslovne godine (analitika po članovima)
+9510;Gubitak iz privremenih razlika
+96;MANJINSKI INTERES
+960;Manjinski interes
+9600;Kapital manjinskog društva (ovaj račun privremeno se rabi u postupku konsolidacije društva kao dio kapitala koji nije pod kontrolom matice)
+99;IZVANBILANČNI ZAPISI
+990;Imovina – materijalna u optjecaju
+9900;Primljena roba u komisiju i konsignaciju (tuđa)
+9901;Materijal i roba u doradi (tuđa)
+9902;Pozajmica strojeva i alata
+9903;Zaštitna odjeća i obuća na korištenju
+9904;Roba u skladištu (tuđa)
+9905;Ambalaža na korištenju (tuđa)
+9906;Imovina iz ortačke zajednice
+9907;Materijali za doradne – lohn-poslove
+9908;Roba u izvozu
+9909;Zgrade i zemljišta u zakupu
+991;Prava i tražbine
+9910;Prava na korištenja
+9911;Krediti ugovoreni
+9912;Hipoteka na tuđoj imovini
+9913;Materijalna prava
+9914;Prava po loro-akreditivima (domaći partneri)
+9915;Prava po loro-akreditivima (inozemni partneri)
+9916;Prava na ratne reparacije i štete od oduzete imovine
+992;Vrijednosni papiri
+9920;Primljeni čekovi, mjenice za osiguranje otplate anuiteta za dobivene robne i financijske kredite
+9921;Primljena jamstva vjerovnika kao instrumenata plaćanja
+9922;Primljene zadužnice
+9923;Ostali vrijednosni papiri koji nisu stavljeni u optjecaj
+9924;Izdane zadužnice
+9925;Izdane mjenice
+9926;Korištene garancije u tijeku
+9927;Tražbine od kupaca iz zastupničke prodaje
+9928;Izdani vrijednosni kuponi (bonovi)
+99280;Izdani jednonamjenski vrijednosni kuponi
+99281;Izdani višenamjenski vrijednosni kuponi
+993;Vrijednosnice u manipulaciji
+9930;Obveznice i druge vrijednosti na skladištu (blagajni)
+9931;Vrijednosni papiri na čuvanju (obveznice, dionice)
+9932;Blokovi ulaznica
+9933;Prodajna mjesta za izdane obveznice
+9934;Prodajna mjesta za izdavanje komercijalnih zapisa
+994;Obračun dobitka investicijskog ili ortačkog pothvata
+9940;Investicija – ulaganje – rashodi
+9941;Prihod – priljev
+9942;Dobitak
+9944;Čisti dobitak
+9947;Trošak kamata budućeg razdoblja
+995;Izvori materijalne imovine
+9950;Obveze prema vlasnicima robe u komisiji i konsignaciji (tuđa sredstva)
+9951;Vlasnici materijala i robe u doradi
+9952;Vlasnici pozajmljenih strojeva i alata
+9953;Skladište zaštitne odjeće i obuće
+9954;Vlasnici robe u našim skladištima
+9955;Vlasnici ambalaže u korištenju
+9956;Obveze iz ortačke zajednice
+9957;Obveze za materijale u doradi – lohnu
+9958;Obveze za robu u izvozu (tuđa roba)
+9959;Vlasnici zemljišta i zgrada u zakupu
+996;Izvori prava i obveze
+9960;Izvor prava na korištenje
+9961;Krediti odobreni
+9962;Dužnici po hipoteci
+9963;Ulagači u materijalna prava
+9964;Izvori prava loro-akreditiva (domaći partneri)
+9965;Izvori prava loro-akreditiva (inozemni partneri)
+9966;Ratne reparacije i nadoknade šteta
+9967;Obveze zastupnika iz prodaje prema nalogodavcu
+9968;Očekivane koristi iz tužbi
+997;Obveze za vrijednosne papire koji nisu stavljeni u optjecaj
+9970;Obveze za čekove i mjenice za osiguranje otplate anuiteta za robne i financijske kredite
+9971;Jamstva od dužnika kao instrument plaćanja
+9972;Obveze za primljene zadužnice
+9973;Ostali vrijednosni papiri koji nisu stavljeni u optjecaj
+9974;Obveze za izdane zadužnice
+9975;Obveze za izdane mjenice
+9976;Obveze za korištene garancije u tijeku
+9978;Obveze za izdane vrijednosne kupone (kupone)
+99780;Obveze za izdane jednonamjenske vrijednosne kupone
+99781;Obveze za izdane višenamjenske vrijednosne kupone
+998;Obveze za izdane vrijednosnice u manipulaciji
+9980;Obveznice i druge vrijednosnice
+9981;Vrijednosni papiri (obveznice, dionice)
+9982;Vrijednost zalihe blokova ulaznica
+9983;Prodajna mjesta za izdane obveznice
+9984;Prodajna mjesta za izdavanje komercijalnih zapisa
+9987;Kamate sadržane u vrijednosnicama ili obračunima
+999;Obveze s osnove investicijskog pothvata
+9990;Obveze prema ulagačima
+9991;Izvori prihoda – priljeva
+9992;Ukalkulirani – planirani dobitak
+9993;Obveze za porez i druga javna davanja
+9994;Obveze iz planiranog čistog dobitka

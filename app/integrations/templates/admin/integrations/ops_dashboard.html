@@ -1,0 +1,64 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<form method="get" style="margin-bottom: 1.5rem;">
+  <label>Tenant:
+    <select name="tenant">
+      <option value="">— svi —</option>
+      {% for t in tenants %}
+        <option value="{{ t.pk }}" {% if selected_tenant and selected_tenant.pk == t.pk %}selected{% endif %}>{{ t.slug }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Period:
+    <select name="days">
+      <option value="7" {% if days == 7 %}selected{% endif %}>7 dana</option>
+      <option value="30" {% if days == 30 %}selected{% endif %}>30 dana</option>
+    </select>
+  </label>
+  <button type="submit" class="button">Filtriraj</button>
+  <a href="{% url 'admin:integrations_ops_export' %}?days={{ days }}{% if selected_tenant %}&tenant={{ selected_tenant.pk }}{% endif %}" class="button">Export CSV</a>
+</form>
+
+<h2>Izlazni promet po provideru</h2>
+<table class="adminlist">
+  <thead><tr><th>Provider</th><th>Poslano</th><th>Neuspjelo</th></tr></thead>
+  <tbody>
+    {% for row in metrics.outbound %}
+      <tr><td>{{ row.provider|default:"—" }}</td><td>{{ row.sent }}</td><td>{{ row.failed }}</td></tr>
+    {% empty %}
+      <tr><td colspan="3">Nema podataka</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Greške po koraku</h2>
+<table class="adminlist">
+  <thead><tr><th>Korak</th><th>Broj</th></tr></thead>
+  <tbody>
+    {% for row in metrics.errors_by_step %}
+      <tr><td>{{ row.step }}</td><td>{{ row.count }}</td></tr>
+    {% empty %}
+      <tr><td colspan="2">Nema grešaka</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Latencija (duration_ms u audit detail)</h2>
+<p>p50: {{ metrics.latency.p50|default:"—" }} ms |
+   p95: {{ metrics.latency.p95|default:"—" }} ms |
+   avg: {{ metrics.latency.avg|default:"—" }} ms</p>
+
+<h2>Schematron preskočen</h2>
+<p>{{ metrics.schematron_skipped }} događaja</p>
+
+<h2>Smjer dokumenta</h2>
+<ul>
+  <li>Outbound sent: {{ metrics.directions.outbound_sent }}</li>
+  <li>AS4 inbound: {{ metrics.directions.inbound_as4 }}</li>
+  <li>AS4 outbound: {{ metrics.directions.as4_outbound }}</li>
+  <li>SUPER outbound (legacy): {{ metrics.directions.super_outbound }}</li>
+</ul>
+{% endblock %}

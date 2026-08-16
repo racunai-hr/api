@@ -1,0 +1,92 @@
+{% extends "admin/change_form.html" %}
+{% block after_related_objects %}
+{{ block.super }}
+<div class="module" style="margin-top: 1rem;">
+  <h2>PDV obrazac — predaja</h2>
+  {% if pdv_integrity and pdv_integrity_return %}
+  <p>
+    Trenutni draft: <strong>v{{ pdv_integrity_return.version }}</strong>
+    &nbsp;|&nbsp;
+    Status integriteta:
+    {% if pdv_integrity.status == 'SYNC' %}
+      <strong style="color:#0a7d32;">SYNC</strong>
+    {% else %}
+      <strong style="color:#ba2121;">OUT OF SYNC</strong>
+    {% endif %}
+    &nbsp;
+    <a href="{% url 'admin:accounting_vatreturn_change' pdv_integrity_return.pk %}">Otvori draft</a>
+  </p>
+  {% if pdv_integrity.status != 'SYNC' %}
+  <p style="color:#ba2121;">
+    PDV XML preuzimanje je onemogućeno dok draft nije SYNC. Uskladi XML iz payload.json ili generiraj novi draft.
+  </p>
+  {% endif %}
+  {% endif %}
+  <p>
+    {% if pdv_can_mark_submitted %}
+      <a href="mark-submitted/" class="button default">
+        Označi predano (v{{ pdv_mark_submitted_return.version }})
+      </a>
+    {% else %}
+      <span class="button" style="opacity:0.5;cursor:not-allowed;" title="Nema generiranog drafta">
+        Označi predano
+      </span>
+    {% endif %}
+  </p>
+</div>
+<div class="module" style="margin-top: 1rem;">
+  <h2>Obrazac PDV-S (EU stjecanje)</h2>
+  <p>
+    <a href="{% url 'accounting:pdv_s_xml_export' original.pk %}" class="button">Preuzmi PDV-S XML</a>
+    <a href="{% url 'accounting:vat_export' original.pk %}">PDV-S XLSX (legacy)</a>
+    {% if pdv_s_can_mark_submitted %}
+      <a href="mark-pdv-s-submitted/" class="button default">Označi PDV-S predano</a>
+    {% else %}
+      <span class="button" style="opacity:0.5;cursor:not-allowed;" title="PDV-S već predan">
+        Označi PDV-S predano
+      </span>
+    {% endif %}
+  </p>
+</div>
+<div class="module" style="margin-top: 1rem;">
+  <h2>Obrazac ZP (EU isporuke)</h2>
+  <p>
+    {% if zp_latest_return and zp_latest_return.xml_unsigned %}
+      <a href="{% url 'accounting:zp_xml_export' original.pk %}" class="button">Preuzmi ZP XML</a>
+      <a href="{% url 'admin:accounting_zpreturn_change' zp_latest_return.pk %}">
+        Otvori draft v{{ zp_latest_return.version }}
+      </a>
+    {% else %}
+      <span class="button" style="opacity:0.5;cursor:not-allowed;" title="Nema ZP drafta">
+        Preuzmi ZP XML
+      </span>
+    {% endif %}
+    {% if zp_can_mark_submitted %}
+      <a href="mark-zp-submitted/" class="button default">
+        Označi ZP predano (v{{ zp_mark_submitted_return.version }})
+      </a>
+    {% else %}
+      <span class="button" style="opacity:0.5;cursor:not-allowed;" title="Nema ZP drafta ili je već predan">
+        Označi ZP predano
+      </span>
+    {% endif %}
+  </p>
+  <p class="help">
+    Generiraj ZP draft akcijom na changelistu PDV razdoblja ili na ZP obrascima.
+  </p>
+</div>
+<details class="module" style="margin-top: 1rem;">
+  <summary style="cursor:pointer;font-weight:bold;padding:0.5rem 0;">
+    Alati (import XML, usklađivanje)
+  </summary>
+  <div style="padding-top:0.5rem;">
+    <p>
+      <a href="upload-signed/" class="button">Upload potpisani XML</a>
+      <a href="reconciliation/" class="button">Usklađivanje ERP vs. predano</a>
+    </p>
+    <p class="help">
+      Sekundarni alati za arhivu i reviziju. Primarni put evidencije predaje je „Označi predano”.
+    </p>
+  </div>
+</details>
+{% endblock %}

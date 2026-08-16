@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "mapping_version": 1,
+  "period_from": "2026-08-01",
+  "period_to": "2026-08-31",
+  "taxpayer": {
+    "name": "FINE STAR D.O.O.",
+    "oib": "36619131370",
+    "city": "Šibenik",
+    "street": "Bana Josipa Jelačića",
+    "house_number": "58"
+  },
+  "prepared_by": {
+    "first_name": "Toni",
+    "last_name": "Šupe"
+  },
+  "tax_office_code": "3566",
+  "rows": []
+}

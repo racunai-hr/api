@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:accounting_vatperiod_changelist' %}">PDV razdoblja</a>
+  &rsaquo; <a href="{% url 'admin:accounting_vatperiod_change' period.pk %}">{{ period }}</a>
+  &rsaquo; Upload potpisani XML
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Upload potpisani XML — {{ period }}</h1>
+<p>Usporedba s draftom v{{ vat_return.version }} (hash: {{ vat_return.payload_hash|slice:":12" }}…).</p>
+
+{% if differences %}
+<div class="messagelist">
+  <div class="error">Payload se ne podudara s draftom.</div>
+</div>
+<table style="width: 100%; margin-bottom: 1rem;">
+  <thead>
+    <tr>
+      <th>Polje</th>
+      <th>Vrsta</th>
+      <th>ERP (očekivano)</th>
+      <th>XML (stvarno)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for diff in differences %}
+    <tr>
+      <td>{{ diff.field }}</td>
+      <td>{{ diff.kind }}</td>
+      <td>{{ diff.expected }}</td>
+      <td>{{ diff.actual }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <fieldset class="module aligned">
+    <div class="form-row">
+      <label for="signed_xml">Potpisani Obrazac PDV (XML):</label>
+      <input type="file" name="signed_xml" id="signed_xml" accept=".xml" required>
+    </div>
+  </fieldset>
+  <div class="submit-row">
+    <input type="submit" value="Uvezi i označi predano" class="default">
+    <a href="{% url 'admin:accounting_vatperiod_change' period.pk %}" class="button cancel-link">Odustani</a>
+  </div>
+</form>
+{% endblock %}

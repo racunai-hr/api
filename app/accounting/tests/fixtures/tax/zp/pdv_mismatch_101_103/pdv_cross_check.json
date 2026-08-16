@@ -1,0 +1,12 @@
+{
+  "fields": {
+    "101": "8500.00",
+    "103": "1500.00"
+  },
+  "must_match_zp_totals": false,
+  "expected_zp_totals": {
+    "goods": "9000.00",
+    "services": "1000.00"
+  },
+  "note": "PDV boxovi namjerno odstupaju od ZP zbroja — verification test mora failati"
+}

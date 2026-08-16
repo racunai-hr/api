@@ -1,0 +1,86 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/racunai-theme.css' %}">
+<style>
+  #branding {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #branding #site-name {
+    margin: 0;
+    padding: 0;
+    font-weight: 400;
+    font-size: 1.125rem;
+  }
+  #branding #site-name a {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--header-branding-color);
+    text-decoration: none;
+  }
+  #branding #site-name a:hover {
+    color: #fff;
+  }
+  #branding .admin-logo {
+    height: 32px;
+    width: 32px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+</style>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>document.documentElement.dataset.theme = 'dark';</script>
+<link rel="icon" href="{% static 'branding/racunai-logo.png' %}" type="image/png">
+{% endblock %}
+
+{% block userlinks %}
+{% if platform_tenants %}
+<form action="{% url 'admin_switch_tenant' %}" method="post" style="display:inline;margin-right:12px;">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <label for="tenant-switcher">Tenant:</label>
+  <select name="tenant_id" id="tenant-switcher" onchange="this.form.submit()">
+    <option value="all" {% if not platform_active_tenant %}selected{% endif %}>— svi —</option>
+    {% for t in platform_tenants %}
+    <option value="{{ t.pk }}" {% if platform_active_tenant and platform_active_tenant.pk == t.pk %}selected{% endif %}>
+      {{ t.name }} ({{ t.slug }})
+    </option>
+    {% endfor %}
+  </select>
+</form>
+{% endif %}
+{{ block.super }}
+{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">
+    <img class="admin-logo" src="{{ admin_logo_url }}" alt="racunAI">
+    {{ admin_site_header }}
+  </a>
+</h1>
+{% if user.is_authenticated and user.is_superuser and request.is_platform_admin %}
+  {% if platform_active_tenant %}
+  <p style="margin:0;padding:0 0 0 16px;font-size:12px;">
+    Aktivni tenant: <strong>{{ platform_active_tenant.name }}</strong>
+  </p>
+  {% else %}
+  <p style="margin:0;padding:0 0 0 16px;font-size:12px;">Pregled svih tenanata</p>
+  {% endif %}
+{% elif admin_tenant_name %}
+  <p style="margin:0;padding:0 0 0 16px;font-size:12px;">
+    {{ admin_tenant_name }}
+  </p>
+{% endif %}
+{% endblock %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ admin_site_title }}{% endblock %}

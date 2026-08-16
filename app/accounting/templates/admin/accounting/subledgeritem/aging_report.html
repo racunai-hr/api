@@ -1,0 +1,106 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:accounting_subledgeritem_changelist' %}">Stavke saldakonta</a>
+  &rsaquo; Aging izvještaj
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Saldakonti — aging izvještaj</h1>
+<p>Na dan <strong>{{ as_of_date|date:"d.m.Y" }}</strong>.</p>
+
+<form method="get" style="margin-bottom: 1.5rem;">
+  <label for="direction">Smjer:</label>
+  <select name="direction" id="direction">
+    {% for value, label in direction_choices %}
+      <option value="{{ value }}"{% if direction == None and value == 'all' or direction == value %} selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label for="as_of" style="margin-left: 1rem;">Datum:</label>
+  <input type="date" name="as_of" id="as_of" value="{{ as_of_date|date:'Y-m-d' }}">
+  {% if partner_id %}
+    <input type="hidden" name="partner" value="{{ partner_id }}">
+  {% endif %}
+  <input type="submit" value="Primijeni" class="default" style="margin-left: 0.5rem;">
+  <a href="{{ export_url }}" class="button" style="margin-left: 0.5rem;">Preuzmi XLSX</a>
+</form>
+
+<h2>Partner aging</h2>
+<table style="width: 100%; border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th style="text-align: left; padding: 0.4rem;">Partner</th>
+      <th style="text-align: left; padding: 0.4rem;">Smjer</th>
+      {% for col in bucket_columns %}
+        <th style="text-align: right; padding: 0.4rem;">{{ col.label }}</th>
+      {% endfor %}
+      <th style="text-align: right; padding: 0.4rem;">Ukupno</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in partner_rows %}
+    <tr>
+      <td style="padding: 0.4rem;">{{ row.partner_name }}</td>
+      <td style="padding: 0.4rem;">{{ row.direction_label }}</td>
+      {% for amount in row.bucket_amounts %}
+        <td style="text-align: right; padding: 0.4rem;">{{ amount|floatformat:2 }}</td>
+      {% endfor %}
+      <td style="text-align: right; padding: 0.4rem;"><strong>{{ row.total|floatformat:2 }}</strong></td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="{{ bucket_columns|length|add:3 }}" style="padding: 0.4rem; color: #666;">Nema otvorenih stavki.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  {% if partner_rows %}
+  <tfoot>
+    <tr>
+      <th colspan="2" style="text-align: left; padding: 0.4rem;">UKUPNO</th>
+      {% for amount in total_row.bucket_amounts %}
+        <th style="text-align: right; padding: 0.4rem;">{{ amount|floatformat:2 }}</th>
+      {% endfor %}
+      <th style="text-align: right; padding: 0.4rem;">{{ total_row.total|floatformat:2 }}</th>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+
+<h2 style="margin-top: 2rem;">Otvorene stavke ({{ open_items|length }})</h2>
+<table style="width: 100%; border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th style="text-align: left; padding: 0.4rem;">Partner</th>
+      <th style="text-align: left; padding: 0.4rem;">Smjer</th>
+      <th style="text-align: left; padding: 0.4rem;">Dokument</th>
+      <th style="text-align: right; padding: 0.4rem;">Otvoreno</th>
+      <th style="text-align: left; padding: 0.4rem;">Dospijeće</th>
+      <th style="text-align: left; padding: 0.4rem;">Bucket</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in open_items %}
+    <tr>
+      <td style="padding: 0.4rem;">{{ item.partner_name }}</td>
+      <td style="padding: 0.4rem;">{{ item.direction_label }}</td>
+      <td style="padding: 0.4rem;">{{ item.source_label }}</td>
+      <td style="text-align: right; padding: 0.4rem;">{{ item.open_amount|floatformat:2 }}</td>
+      <td style="padding: 0.4rem;">{{ item.due_date|date:"d.m.Y" }}</td>
+      <td style="padding: 0.4rem;">{{ item.bucket_label }}</td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="6" style="padding: 0.4rem; color: #666;">Nema otvorenih stavki.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p style="margin-top: 1.5rem;">
+  <a href="{% url 'admin:accounting_subledgeritem_changelist' %}" class="button">Natrag na stavke</a>
+</p>
+{% endblock %}

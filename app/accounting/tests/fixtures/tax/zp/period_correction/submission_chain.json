@@ -1,0 +1,16 @@
+{
+  "submission_flow": {
+    "v1": {
+      "submission_no": 1,
+      "submission_type": "initial",
+      "payload_version": 1
+    },
+    "v2": {
+      "submission_no": 2,
+      "submission_type": "correction",
+      "payload_version": 2,
+      "supersedes_submission_no": 1
+    }
+  },
+  "note": "SubmissionService.supersede() — vidi ADR-0009"
+}

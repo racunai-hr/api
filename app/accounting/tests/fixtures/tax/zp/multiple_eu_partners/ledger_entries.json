@@ -1,0 +1,46 @@
+{
+  "period": {"year": 2026, "month": 7},
+  "taxpayer_oib": "36619131370",
+  "entries": [
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "101",
+      "entry_date": "2026-07-05",
+      "net_amount": "8000.00",
+      "vat_amount": "0.00",
+      "partner_country": "DE",
+      "partner_vat_id": "DE123456789",
+      "description": "EU dobra — DE"
+    },
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "103",
+      "entry_date": "2026-07-08",
+      "net_amount": "2500.00",
+      "vat_amount": "0.00",
+      "partner_country": "DE",
+      "partner_vat_id": "DE123456789",
+      "description": "EU usluge — DE (isti primatelj)"
+    },
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "101",
+      "entry_date": "2026-07-10",
+      "net_amount": "12000.00",
+      "vat_amount": "0.00",
+      "partner_country": "FR",
+      "partner_vat_id": "FR99887766554",
+      "description": "EU dobra — FR"
+    },
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "103",
+      "entry_date": "2026-07-18",
+      "net_amount": "4200.50",
+      "vat_amount": "0.00",
+      "partner_country": "IT",
+      "partner_vat_id": "IT12345678901",
+      "description": "EU usluge — IT"
+    }
+  ]
+}

@@ -1,0 +1,381 @@
+{% load static %}
+{% load humanize %}  {# za intcomma #}
+
+<!doctype html>
+<html lang="hr">
+<head>
+  <meta charset="utf-8">
+  <title>Račun {{ invoice.invoice_number }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap 5 (ako već imate bundlan u staticu, zamijenite s vašim pathom) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+
+  <style>
+    :root{
+        /* suptilan naglasak – kompatibilan sa svijetlom pozadinom */
+        --accent: #0d6efd;         /* Bootstrap primary */
+        --text-muted: #6c757d;
+        --border-color: #dee2e6;   /* Bootstrap border */
+    }
+
+    body { background: #fff; color: #212529; font-family: "DejaVu Sans", Arial, sans-serif; }
+    .invoice-wrap { max-width: 920px; margin: 0 auto; }
+
+    .brand-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 3px solid var(--accent);
+        padding-bottom: .75rem; margin-bottom: 1.25rem;
+    }
+    .brand-left { display: flex; gap: 1rem; align-items: center; }
+    .brand-left img.logo { max-height: 64px; height: auto; width: auto; }
+
+    .company-block small { color: var(--text-muted); display: block; }
+    .badge-status {
+        font-size: .85rem;
+        background: rgba(13,110,253,.08);
+        color: var(--accent);
+        border: 1px solid rgba(13,110,253,.25);
+    }
+
+    .meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .75rem 1.5rem;
+    }
+    .meta-grid .label { color: var(--text-muted); font-size: .875rem; }
+    .meta-grid .value { font-weight: 600; }
+
+    .party-card {
+        border: 1px solid var(--border-color);
+        border-radius: .5rem;
+        padding: .75rem 1rem;
+        background: #fff;
+    }
+    .party-title { text-transform: uppercase; color: var(--text-muted); font-size: .8rem; letter-spacing: .02em; }
+
+    /* PDF DVIJE KOLONE - JEDNOSTAVNO RJEŠENJE */
+    .invoice-two-cols {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Tablica stavki – vidljive crte + fiksne širine stupaca (PDF friendly) */
+    table.items {
+        border: 1px solid var(--border-color);
+        border-collapse: collapse;
+        table-layout: fixed;              /* ključno za poštivanje širina */
+        font-size: .9rem;                 /* malo manji font u stavkama */
+        width: 100%;
+    }
+    table.items thead th {
+        background: #f8f9fa;
+        border-bottom: 1px solid var(--border-color) !important;
+        text-align: center !important;
+        vertical-align: middle;
+        padding: .5rem .6rem;
+        line-height: 1.2; /* ljepše s <br> u naslovima */
+    }
+    table.items th, table.items td {
+        border: 1px solid var(--border-color) !important;
+        vertical-align: middle;
+        padding: .5rem .6rem;
+    }
+
+    /* Širine stupaca u mm (A4 nakon margina ~182mm) */
+    /* 1: #, 2: Naziv, 3: Količina, 4: Jed. cijena, 5: PDV %, 6: Ukupno */
+    .items thead th:nth-child(1), .items tbody td:nth-child(1) { width: 10mm; }
+    .items thead th:nth-child(2), .items tbody td:nth-child(2) { width: 82mm; } /* Naziv – šire */
+    .items thead th:nth-child(3), .items tbody td:nth-child(3) { width: 16mm; } /* Količina – uže */
+    .items thead th:nth-child(4), .items tbody td:nth-child(4) { width: 28mm; }
+    .items thead th:nth-child(5), .items tbody td:nth-child(5) { width: 12mm; }
+    .items thead th:nth-child(6), .items tbody td:nth-child(6) { width: 34mm; }
+
+    /* Naziv smije lomiti riječi; brojevi neka ne prelome (nowrap) */
+    .items tbody td:nth-child(2) { word-break: break-word; hyphens: auto; }
+    .items tbody td:nth-child(n+3) { white-space: nowrap; }
+
+    .text-right { text-align: right !important; }
+
+    .totals .table {
+        margin-bottom: 0;
+        border: 1px solid var(--border-color);
+    }
+    .totals .table th { width: 55%; text-align: right; font-weight: 600; }
+    .totals .table td { text-align: right; }
+    .totals .table tr:last-child th,
+    .totals .table tr:last-child td {
+        background: #f8f9fa; font-weight: 700;
+    }
+
+    .footnote { color: var(--text-muted); font-size: .9rem; }
+
+    .responsible-person {
+        border: 1px solid var(--border-color);
+        border-radius: .5rem;
+        padding: .75rem 1rem;
+        background: #f8f9fa;
+        margin-bottom: 1rem;
+    }
+    .responsible-person h6 {
+        color: var(--text-muted);
+        text-transform: uppercase;
+        font-size: .8rem;
+        letter-spacing: .02em;
+        margin-bottom: .5rem;
+    }
+
+    .company-inline { white-space: nowrap; }      /* ne lomi u HTML-u i PDF-u */
+
+    /* sigurno lomljenje i u HTML-u i u PDF-u (WeasyPrint) */
+    .wrap {
+        white-space: normal;
+        overflow-wrap: anywhere;   /* modernije od word-wrap */
+        word-break: break-word;    /* fallback */
+        hyphens: auto;             /* probaj umetati crtice; radi bolje uz lang="hr" */
+    }
+
+    /* Print/PDF */
+    @page { size: A4; margin: 14mm; }
+    @media print {
+        .no-print { display: none !important; }
+        .brand-bar { border-bottom-color: #000; }
+
+        /* ponovi zaglavlje tablice na svakoj stranici */
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+
+        /* jasne crte kod ispisa */
+        table, th, td {
+            border-color: #000 !important;
+            border-width: 1px !important;
+        }
+
+        /* header tablice s blagom sivom pozadinom i jasnim rubom */
+        table.items thead th {
+            background: #efefef !important;
+            border-bottom-color: #000 !important;
+        }
+
+        /* bolje zadržavanje boja (logo, badge, pozadine) */
+        body, img, table.items thead th {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        
+        .company-inline { white-space: nowrap; }
+        /* po potrebi dodatno smanji logo da sve stane u jedan red */
+        .brand-left img.logo { max-width: 48mm; }
+
+        /* Osiguraj da dvije kolone rade u PDF-u */
+        .invoice-two-cols {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            break-inside: avoid;
+        }
+
+        /* Responsible person styling za PDF */
+        .responsible-person {
+            background: #f5f5f5 !important;
+            border-color: #000 !important;
+            break-inside: avoid;
+        }
+
+        /* Barcode styling za PDF */
+        .barcode-section {
+            background: #fff !important;
+            border-color: #000 !important;
+            break-inside: avoid;
+        }
+    }
+</style>
+
+</head>
+<body>
+  <div class="invoice-wrap py-3">
+
+    <!-- Akcije (samo u pregledu) -->
+    <div class="no-print mb-3 d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="javascript:window.print()">Ispiši</a>
+        <a class="btn btn-primary" href="{% url 'invoices:invoice_pdf' invoice.id %}">Preuzmi PDF</a>
+    </div>
+
+    <!-- Zaglavlje s logom, podacima tvrtke i naslovom računa -->
+    <div class="brand-bar">
+        <div class="brand-left">
+            {% if company_logo_uri %}
+            <img class="logo" src="{{ company_logo_uri }}" alt="{{ company.company_name }} logo">
+            {% elif company.company_logo %}
+            <img class="logo" src="{{ company.company_logo.url }}" alt="{{ company.company_name }} logo">
+            {% else %}
+            <div class="fs-4 fw-bold text-uppercase" style="letter-spacing:.04em;">
+                {{ company.company_name }}
+            </div>
+            {% endif %}
+
+            <div class="company-block ms-4 flex-fill align-items-center gap-2 company-inline">
+                <div class="fw-semibold">{{ company.company_name }}</div>
+                <small>OIB: {{ company.vat_number }}</small>
+                <small>{{ company.company_address }}</small>
+            </div>
+        </div>
+
+        <!-- Desno: naslov i status (samo u HTML pregledu) -->
+        <div class="text-end no-print">
+            <div class="h5 mb-1 fw-bold">Račun {{ invoice.invoice_number }}</div>
+            <div class="mb-2 text-muted small">Dokument</div>
+            <span class="badge rounded-pill badge-status">{{ invoice.get_status_display }}</span>
+        </div>
+    </div>
+
+    <!-- Primatelj i meta podaci u dvije kolone -->
+    <div class="invoice-two-cols">
+        <div>
+            <div class="party-card h-100">
+                <div class="party-title mb-1">Primatelj</div>
+                {% with nm=invoice.company_to.name %}
+                <div class="fw-semibold {% if nm|length > 28 %}wrap{% endif %}">{{ nm }}</div>
+                {% endwith %}
+                <div class="text-muted">{{ invoice.company_to.address|linebreaksbr }}</div>
+                <div class="text-muted">
+                    {{ invoice.company_to.postal_code }} {{ invoice.company_to.city }}, {{ invoice.company_to.country }}
+                </div>
+                <div class="text-muted">OIB: {{ invoice.company_to.tax_number }}</div>
+                {% if invoice.company_to.email %}
+                <div class="text-muted">{{ invoice.company_to.email }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div>
+            <div class="meta-grid">
+                <div>
+                    <div class="label">Broj računa</div>
+                    <div class="value">{{ invoice.invoice_number }}</div>
+                </div>
+                <div>
+                    <div class="label">Datum izdavanja</div>
+                    <div class="value">{{ invoice.issue_date|date:"d.m.Y" }}</div>
+                </div>
+                <div>
+                    <div class="label">Datum dospijeća</div>
+                    <div class="value">{{ invoice.due_date|date:"d.m.Y" }}</div>
+                </div>
+                {% if invoice.service_date %}
+                <div>
+                    <div class="label">Datum usluge</div>
+                    <div class="value">{{ invoice.service_date|date:"d.m.Y" }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Stavke -->
+    <div class="table-responsive mb-3">
+        <table class="table table-sm table-bordered items w-100" style="font-size:.9rem;">
+            <colgroup>
+                <col style="width:10mm"><!-- # -->
+                <col style="width:82mm"><!-- Naziv -->
+                <col style="width:16mm"><!-- Količina -->
+                <col style="width:28mm"><!-- Jed. cijena -->
+                <col style="width:14mm"><!-- PDV % -->
+                <col style="width:32mm"><!-- Ukupno -->
+            </colgroup>
+
+            <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Naziv</th>
+                    <th scope="col">Kol.</th>
+                    <th scope="col">Cijena<br><small>(EUR)</small></th>
+                    <th scope="col">PDV<br><small>(%)</small></th>
+                    <th scope="col">Ukupno<br><small>(EUR)</small></th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for it in invoice.items.all %}
+                <tr>
+                    <td>{{ forloop.counter }}.</td>
+                    <td class="col-name">
+                        <div>{{ it.item_name }}</div>
+                        {% if it.description %}<div class="small text-muted">{{ it.description }}</div>{% endif %}
+                    </td>
+                    <td class="text-end nowrap">{{ it.quantity|floatformat:2|intcomma }}</td>
+                    <td class="text-end nowrap">{{ it.unit_price|floatformat:2|intcomma }}</td>
+                    <td class="text-end nowrap">{{ it.tax_rate|floatformat:2 }}</td>
+                    <td class="text-end nowrap">{{ it.line_total|floatformat:2|intcomma }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Nema stavki.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Sažetak iznosa -->
+    <div class="row justify-content-end mb-3">
+        <!-- Totals - desno -->
+        <div class="col-md-6 totals">
+            <table class="table table-bordered">
+                <tbody>
+                    <tr>
+                        <th>Osnovica</th>
+                        <td>{{ invoice.subtotal|floatformat:2|intcomma }}</td>
+                    </tr>
+                    <tr>
+                        <th>PDV</th>
+                        <td>{{ invoice.tax_amount|floatformat:2|intcomma }}</td>
+                    </tr>
+                    <tr>
+                        <th>Ukupno</th>
+                        <td><strong>{{ invoice.total_amount|floatformat:2|intcomma }}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Odgovorna osoba ispod totals -->
+    {% if responsible_person %}
+    <div class="row justify-content-end mb-3">
+        <div class="col-md-6">
+            <div class="responsible-person">
+                <h6>Odgovorna osoba</h6>
+                <div class="fw-semibold">{{ responsible_person.full_name }}</div>
+                <div class="text-muted">{{ responsible_person.get_title_display }}</div>
+                {% if responsible_person.email %}
+                <div class="text-muted small mt-1">
+                    {{ responsible_person.email }}
+                </div>
+                {% endif %}
+                {% if responsible_person.phone %}
+                <div class="text-muted small">
+                    {{ responsible_person.phone }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if invoice.notes %}
+    <div class="mb-3">
+        <div class="fw-semibold mb-1">Napomene</div>
+        <div class="footnote">{{ invoice.notes|linebreaksbr }}</div>
+    </div>
+    {% endif %}
+
+    <div class="footnote mt-4">
+        <div>Hvala na poslovanju.</div>
+        <div class="small">© {{ company.company_name }} · {{ company.company_website|default:'www.finestar.hr' }}</div>
+    </div>
+  </div>
+</body>
+</html>

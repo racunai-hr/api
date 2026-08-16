@@ -1,0 +1,92 @@
+{
+  "document_number": "13062026-TP-4129",
+  "issue_date": "2026-06-13",
+  "issue_time": "22:22:56",
+  "due_date": "2026-06-14",
+  "invoice_type_code": "380",
+  "currency": "EUR",
+  "supplier": {
+    "name": "Test Kupac d.o.o.",
+    "oib": "11528564544",
+    "address": {
+      "street": "Ilica 21",
+      "city": "Zagreb",
+      "postal_zone": "10000",
+      "country_code": "HR"
+    },
+    "party_identification": "9934:11528564544::HR99:12345",
+    "contact": {
+      "name": "KORISNIK 1021",
+      "email": "korisnik@testni-prodavatelj.hr"
+    },
+    "company_legal_form": "Memorandum Testnog prodavatelja"
+  },
+  "customer": {
+    "name": "Testni kupac",
+    "oib": "99999999994",
+    "address": {
+      "street": "SAVSKA CESTA 1",
+      "city": "Zagreb",
+      "postal_zone": "10000",
+      "country_code": "HR"
+    },
+    "party_identification": "9934:99999999994::HR99:98765"
+  },
+  "seller_contact": {
+    "oib": "18683136487",
+    "name": "Oznaka operatera"
+  },
+  "delivery": {
+    "actual_delivery_date": "2025-08-31",
+    "country_code": "HR"
+  },
+  "payment_means": {
+    "payment_means_code": "30",
+    "iban": "HR4424070001100630713"
+  },
+  "payment_terms_note": "Neki uvjeti plaćanja",
+  "lines": [
+    {
+      "line_id": "1",
+      "quantity": "1.000",
+      "line_extension_amount": "100.00",
+      "item_name": "Proizvod A",
+      "tax_category": "S",
+      "tax_name": "HR:PDV13",
+      "tax_percent": "13",
+      "unit_price": "100.000000",
+      "classification_code": "62.90.90"
+    },
+    {
+      "line_id": "2",
+      "quantity": "1.000",
+      "line_extension_amount": "100.00",
+      "item_name": "Proizvod B",
+      "tax_category": "S",
+      "tax_name": "HR:PDV25",
+      "tax_percent": "25",
+      "unit_price": "100.000000",
+      "classification_code": "62.90.90"
+    }
+  ],
+  "tax_subtotals": [
+    {
+      "taxable_amount": "100.00",
+      "tax_amount": "25.00",
+      "category_id": "S",
+      "percent": "25.00"
+    },
+    {
+      "taxable_amount": "100.00",
+      "tax_amount": "13.00",
+      "category_id": "S",
+      "percent": "13.00"
+    }
+  ],
+  "totals": {
+    "line_extension_amount": "200.00",
+    "tax_exclusive_amount": "200.00",
+    "tax_inclusive_amount": "238.00",
+    "payable_amount": "238.00"
+  }
+}

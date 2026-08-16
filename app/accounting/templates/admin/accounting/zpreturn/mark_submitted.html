@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:accounting_zpreturn_changelist' %}">ZP obrasci</a>
+  &rsaquo; <a href="{% url 'admin:accounting_zpreturn_change' zp_return.pk %}">{{ zp_return }}</a>
+  &rsaquo; Označi predano
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Označi ZP predano — {{ zp_return }}</h1>
+<p>
+  Evidencija ručne predaje na ePorezni za draft <strong>v{{ zp_return.version }}</strong>
+  (hash: {{ zp_return.payload_hash|slice:":12" }}…).
+  Potpisani XML se ne parsira — unesite UUID potvrde s ePorezne.
+</p>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <fieldset class="module aligned">
+    <div class="form-row">
+      <label for="submitted_at">Datum i vrijeme predaje:</label>
+      <input type="datetime-local" name="submitted_at" id="submitted_at" step="1">
+      <p class="help">Ostavite prazno za trenutno vrijeme.</p>
+    </div>
+    <div class="form-row">
+      <label for="eporezna_identifier">ePorezna identifikator (UUID):</label>
+      <input type="text" name="eporezna_identifier" id="eporezna_identifier" required
+             pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </div>
+    <div class="form-row">
+      <label>Predao:</label>
+      <p>{{ submitted_by.get_full_name|default:submitted_by.username }}</p>
+    </div>
+    <div class="form-row">
+      <label for="submission_confirmation">Potvrda predaje (PDF/XML, opcionalno):</label>
+      <input type="file" name="submission_confirmation" id="submission_confirmation"
+             accept=".pdf,.xml">
+    </div>
+    <div class="form-row">
+      <label for="version_confirmed">
+        <input type="checkbox" name="version_confirmed" id="version_confirmed" required>
+        Potvrđujem da sam na ePoreznu predao/la isti sadržaj kao draft v{{ zp_return.version }} iz ERP-a.
+      </label>
+    </div>
+  </fieldset>
+  <div class="submit-row">
+    <input type="submit" value="Označi predano" class="default">
+    <a href="{% url 'admin:accounting_zpreturn_change' zp_return.pk %}" class="button cancel-link">Odustani</a>
+  </div>
+</form>
+{% endblock %}

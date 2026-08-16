@@ -1,0 +1,105 @@
+<ObrazacZP verzijaSheme="1.0" xmlns="http://e-porezna.porezna-uprava.hr/sheme/zahtjevi/ObrazacZP/v1-0">
+	<Metapodaci xmlns="http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0">
+		<Naslov dc="http://purl.org/dc/elements/1.1/title">Zbirna prijava za isporuke dobara i usluga u druge države članice Europske unije</Naslov>
+		<Autor dc="http://purl.org/dc/elements/1.1/creator">LUKA MODRIĆ</Autor>
+		<Datum dc="http://purl.org/dc/elements/1.1/date">2020-01-10T15:19:11</Datum>
+		<Format dc="http://purl.org/dc/elements/1.1/format">text/xml</Format>
+		<Jezik dc="http://purl.org/dc/elements/1.1/language">hr-HR</Jezik>
+		<Identifikator dc="http://purl.org/dc/elements/1.1/identifier">e0dfebe3-0e6a-4fae-8c9b-359b5b9299af</Identifikator>
+		<Uskladjenost dc="http://purl.org/dc/terms/conformsTo">ObrazacZP-v1-0</Uskladjenost>
+		<Tip dc="http://purl.org/dc/elements/1.1/type">Elektronički obrazac</Tip>
+		<Adresant>Ministarstvo Financija, Porezna uprava, Zagreb</Adresant>
+	</Metapodaci>
+	<Zaglavlje>
+		<Razdoblje>
+			<DatumOd>2020-01-01</DatumOd>
+			<DatumDo>2020-01-31</DatumDo>
+		</Razdoblje>
+		<Obveznik>
+			<Naziv>Dobra firma d.o.o.</Naziv>
+			<OIB>00000000001</OIB>
+			<Adresa>
+				<Mjesto>ZAGREB</Mjesto>
+				<Ulica>TKALČIĆEVA</Ulica>
+				<Broj>0017</Broj>
+			</Adresa>
+		</Obveznik>
+		<ObracunSastavio>
+			<Ime>Pero</Ime>
+			<Prezime>Perić</Prezime>
+			<Telefon>+38512345678</Telefon>
+			<Fax>+385111111</Fax>
+			<Email>pero.peric951951@gmail.com</Email>
+		</ObracunSastavio>
+		<Ispostava>3379</Ispostava>
+	</Zaglavlje>
+	<Tijelo>
+		<Isporuke>
+			<Isporuka>
+				<RedBr>1</RedBr>
+				<KodDrzave>AT</KodDrzave>
+				<PDVID>U10223006</PDVID>
+				<I1>10.00</I1>
+				<I2>0.00</I2>
+				<I3>0.00</I3>
+				<I4>0.00</I4>
+			</Isporuka>
+			<Isporuka>
+				<RedBr>2</RedBr>
+				<KodDrzave>BE</KodDrzave>
+				<PDVID>0776091951</PDVID>
+				<I1>0.00</I1>
+				<I2>100.00</I2>
+				<I3>0.00</I3>
+				<I4>0.00</I4>
+			</Isporuka>
+			<Isporuka>
+				<RedBr>3</RedBr>
+				<KodDrzave>BG</KodDrzave>
+				<PDVID>0041010002</PDVID>
+				<I1>0.00</I1>
+				<I2>0.00</I2>
+				<I3>1000.00</I3>
+				<I4>0.00</I4>
+			</Isporuka>
+			<Isporuka>
+				<RedBr>4</RedBr>
+				<KodDrzave>CY</KodDrzave>
+				<PDVID>00532445O</PDVID>
+				<I1>90.00</I1>
+				<I2>100.00</I2>
+				<I3>100.00</I3>
+				<I4>1000.00</I4>
+			</Isporuka>
+		</Isporuke>
+		<IsporukeUkupno>
+			<I1>100.00</I1>
+			<I2>200.00</I2>
+			<I3>1100.00</I3>
+			<I4>1000.00</I4>
+		</IsporukeUkupno>
+		<AranzmaniPremjestanjaDobara>
+			<AranzmanPremjestanjaDobara>
+				<RedBr>1</RedBr>
+				<KodDrzave>EE</KodDrzave>
+				<PDVIdPotencijalni>100207415</PDVIdPotencijalni>
+				<PDVIdPotencijalniZamijenjen/>
+				<PovratDobara>0</PovratDobara>
+			</AranzmanPremjestanjaDobara>
+			<AranzmanPremjestanjaDobara>
+				<RedBr>2</RedBr>
+				<KodDrzave>EL</KodDrzave>
+				<PDVIdPotencijalni>040127797</PDVIdPotencijalni>
+				<PDVIdPotencijalniZamijenjen/>
+				<PovratDobara>1</PovratDobara>
+			</AranzmanPremjestanjaDobara>
+			<AranzmanPremjestanjaDobara>
+				<RedBr>3</RedBr>
+				<KodDrzave>HU</KodDrzave>
+				<PDVIdPotencijalni>12147117</PDVIdPotencijalni>
+				<PDVIdPotencijalniZamijenjen>21376414</PDVIdPotencijalniZamijenjen>
+				<PovratDobara>0</PovratDobara>
+			</AranzmanPremjestanjaDobara>
+		</AranzmaniPremjestanjaDobara>
+	</Tijelo>
+</ObrazacZP>

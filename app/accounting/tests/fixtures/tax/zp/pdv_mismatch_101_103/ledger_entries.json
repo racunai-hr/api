@@ -1,0 +1,26 @@
+{
+  "period": {"year": 2026, "month": 10},
+  "taxpayer_oib": "36619131370",
+  "entries": [
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "101",
+      "entry_date": "2026-10-07",
+      "net_amount": "9000.00",
+      "vat_amount": "0.00",
+      "partner_country": "DE",
+      "partner_vat_id": "DE123456789",
+      "description": "EU dobra — verification mismatch scenario"
+    },
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "103",
+      "entry_date": "2026-10-14",
+      "net_amount": "1000.00",
+      "vat_amount": "0.00",
+      "partner_country": "DE",
+      "partner_vat_id": "DE123456789",
+      "description": "EU usluge"
+    }
+  ]
+}

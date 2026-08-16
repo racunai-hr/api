@@ -1,0 +1,182 @@
+{
+  "fields": {
+    "000": "0.00",
+    "100": "0.00",
+    "101": "0.00",
+    "102": "0.00",
+    "103": "0.00",
+    "104": "0.00",
+    "105": "0.00",
+    "106": "0.00",
+    "107": "0.00",
+    "108": "0.00",
+    "109": "0.00",
+    "110": "0.00",
+    "111": "0.00",
+    "200": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "201": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "202": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "203": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "204": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "205": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "206": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "207": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "208": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "209": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "210": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "211": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "212": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "213": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "214": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "215": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "300": {
+      "porez": "84.11",
+      "vrijednost": "336.43"
+    },
+    "301": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "302": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "303": {
+      "porez": "84.11",
+      "vrijednost": "336.43"
+    },
+    "304": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "305": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "306": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "307": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "308": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "309": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "310": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "311": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "312": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "313": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "314": {
+      "porez": "0.00",
+      "vrijednost": "0.00"
+    },
+    "315": "0.00",
+    "400": "-84.11",
+    "500": "0.00",
+    "610": "0.00",
+    "611": "0.00",
+    "612": "0.00",
+    "613": "0.00",
+    "614": "0.00",
+    "615": "0.00",
+    "630": "0.00",
+    "640": "0.00",
+    "650": "0.00",
+    "660": true,
+    "701": {
+      "nabavna_vrijednost": "0.00",
+      "prodajna_vrijednost": "0.00"
+    },
+    "702": {
+      "nabavna_vrijednost": "0.00",
+      "prodajna_vrijednost": "0.00"
+    },
+    "703": {
+      "nabavna_vrijednost": "0.00",
+      "prodajna_vrijednost": "0.00"
+    },
+    "704": {
+      "nabavna_vrijednost": "0.00",
+      "prodajna_vrijednost": "0.00"
+    }
+  },
+  "mapping_version": 7,
+  "period_from": "2026-04-01",
+  "period_to": "2026-04-30",
+  "schema_version": "11.0",
+  "taxpayer": {
+    "city": "\u0160ibenik",
+    "house_number": "58",
+    "name": "FINE STAR D.O.O.",
+    "oib": "36619131370",
+    "postal_code": "",
+    "street": "Bana Josipa Jela\u010di\u0107a"
+  }
+}

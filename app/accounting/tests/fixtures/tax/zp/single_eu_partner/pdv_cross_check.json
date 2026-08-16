@@ -1,0 +1,8 @@
+{
+  "fields": {
+    "101": "15000.00",
+    "103": "0.00"
+  },
+  "must_match_zp_totals": true,
+  "note": "ZP Σ goods = PDV Podatak101; ZP Σ services = PDV Podatak103"
+}

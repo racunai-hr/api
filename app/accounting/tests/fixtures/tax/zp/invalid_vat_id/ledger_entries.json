@@ -1,0 +1,16 @@
+{
+  "period": {"year": 2026, "month": 9},
+  "taxpayer_oib": "36619131370",
+  "entries": [
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "101",
+      "entry_date": "2026-09-03",
+      "net_amount": "5000.00",
+      "vat_amount": "0.00",
+      "partner_country": "XX",
+      "partner_vat_id": "INVALID",
+      "description": "Namjerno neispravan PDV ID — validation test"
+    }
+  ]
+}

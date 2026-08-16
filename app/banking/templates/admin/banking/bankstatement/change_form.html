@@ -1,0 +1,18 @@
+{% extends "admin/change_form.html" %}
+{% block after_related_objects %}
+{{ block.super }}
+<div class="module" style="margin-top: 1rem;">
+  <h2>Import transakcija</h2>
+  <form method="post" enctype="multipart/form-data" action="import/">
+    {% csrf_token %}
+    <p>
+      <label for="import_file">CAMT.053 (XML) ili CSV datoteka:</label>
+      <input type="file" name="import_file" id="import_file" required>
+    </p>
+    <input type="submit" value="Uvezi transakcije" class="default">
+  </form>
+  <p style="margin-top: 1rem;">
+    <a href="suggest-matches/" class="button">Pokreni automatske prijedloge usklađivanja</a>
+  </p>
+</div>
+{% endblock %}

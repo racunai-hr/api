@@ -1,0 +1,37 @@
+{
+  "document_number": "EXP-2026-001",
+  "issue_date": "2026-05-01",
+  "invoice_type_code": "380",
+  "currency": "EUR",
+  "supplier": {
+    "name": "Izvoznik d.o.o.",
+    "oib": "36619131370",
+    "address": {"street": "Ilica 1", "city": "Zagreb", "postal_zone": "10000"}
+  },
+  "customer": {
+    "name": "Foreign Buyer GmbH",
+    "oib": "12345678903",
+    "address": {"street": "Berliner Str 1", "city": "Berlin", "postal_zone": "10115", "country_code": "DE"}
+  },
+  "lines": [
+    {
+      "line_id": "1",
+      "quantity": "1",
+      "line_extension_amount": "500.00",
+      "item_name": "Export goods",
+      "tax_category": "G",
+      "tax_name": "HR:IZV",
+      "tax_percent": "0",
+      "unit_price": "500.00"
+    }
+  ],
+  "tax_subtotals": [
+    {"taxable_amount": "500.00", "tax_amount": "0.00", "category_id": "G", "percent": "0"}
+  ],
+  "totals": {
+    "line_extension_amount": "500.00",
+    "tax_exclusive_amount": "500.00",
+    "tax_inclusive_amount": "500.00",
+    "payable_amount": "500.00"
+  }
+}

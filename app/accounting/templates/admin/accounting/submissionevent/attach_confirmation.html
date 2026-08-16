@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>Priloži potvrdu predaje #{{ event.submission_no }}</h1>
+
+<p>
+  Dokument: <strong>{{ document }}</strong><br>
+  Portal UUID: <code>{{ event.external_identifier }}</code><br>
+  payload_hash: <code>{{ event.payload_hash|default:"—" }}</code>
+</p>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <fieldset class="module aligned">
+    <div class="form-row">
+      <label for="id_confirmation_attachment">Datoteka potvrde (XML, PDF, …):</label>
+      <input type="file" name="confirmation_attachment" id="id_confirmation_attachment" required>
+    </div>
+  </fieldset>
+  <div class="submit-row">
+    <input type="submit" value="Priloži potvrdu" class="default">
+    <a href="{% url 'admin:accounting_submissionevent_change' event.pk %}">Odustani</a>
+  </div>
+</form>
+
+<p class="help">
+  XML prilozi se validiraju (OIB, razdoblje, XSD, potpis). Hash se uspoređuje s payload_hash eventa.
+</p>
+{% endblock %}

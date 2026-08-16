@@ -1,0 +1,41 @@
+# ZP fixture scenarios — index
+# Load with: yaml.safe_load or manual list in tests
+
+scenarios:
+  - id: single_eu_partner
+    description: Jedan EU primatelj (DE), samo dobra (box 101)
+    has_expected_payload: true
+    has_pdv_cross_check: true
+    expect_validation_error: false
+
+  - id: multiple_eu_partners
+    description: Tri EU primatelja — dobra i usluge
+    has_expected_payload: true
+    has_pdv_cross_check: true
+    expect_validation_error: false
+
+  - id: period_correction
+    description: Ispravak razdoblja — v1 i v2 ledger/payload
+    has_expected_payload: true
+    has_pdv_cross_check: true
+    versions: [v1, v2]
+    expect_validation_error: false
+
+  - id: empty_period
+    description: Nema EU izlaznih stavki
+    has_expected_payload: true
+    has_pdv_cross_check: true
+    expect_validation_error: false
+
+  - id: invalid_vat_id
+    description: Neispravan format EU PDV ID-a
+    has_expected_payload: false
+    has_pdv_cross_check: false
+    expect_validation_error: true
+
+  - id: pdv_mismatch_101_103
+    description: ZP payload ispravan; PDV cross-check namjerno kriv
+    has_expected_payload: true
+    has_pdv_cross_check: true
+    must_match_zp_totals: false
+    expect_validation_error: false

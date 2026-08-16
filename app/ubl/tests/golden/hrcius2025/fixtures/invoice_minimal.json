@@ -1,0 +1,35 @@
+{
+  "document_number": "MIN-001",
+  "issue_date": "2026-01-15",
+  "due_date": "2026-02-15",
+  "supplier": {
+    "name": "Dobavljač d.o.o.",
+    "oib": "12345678903",
+    "address": {"street": "Ulica 1", "city": "Zagreb", "postal_zone": "10000"}
+  },
+  "customer": {
+    "name": "Kupac d.o.o.",
+    "oib": "98765432108",
+    "address": {"street": "Ulica 2", "city": "Split", "postal_zone": "21000"}
+  },
+  "lines": [
+    {
+      "line_id": "1",
+      "quantity": "1",
+      "line_extension_amount": "100.00",
+      "item_name": "Usluga",
+      "tax_name": "HR:PDV25",
+      "tax_percent": "25",
+      "unit_price": "100.00"
+    }
+  ],
+  "tax_subtotals": [
+    {"taxable_amount": "100.00", "tax_amount": "25.00", "percent": "25"}
+  ],
+  "totals": {
+    "line_extension_amount": "100.00",
+    "tax_exclusive_amount": "100.00",
+    "tax_inclusive_amount": "125.00",
+    "payable_amount": "125.00"
+  }
+}

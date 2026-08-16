@@ -1,0 +1,117 @@
+/* racunAI admin — paleta usklađena s app.racunai.hr (Next.js) */
+
+html[data-theme="dark"],
+html[data-theme="light"] {
+  --body-bg: #0f1419;
+  --body-fg: #e8edf4;
+  --body-quiet-color: #8b9cb3;
+  --body-loud-color: #ffffff;
+
+  --darkened-bg: #1a2332;
+  --selected-bg: #243044;
+  --selected-row: #1e3a5f;
+  --hairline-color: #2d3a4f;
+  --border-color: #2d3a4f;
+
+  --header-bg: #1a2332;
+  --header-color: #e8edf4;
+  --header-branding-color: #e8edf4;
+  --header-link-color: #8b9cb3;
+
+  --primary: #3b82f6;
+  --secondary: #2563eb;
+  --accent: #3b82f6;
+  --primary-fg: #ffffff;
+
+  --link-fg: #3b82f6;
+  --link-hover-color: #2563eb;
+  --link-selected-fg: #60a5fa;
+
+  --breadcrumbs-fg: #8b9cb3;
+  --breadcrumbs-link-fg: #e8edf4;
+  --breadcrumbs-bg: #1a2332;
+
+  --button-fg: #ffffff;
+  --button-bg: #3b82f6;
+  --button-hover-bg: #2563eb;
+  --default-button-bg: #2563eb;
+  --default-button-hover-bg: #1d4ed8;
+
+  --close-button-bg: #243044;
+  --close-button-hover-bg: #2d3a4f;
+
+  --error-fg: #fca5a5;
+  --message-success-bg: #14532d;
+  --message-warning-bg: #78350f;
+  --message-error-bg: #450a0a;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(59, 130, 246, 0.06), transparent);
+}
+
+#header {
+  border-bottom: 1px solid var(--border-color);
+}
+
+#branding p {
+  color: var(--body-quiet-color) !important;
+}
+
+#tenant-switcher {
+  background: var(--body-bg);
+  color: var(--body-fg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 8px;
+  max-width: 180px;
+  font-size: 0.8125rem;
+}
+
+#tenant-switcher:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+label[for="tenant-switcher"] {
+  color: var(--body-quiet-color) !important;
+}
+
+.module,
+#content-main .module {
+  border-radius: 10px;
+  border-color: var(--border-color);
+}
+
+.dashboard #content-main .module table th {
+  background: var(--darkened-bg);
+}
+
+.login #container {
+  background: transparent;
+}
+
+.login #content {
+  background: var(--darkened-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.login .form-row input {
+  background: var(--body-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--body-fg);
+}
+
+.login .form-row input:focus {
+  border-color: var(--primary);
+}
+
+.login .submit-row input {
+  border-radius: 6px;
+}

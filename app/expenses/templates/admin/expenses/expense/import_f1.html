@@ -1,0 +1,67 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; Uvezi F1 CSV
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Uvezi F1 CSV</h1>
+<p>Odaberite F1 izvještaj ulaznih računa (.csv). Način plaćanja dobavljaču (K/G/T) dolazi iz F1 datoteke; način podmirenja u tvrtki postavite ispod.</p>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <fieldset class="module aligned">
+    <div class="form-row">
+      <label for="id_import_file">CSV datoteka:</label>
+      <input type="file" name="import_file" id="id_import_file" accept=".csv,text/csv" required>
+    </div>
+    <div class="form-row">
+      <label for="id_settlement_method">Način podmirenja u tvrtki:</label>
+      <select name="settlement_method" id="id_settlement_method">
+        <option value="">— Odaberi —</option>
+        {% for value, label in settlement_methods %}
+          <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label for="id_paid_by">Platitelj (privatno podmirenje):</label>
+      <select name="paid_by" id="id_paid_by">
+        <option value="">— Odaberi —</option>
+        {% for payer in payers %}
+          <option value="{{ payer.pk }}">{{ payer.name }}{% if payer.oib %} ({{ payer.oib }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label for="id_mark_paid">
+        <input type="checkbox" name="mark_paid" id="id_mark_paid" value="1">
+        Uvezi kao plaćeno (knjiži podmirenje)
+      </label>
+    </div>
+    <div class="form-row">
+      <label for="id_dry_run">
+        <input type="checkbox" name="dry_run" id="id_dry_run" value="1">
+        Analiziraj bez spremanja (dry run)
+      </label>
+    </div>
+  </fieldset>
+  <div class="submit-row">
+    <input type="submit" value="Uvezi" class="default">
+    <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">Odustani</a>
+  </div>
+</form>
+
+{% if report %}
+  <fieldset class="module">
+    <h2>Rezultat</h2>
+    <pre style="white-space: pre-wrap; font-family: monospace;">{{ report }}</pre>
+  </fieldset>
+{% endif %}
+{% endblock %}

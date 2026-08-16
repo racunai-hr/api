@@ -1,0 +1,261 @@
+{% extends "admin/login.html" %}
+
+{% load i18n static %}
+
+
+
+{% block extrastyle %}
+
+{{ block.super }}
+
+<link rel="stylesheet" href="{% static 'admin/css/racunai-theme.css' %}">
+
+<style>
+
+  .login-logo {
+
+    text-align: center;
+
+    margin-bottom: 1.5rem;
+
+  }
+
+  .login-logo img {
+
+    height: 64px;
+
+    width: 64px;
+
+    border-radius: 12px;
+
+  }
+
+  .login-logo h1 {
+
+    margin: 0.75rem 0 0;
+
+    font-size: 1.5rem;
+
+    font-weight: 600;
+
+    color: var(--body-fg);
+
+  }
+
+  .turnstile-row {
+
+    margin: 1rem 0;
+
+  }
+
+  #turnstile-container {
+
+    min-height: 65px;
+
+  }
+
+</style>
+
+{% endblock %}
+
+
+
+{% block extrahead %}
+
+{{ block.super }}
+
+<script>document.documentElement.dataset.theme = 'dark';</script>
+
+<link rel="icon" href="{% static 'branding/racunai-logo.png' %}" type="image/png">
+
+{% if turnstile_enabled and turnstile_site_key %}
+
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+
+{% endif %}
+
+{% endblock %}
+
+
+
+{% block branding %}
+
+<div class="login-logo">
+
+  <img src="{% static 'branding/racunai-logo.png' %}" alt="racunAI">
+
+  <h1>racunAI</h1>
+
+</div>
+
+{% endblock %}
+
+
+
+{% block content %}
+
+{% if form.errors and not form.non_field_errors %}
+
+<p class="errornote">
+
+{% blocktranslate count counter=form.errors.items|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}
+
+</p>
+
+{% endif %}
+
+
+
+{% if form.non_field_errors %}
+
+{% for error in form.non_field_errors %}
+
+<p class="errornote">
+
+    {{ error }}
+
+</p>
+
+{% endfor %}
+
+{% endif %}
+
+
+
+<div id="content-main">
+
+
+
+{% if user.is_authenticated %}
+
+<p class="errornote">
+
+{% blocktranslate trimmed %}
+
+    You are authenticated as {{ username }}, but are not authorized to
+
+    access this page. Would you like to login to a different account?
+
+{% endblocktranslate %}
+
+</p>
+
+{% endif %}
+
+
+
+<form action="{{ app_path }}" method="post" id="login-form">{% csrf_token %}
+
+  <div class="form-row">
+
+    {{ form.username.errors }}
+
+    {{ form.username.label_tag }} {{ form.username }}
+
+  </div>
+
+  <div class="form-row">
+
+    {{ form.password.errors }}
+
+    {{ form.password.label_tag }} {{ form.password }}
+
+    <input type="hidden" name="next" value="{{ next }}">
+
+  </div>
+
+  {% if turnstile_enabled and turnstile_site_key %}
+
+  <div class="form-row turnstile-row">
+
+    <div id="turnstile-container"></div>
+
+  </div>
+
+  {% endif %}
+
+  {% url 'admin_password_reset' as password_reset_url %}
+
+  {% if password_reset_url %}
+
+  <div class="password-reset-link">
+
+    <a href="{{ password_reset_url }}">{% translate 'Forgotten your password or username?' %}</a>
+
+  </div>
+
+  {% endif %}
+
+  <div class="submit-row">
+
+    <input type="submit" value="{% translate 'Log in' %}"{% if turnstile_enabled and turnstile_site_key %} disabled{% endif %}>
+
+  </div>
+
+</form>
+
+
+
+</div>
+
+{% if turnstile_enabled and turnstile_site_key %}
+
+<script>
+
+(function () {
+
+  var submitBtn = document.querySelector('#login-form input[type="submit"]');
+
+  function enableSubmit() {
+
+    if (submitBtn) submitBtn.disabled = false;
+
+  }
+
+  function disableSubmit() {
+
+    if (submitBtn) submitBtn.disabled = true;
+
+  }
+
+  function renderTurnstile() {
+
+    if (!window.turnstile) return false;
+
+    window.turnstile.render('#turnstile-container', {
+
+      sitekey: '{{ turnstile_site_key|escapejs }}',
+
+      theme: 'dark',
+
+      callback: enableSubmit,
+
+      'expired-callback': disableSubmit,
+
+      'error-callback': disableSubmit,
+
+    });
+
+    return true;
+
+  }
+
+  if (!renderTurnstile()) {
+
+    var timer = setInterval(function () {
+
+      if (renderTurnstile()) clearInterval(timer);
+
+    }, 100);
+
+  }
+
+})();
+
+</script>
+
+{% endif %}
+
+{% endblock %}
+
+

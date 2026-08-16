@@ -1,0 +1,29 @@
+{
+  "period": {"year": 2026, "month": 5},
+  "version": 2,
+  "taxpayer_oib": "36619131370",
+  "supersedes_version": 1,
+  "correction_reason": "Ispravak osnovice nakon storno stavke",
+  "entries": [
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "101",
+      "entry_date": "2026-05-20",
+      "net_amount": "20000.00",
+      "vat_amount": "0.00",
+      "partner_country": "DE",
+      "partner_vat_id": "DE229674882",
+      "description": "Original"
+    },
+    {
+      "ledger_type": "I-RA",
+      "vat_box": "101",
+      "entry_date": "2026-05-28",
+      "net_amount": "-5000.00",
+      "vat_amount": "0.00",
+      "partner_country": "DE",
+      "partner_vat_id": "DE229674882",
+      "description": "Storno dijela isporuke"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:accounting_vatperiod_changelist' %}">PDV razdoblja</a>
+  &rsaquo; <a href="{% url 'admin:accounting_vatperiod_change' period.pk %}">{{ period }}</a>
+  &rsaquo; Usklađivanje
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Usklađivanje ERP vs. predano — {{ period }}</h1>
+<p>Referenca: PDV obrazac v{{ submitted.version }} ({{ submitted.get_status_display }}).</p>
+
+{% if matches %}
+<div class="messagelist">
+  <div class="success">ERP payload podudara se s predanim obrazcem.</div>
+</div>
+{% else %}
+<div class="messagelist">
+  <div class="warning">Postoje razlike između ERP-a i predanog obrasca.</div>
+</div>
+<table style="width: 100%;">
+  <thead>
+    <tr>
+      <th>Polje</th>
+      <th>Vrsta</th>
+      <th>ERP</th>
+      <th>Predano</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for diff in differences %}
+    <tr>
+      <td>{{ diff.field }}</td>
+      <td>{{ diff.kind }}</td>
+      <td>{{ diff.expected }}</td>
+      <td>{{ diff.actual }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<p style="margin-top: 1rem;">
+  <a href="{% url 'admin:accounting_vatperiod_change' period.pk %}" class="button">Natrag</a>
+</p>
+{% endblock %}

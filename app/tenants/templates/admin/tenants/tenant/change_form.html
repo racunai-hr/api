@@ -1,0 +1,41 @@
+{% extends "admin/change_form.html" %}
+{% block after_related_objects %}
+{{ block.super }}
+<div class="module" style="margin-top: 1rem;">
+  <h2>Integracije</h2>
+  {% if integration_rows %}
+  <table style="width: 100%;">
+    <thead>
+      <tr>
+        <th>Tip</th>
+        <th>Provider</th>
+        <th>Okruženje</th>
+        <th>Status</th>
+        <th>Akcija</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in integration_rows %}
+      <tr>
+        <td>{{ row.type }}</td>
+        <td>{{ row.provider }}</td>
+        <td>{{ row.environment }}</td>
+        <td>{{ row.status }}</td>
+        <td>
+          <a href="{{ row.edit_url }}">Integracija</a>
+          {% if row.provider_url %}
+          | <a href="{{ row.provider_url }}">Provider config</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Nema konfiguriranih integracija.</p>
+  {% endif %}
+  <p style="margin-top: 1rem;">
+    <a href="{{ add_integration_url }}" class="button">Dodaj integraciju</a>
+  </p>
+</div>
+{% endblock %}

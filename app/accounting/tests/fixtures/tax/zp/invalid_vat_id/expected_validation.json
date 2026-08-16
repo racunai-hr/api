@@ -1,0 +1,6 @@
+{
+  "expect_error": true,
+  "error_substring": "Neispravan EU PDV ID",
+  "failing_entry_index": 0,
+  "note": "Agregacija ili validate mora odbiti prije persistencije ZPReturn"
+}

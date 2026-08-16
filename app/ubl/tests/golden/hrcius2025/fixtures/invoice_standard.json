@@ -1,0 +1,43 @@
+{
+  "document_number": "STD-2026-001",
+  "issue_date": "2026-03-01",
+  "issue_time": "10:30:00",
+  "due_date": "2026-03-31",
+  "supplier": {
+    "name": "Fine Star d.o.o.",
+    "oib": "36619131370",
+    "address": {"street": "Trgovačka 5", "city": "Šibenik", "postal_zone": "22000"},
+    "party_identification": "9934:36619131370::HR99:12345",
+    "contact": {"name": "Fine Star", "email": "info@finestar.hr"}
+  },
+  "customer": {
+    "name": "Partner d.o.o.",
+    "oib": "11111111119",
+    "address": {"street": "Savska 10", "city": "Zagreb", "postal_zone": "10000"},
+    "party_identification": "9934:11111111119::HR99:98765"
+  },
+  "seller_contact": {"oib": "11528564544", "name": "Operater"},
+  "payment_means": {"iban": "HR1210010051863000160"},
+  "payment_terms_note": "Plaćanje u 30 dana",
+  "lines": [
+    {
+      "line_id": "1",
+      "quantity": "2",
+      "line_extension_amount": "200.00",
+      "item_name": "Konzulting",
+      "tax_name": "HR:PDV25",
+      "tax_percent": "25",
+      "unit_price": "100.00",
+      "classification_code": "62.90.90"
+    }
+  ],
+  "tax_subtotals": [
+    {"taxable_amount": "200.00", "tax_amount": "50.00", "percent": "25"}
+  ],
+  "totals": {
+    "line_extension_amount": "200.00",
+    "tax_exclusive_amount": "200.00",
+    "tax_inclusive_amount": "250.00",
+    "payable_amount": "250.00"
+  }
+}
