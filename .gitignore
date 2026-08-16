@@ -14,6 +14,9 @@ htmlcov/
 .venv/
 venv/
 
+# Runtime uploads (HEL1: /opt/stacks/racunai.hr/api/media)
+/media/
+
 *.log
 .cursor/
 .vscode/
