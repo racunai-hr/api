@@ -25,8 +25,12 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Multi-tenancy
 TENANT_PLATFORM_DOMAIN = env('TENANT_PLATFORM_DOMAIN', default='racunai.hr')
-TENANT_PLATFORM_ADMIN_HOSTS = ['admin.racunai.hr']
-TENANT_RESERVED_SLUGS = ['app', 'admin', 'www', 'api', 'mail', 'static', 'otp', 'otp-sbx']
+TENANT_STAGE_INFIX = env('TENANT_STAGE_INFIX', default='')
+TENANT_PLATFORM_ADMIN_HOSTS = env.list(
+    'TENANT_PLATFORM_ADMIN_HOSTS',
+    default=['admin.racunai.hr'],
+)
+TENANT_RESERVED_SLUGS = ['app', 'admin', 'www', 'api', 'mail', 'static', 'otp', 'otp-sbx', 'mps']
 TENANT_LEGACY_HOST_MAP = {
     'erp.finestar.hr': 'finestar',
 }
@@ -284,7 +288,7 @@ PLATFORM_ADMIN_LOGIN_URL = env(
     'PLATFORM_ADMIN_LOGIN_URL',
     default='https://admin.racunai.hr/admin/login/',
 )
-SESSION_COOKIE_DOMAIN = env('SESSION_COOKIE_DOMAIN', default='.racunai.hr')
+SESSION_COOKIE_DOMAIN = env('SESSION_COOKIE_DOMAIN', default='.racunai.hr') or None
 FISCAL_AS4_SERVICE_HOSTS = env.list('FISCAL_AS4_SERVICE_HOSTS', default=[])
 
 if not DEBUG:

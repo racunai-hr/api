@@ -55,7 +55,8 @@ def resolve_tenant_from_host(host):
     if tenant:
         return tenant
 
-    suffix = f'.{platform_domain}'
+    infix = getattr(settings, 'TENANT_STAGE_INFIX', '') or ''
+    suffix = f'{infix}.{platform_domain}' if infix else f'.{platform_domain}'
     if host.endswith(suffix):
         slug = host[: -len(suffix)]
         if slug and '.' not in slug and slug not in reserved_slugs:

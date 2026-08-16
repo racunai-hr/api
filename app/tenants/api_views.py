@@ -9,11 +9,20 @@ from tenants.models import Tenant, TenantMembership
 from tenants.serializers import TurnstileTokenObtainPairSerializer
 
 
+def _platform_admin_host() -> str:
+    admin_hosts = getattr(settings, 'TENANT_PLATFORM_ADMIN_HOSTS', [])
+    if admin_hosts:
+        return admin_hosts[0]
+    platform_domain = getattr(settings, 'TENANT_PLATFORM_DOMAIN', 'racunai.hr')
+    return f'admin.{platform_domain}'
+
+
 def _tenant_admin_url(tenant: Tenant) -> str:
     if tenant.custom_domain:
         return f'https://{tenant.custom_domain}/admin/'
     platform_domain = getattr(settings, 'TENANT_PLATFORM_DOMAIN', 'racunai.hr')
-    return f'https://{tenant.slug}.{platform_domain}/admin/'
+    infix = getattr(settings, 'TENANT_STAGE_INFIX', '') or ''
+    return f'https://{tenant.slug}{infix}.{platform_domain}/admin/'
 
 
 def _serialize_tenant_membership(membership: TenantMembership) -> dict:
@@ -41,7 +50,6 @@ class AuthMeView(APIView):
 
     def get(self, request):
         user = request.user
-        platform_domain = getattr(settings, 'TENANT_PLATFORM_DOMAIN', 'racunai.hr')
 
         tenants = []
         if user.is_superuser:
@@ -69,5 +77,5 @@ class AuthMeView(APIView):
                 'is_superuser': user.is_superuser,
             },
             'tenants': tenants,
-            'platform_admin_url': f'https://admin.{platform_domain}/admin/',
+            'platform_admin_url': f'https://{_platform_admin_host()}/admin/',
         })
