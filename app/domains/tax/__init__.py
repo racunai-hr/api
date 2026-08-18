@@ -12,7 +12,9 @@ from domains.tax.facade import (
     TaxFormEngine,
     aggregate_vat_boxes,
     build_pdv_payload,
+    classify,
     compute_vat_due,
+    finalize_period,
 )
 
 __all__ = [
@@ -23,5 +25,7 @@ __all__ = [
     'TaxFormEngine',
     'aggregate_vat_boxes',
     'build_pdv_payload',
+    'classify',
     'compute_vat_due',
+    'finalize_period',
 ]
