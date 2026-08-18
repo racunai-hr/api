@@ -924,6 +924,62 @@ class VATEntryCategory(models.TextChoices):
     ADJUSTMENT = 'adjustment', 'Korekcija'
 
 
+class VATLedgerOrigin(models.TextChoices):
+    LEGACY = 'legacy', 'Legacy generator'
+    ENGINE = 'engine', 'Tax classification engine'
+    MANUAL = 'manual', 'Manual correction'
+
+
+class VATProjectionRunStatus(models.TextChoices):
+    PREPARED = 'PREPARED', 'Prepared'
+    APPLIED = 'APPLIED', 'Applied'
+    REJECTED = 'REJECTED', 'Rejected'
+    STALE = 'STALE', 'Stale'
+    FAILED = 'FAILED', 'Failed'
+
+
+class VATProjectionRun(TenantMixin, models.Model):
+    """Audit record for a projection prepare/apply. Gate B does not insert rows."""
+
+    vat_period = models.ForeignKey(
+        VATPeriod,
+        on_delete=models.CASCADE,
+        related_name='projection_runs',
+        verbose_name='PDV razdoblje',
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=VATProjectionRunStatus.choices,
+        verbose_name='Status',
+    )
+    engine_version = models.PositiveSmallIntegerField(verbose_name='Verzija enginea')
+    mapping_version = models.PositiveSmallIntegerField(verbose_name='Verzija mapiranja')
+    input_fingerprint = models.CharField(max_length=64, verbose_name='Ulazni fingerprint')
+    output_fingerprint = models.CharField(max_length=64, blank=True, verbose_name='Izlazni fingerprint')
+    classified_count = models.PositiveIntegerField(default=0)
+    not_relevant_count = models.PositiveIntegerField(default=0)
+    review_count = models.PositiveIntegerField(default=0)
+    invalid_count = models.PositiveIntegerField(default=0)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vat_projection_runs',
+    )
+    rejection_code = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'PDV projection run'
+        verbose_name_plural = 'PDV projection runovi'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.vat_period} {self.status}'
+
+
 class VATLedgerEntry(TenantMixin, models.Model):
     LEDGER_I_RA = 'I-RA'
     LEDGER_U_RA = 'U-RA'
@@ -972,11 +1028,40 @@ class VATLedgerEntry(TenantMixin, models.Model):
         verbose_name='Kategorija stavke',
     )
     is_manual = models.BooleanField(default=False, verbose_name='Ručna korekcija')
+    origin = models.CharField(
+        max_length=16,
+        choices=VATLedgerOrigin.choices,
+        default=VATLedgerOrigin.LEGACY,
+        verbose_name='Podrijetlo retka',
+    )
+    projection_run = models.ForeignKey(
+        'VATProjectionRun',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ledger_entries',
+        verbose_name='Projection run',
+    )
+    mapping_version = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Verzija mapiranja',
+    )
+    source_line_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='ID izvorne stavke',
+    )
 
     class Meta:
         verbose_name = "Stavka PDV knjige"
         verbose_name_plural = "Stavke PDV knjiga"
         ordering = ['entry_date', 'document_number']
+
+    def save(self, *args, **kwargs):
+        if self.is_manual and self.origin != VATLedgerOrigin.ENGINE:
+            self.origin = VATLedgerOrigin.MANUAL
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.ledger_type} {self.document_number}"
