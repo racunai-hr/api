@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections import Counter
 from decimal import Decimal
 
@@ -23,6 +21,7 @@ from accounting.services.tax_projection.contracts import (
     VatProjectionCandidate,
     VatProjectionStatus,
 )
+from accounting.services.tax_projection.fingerprints import output_fingerprint
 from accounting.services.tax_projection.identity import identity_of, to_projected
 from accounting.services.tax_projection.snapshot import (
     ProjectionSnapshot,
@@ -173,10 +172,11 @@ def _build_candidate(
     counts = Counter(result.outcome.value for result in results)
     return VatProjectionCandidate(
         period_id=period.pk,
+        tenant_id=period.tenant_id,
         status=status,
         writable=writable,
         input_fingerprint=input_fingerprint,
-        output_fingerprint=_output_fingerprint(projected),
+        output_fingerprint=output_fingerprint(projected),
         mapping_version=PDV_MAPPING_VERSION,
         engine_version=PROJECTION_ENGINE_VERSION,
         rows=projected,
@@ -292,22 +292,6 @@ def _sorted_issues(issues: list[ProjectionIssue]) -> list[ProjectionIssue]:
     )
 
 
-def _output_fingerprint(rows: tuple[ProjectedLedgerRow, ...]) -> str:
-    payload = [
-        {
-            'identity': list(identity_of(row)),
-            'box': row.box,
-            'base': format(row.base_amount, 'f'),
-            'tax': format(row.tax_amount, 'f'),
-            'sign': format(row.sign, 'f'),
-            'rule_code': row.rule_code,
-        }
-        for row in sorted(rows, key=lambda row: (*identity_of(row), row.box))
-    ]
-    encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'))
-    return hashlib.sha256(encoded.encode('utf-8')).hexdigest()
-
-
 def _stale_candidate(
     period: VATPeriod,
     *,
@@ -323,6 +307,7 @@ def _stale_candidate(
     )
     return VatProjectionCandidate(
         period_id=period.pk,
+        tenant_id=period.tenant_id,
         status=VatProjectionStatus.STALE,
         writable=False,
         input_fingerprint=input_fingerprint,
