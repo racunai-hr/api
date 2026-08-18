@@ -12,7 +12,7 @@ from domains.tax.classification.contracts import (
     TaxClassificationResult,
     TaxDocumentInput,
 )
-from domains.tax.classification.engine import classify
+from domains.tax.classification.engine import classify, reconcile_rc_bases
 from domains.tax.classification.finalize import finalize_period
 
 __all__ = [
@@ -28,4 +28,5 @@ __all__ = [
     'TaxDocumentInput',
     'classify',
     'finalize_period',
+    'reconcile_rc_bases',
 ]

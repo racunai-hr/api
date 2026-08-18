@@ -32,7 +32,7 @@ from accounting.services.tax_shadow.selection import (
     select_reversal_entries,
 )
 from domains.tax.classification.contracts import Outcome, TaxClassificationResult
-from domains.tax.classification.engine import classify
+from domains.tax.classification.engine import classify, reconcile_rc_bases
 from domains.tax.classification.finalize import finalize_period
 
 _JOURNAL_INPUT_ACCOUNTS = frozenset({'1400'})
@@ -191,7 +191,7 @@ def shadow_classify_period(period: VATPeriod) -> ShadowReport:
             })
 
     finalized = finalize_period(
-        tuple(classified_rows),
+        reconcile_rc_bases(tuple(classified_rows)),
         period_year=period.year,
         period_month=period.month,
         period_id=period.pk,

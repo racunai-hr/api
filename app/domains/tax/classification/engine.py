@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 from accounting.services.tax_forms.pdv.mapping import (
     PDV_MAPPING,
     PDV_MAPPING_VERSION,
+    RC_INPUT_BOXES,
     invoice_eu_outbound_box,
     invoice_rate_to_box,
     is_eu_customer,
@@ -14,6 +16,8 @@ from accounting.services.tax_forms.pdv.mapping import (
     is_eu_supplier,
     journal_line_vat_rate,
     pretporez_base_from_vat,
+    rc_output_box_for_input,
+    rc_vat_from_base,
     viii1_box_amounts,
 )
 from accounting.services.tax_forms.pdv.supply_procedure import (
@@ -374,6 +378,45 @@ def _classify_journal(
             rule_code='UNMAPPED_TAX_ACCOUNT_NO_LONGER_SKIPPED',
         )
     return _empty(document, Outcome.NOT_TAX_RELEVANT, 'non_tax_journal_account', warnings)
+
+
+def reconcile_rc_bases(rows: tuple[ProposedLedgerRow, ...]) -> tuple[ProposedLedgerRow, ...]:
+    """Align RC pretporez bases with paired acquisition 207/209/210 rows.
+
+    Mirrors generate_vat_ledger _matched_rc_base without reading VATLedgerEntry, so
+    inverse-from-VAT 0.01 drift (3970.59 → 15882.36 vs 0373 15882.35) is resolved
+    from the classified asset row, not from eu_rc_base_from_vat which would also
+    rewrite exact 2000.00 → 8000.00 pairs.
+    """
+    reconciled = []
+    rate = Decimal('25.00')
+    for row in rows:
+        if row.box not in RC_INPUT_BOXES:
+            reconciled.append(row)
+            continue
+        output_box = rc_output_box_for_input(row.box)
+        if output_box is None:
+            reconciled.append(row)
+            continue
+        candidate_bases = [
+            other.base_amount
+            for other in rows
+            if other.box == output_box and other.base_amount > 0
+        ]
+        matched = [
+            base for base in candidate_bases
+            if rc_vat_from_base(base, rate) == row.tax_amount
+        ]
+        if len(matched) == 1:
+            reconciled.append(replace(row, base_amount=matched[0]))
+            continue
+        if not matched and candidate_bases:
+            total = sum(candidate_bases, Decimal('0.00'))
+            if rc_vat_from_base(total, rate) == row.tax_amount:
+                reconciled.append(replace(row, base_amount=total))
+                continue
+        reconciled.append(row)
+    return tuple(reconciled)
 
 
 class _PartnerView:
