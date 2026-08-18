@@ -16,7 +16,7 @@ from domains.tax.classification.contracts import (
     PartnerSnapshot,
     TaxDocumentInput,
 )
-from domains.tax.classification.engine import _classified, classify
+from domains.tax.classification.engine import _classified, classify, reconcile_rc_bases
 from domains.tax.classification.finalize import finalize_period
 from domains.tax.classification.hashing import hash_tax_input
 
@@ -214,6 +214,63 @@ class ClassifyJournalTests(SimpleTestCase):
         self.assertEqual(obveza.rows[0].box, '207')
         self.assertEqual(pretporez.rows[0].tax_amount, Decimal('2000.00'))
         self.assertEqual(obveza.rows[0].tax_amount, Decimal('2000.00'))
+        self.assertEqual(pretporez.rows[0].base_amount, Decimal('8000.00'))
+
+    def test_rc_base_follows_acquisition_not_inverse_vat(self):
+        acquisition = classify(
+            _input(
+                source_kind='journal_line',
+                source_line_id=10,
+                lifecycle_status='posted',
+                account_code='0373',
+                debit_amount=Decimal('15882.35'),
+                credit_amount=Decimal('0.00'),
+                direction=Direction.INPUT,
+            )
+        )
+        pretporez = classify(
+            _input(
+                source_kind='journal_line',
+                source_line_id=11,
+                lifecycle_status='posted',
+                account_code='14022',
+                debit_amount=Decimal('3970.59'),
+                credit_amount=Decimal('0.00'),
+                direction=Direction.INPUT,
+            )
+        )
+        self.assertEqual(pretporez.rows[0].base_amount, Decimal('15882.36'))
+        reconciled = reconcile_rc_bases(acquisition.rows + pretporez.rows)
+        bases = {row.box: row.base_amount for row in reconciled}
+        self.assertEqual(bases['207'], Decimal('15882.35'))
+        self.assertEqual(bases['307'], Decimal('15882.35'))
+
+    def test_rc_reconcile_keeps_exact_8000_pair(self):
+        acquisition = classify(
+            _input(
+                source_kind='journal_line',
+                source_line_id=20,
+                lifecycle_status='posted',
+                account_code='0373',
+                debit_amount=Decimal('8000.00'),
+                credit_amount=Decimal('0.00'),
+                direction=Direction.INPUT,
+            )
+        )
+        pretporez = classify(
+            _input(
+                source_kind='journal_line',
+                source_line_id=21,
+                lifecycle_status='posted',
+                account_code='14022',
+                debit_amount=Decimal('2000.00'),
+                credit_amount=Decimal('0.00'),
+                direction=Direction.INPUT,
+            )
+        )
+        reconciled = reconcile_rc_bases(acquisition.rows + pretporez.rows)
+        pretporez_row = next(row for row in reconciled if row.box == '307')
+        self.assertEqual(pretporez_row.base_amount, Decimal('8000.00'))
 
 
 class ReversalTests(SimpleTestCase):
