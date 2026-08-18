@@ -45,9 +45,10 @@ class ProjectedLedgerRow:
 
 @dataclass(frozen=True)
 class VatProjectionCandidate:
-    """Prepare outcome. writable is True only for READY on an open period."""
+    """Prepare outcome. writable is informational; apply uses locked period.status."""
 
     period_id: int
+    tenant_id: int
     status: VatProjectionStatus
     writable: bool
     input_fingerprint: str
