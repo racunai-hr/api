@@ -57,13 +57,21 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     'rest_framework',
-    'drf_spectacular',
     'corsheaders',
     'django_celery_beat',
     'django_celery_results',
     'django_extensions',
     'django_filters',
 ]
+
+# Web image includes drf-spectacular; older celery images may not.
+try:
+    import drf_spectacular  # noqa: F401
+except ImportError:  # pragma: no cover
+    _HAS_DRF_SPECTACULAR = False
+else:
+    _HAS_DRF_SPECTACULAR = True
+    THIRD_PARTY_APPS.insert(1, 'drf_spectacular')
 
 LOCAL_APPS = [
 
@@ -190,8 +198,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
+if _HAS_DRF_SPECTACULAR:
+    REST_FRAMEWORK['DEFAULT_SCHEMA_CLASS'] = 'drf_spectacular.openapi.AutoSchema'
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'računAI API',
@@ -218,8 +227,9 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-# Register OpenApiAuthenticationExtension subclasses
-import config.openapi_auth  # noqa: E402,F401
+# Register OpenApiAuthenticationExtension subclasses (requires drf-spectacular).
+if _HAS_DRF_SPECTACULAR:
+    import config.openapi_auth  # noqa: E402,F401
 
 from datetime import timedelta
 
@@ -230,6 +240,8 @@ SIMPLE_JWT = {
 }
 
 # CORS settings
+from corsheaders.defaults import default_headers
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -237,10 +249,18 @@ CORS_ALLOWED_ORIGINS = [
     "http://erp.finestar.hr",
     "https://admin.racunai.hr",
     "https://app.racunai.hr",
+    "https://app-stage.racunai.hr",
 ]
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://[\w-]+\.racunai\.hr$",
 ]
+# Browser preflight for JWT banking writes sends Idempotency-Key.
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    "idempotency-key",
+)
+# Keep short so allow-headers fixes are not stuck in browser preflight cache for a day.
+CORS_PREFLIGHT_MAX_AGE = 600
 
 # Cloudflare Turnstile (login CAPTCHA)
 TURNSTILE_VERIFY_ENABLED = env.bool('TURNSTILE_VERIFY_ENABLED', default=False)
