@@ -6,7 +6,7 @@ from django.urls import path
 from tenants.mixins import TenantAdminMixin
 
 from .importers import parse_bank_csv, parse_camt053
-from .models import BankStatement, BankTransaction
+from .models import BankImportRun, BankStatement, BankSyncRun, BankTransaction
 from .provider_models import (
     BankApiCall,
     BankConnection,
@@ -25,6 +25,7 @@ from .reconciliation import (
     unmatch_transaction,
 )
 from .services.connect import start_connect_flow
+from .services.import_runs import submit_statement_import
 from .services.import_statements import import_bank_statement_file
 from .services.pis_orders import refresh_payment_order_status, submit_domestic_payment_order
 from .tasks import sync_connection_task
@@ -274,6 +275,44 @@ class PaymentOrderAdmin(TenantAdminMixin, admin.ModelAdmin):
         self.message_user(request, f'Osvježeno {queryset.count()} naloga.')
 
 
+@admin.register(BankImportRun)
+class BankImportRunAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = (
+        'id', 'status', 'format', 'original_filename', 'actor',
+        'transactions_created', 'transactions_skipped', 'created_at', 'finished_at',
+    )
+    list_filter = ('status', 'format')
+    search_fields = ('original_filename', 'content_sha256', 'idempotency_key')
+    readonly_fields = (
+        'run_uuid', 'actor', 'source', 'format', 'original_filename', 'content_sha256',
+        'payload', 'status', 'idempotency_key', 'celery_task_id',
+        'statements_processed', 'statements_created', 'statements_updated',
+        'transactions_processed', 'transactions_created', 'transactions_skipped',
+        'error_count', 'warnings', 'errors',
+        'created_at', 'started_at', 'finished_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(BankSyncRun)
+class BankSyncRunAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = (
+        'id', 'connection', 'status', 'transactions_created',
+        'auto_create_payments', 'actor', 'created_at', 'finished_at',
+    )
+    list_filter = ('status', 'auto_create_payments')
+    readonly_fields = (
+        'connection', 'actor', 'status', 'transactions_created', 'transactions_skipped',
+        'last_error', 'celery_task_id', 'correlation_id', 'auto_create_payments',
+        'created_at', 'started_at', 'finished_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+
 @admin.register(BankStatement)
 class BankStatementAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = ('statement_number', 'bank_account', 'statement_date', 'status', 'closing_balance')
@@ -312,13 +351,52 @@ class BankStatementAdmin(TenantAdminMixin, admin.ModelAdmin):
 
         if request.method == 'POST' and request.FILES.get('import_file'):
             upload = request.FILES['import_file']
-            result = import_bank_statement_file(
-                tenant=tenant,
-                user=request.user,
-                content=upload.read(),
-                filename=upload.name,
-            )
-            self._flash_import_result(request, result)
+            content = upload.read()
+            try:
+                outcome = submit_statement_import(
+                    tenant=tenant,
+                    actor=request.user,
+                    content=content,
+                    filename=upload.name,
+                )
+            except Exception as exc:
+                messages.error(request, f'Uvoz nije pokrenut: {exc}')
+                return redirect('admin:banking_bankstatement_changelist')
+
+            run = outcome.run
+            if run.status == BankImportRun.STATUS_REJECTED:
+                messages.error(
+                    request,
+                    f'Uvoz odbijen ({run.format or "unknown"}): '
+                    f'{"; ".join(run.errors) if run.errors else "nepodržan format"}.',
+                )
+            elif run.status in (
+                BankImportRun.STATUS_QUEUED,
+                BankImportRun.STATUS_RUNNING,
+            ):
+                messages.info(
+                    request,
+                    f'Uvoz bankovnog izvoda pokrenut (run #{run.pk}). '
+                    f'Status: {run.get_status_display()}.',
+                )
+            elif run.status == BankImportRun.STATUS_SUCCEEDED:
+                messages.success(
+                    request,
+                    (
+                        f'Import završen (run #{run.pk}): '
+                        f'{run.statements_created} novih izvoda, '
+                        f'{run.transactions_created} novih transakcija, '
+                        f'{run.transactions_skipped} preskočenih.'
+                    ),
+                )
+            else:
+                messages.error(
+                    request,
+                    f'Import neuspješan (run #{run.pk}): '
+                    f'{"; ".join(run.errors) if run.errors else run.status}.',
+                )
+            for warning in run.warnings or []:
+                messages.warning(request, warning)
             return redirect('admin:banking_bankstatement_changelist')
 
         return render(request, 'admin/banking/bankstatement/import_statement.html', {

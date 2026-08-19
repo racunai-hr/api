@@ -172,6 +172,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = env('MEDIA_URL', default='/media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Banking statement import (ADR-0021)
+BANKING_IMPORT_MAX_BYTES = env.int('BANKING_IMPORT_MAX_BYTES', default=20 * 1024 * 1024)
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

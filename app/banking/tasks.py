@@ -6,19 +6,80 @@ from celery import shared_task
 from django.utils import timezone
 
 from banking.provider_models import BankConnection, BankConsent
+from banking.models import BankSyncRun
 from banking.services.alerting import notify_consent_expiry, notify_stale_connection
-from banking.services.sync import sync_and_reconcile, sync_connection_transactions
+from banking.services.sync_runs import create_or_get_active_sync_run, execute_sync_run
+
+
+@shared_task(name='banking.execute_bank_import_run')
+def execute_bank_import_run_task(run_id: int) -> dict:
+    from banking.services.import_runs import execute_import_run
+
+    run = execute_import_run(run_id)
+    return {
+        'run_id': run.pk,
+        'status': run.status,
+        'transactions_created': run.transactions_created,
+        'transactions_skipped': run.transactions_skipped,
+        'error_count': run.error_count,
+    }
+
+
+@shared_task(name='banking.execute_bank_sync_run')
+def execute_bank_sync_run_task(run_id: int) -> dict:
+    run = execute_sync_run(run_id)
+    return {
+        'run_id': run.pk,
+        'status': run.status,
+        'transactions_created': run.transactions_created,
+        'last_error': run.last_error,
+    }
 
 
 @shared_task(name='banking.sync_connection')
-def sync_connection_task(connection_id: int, *, auto_reconcile: bool = True) -> dict:
+def sync_connection_task(
+    connection_id: int,
+    *,
+    auto_reconcile: bool = True,
+    auto_create_payments: bool | None = None,
+    actor_id: int | None = None,
+) -> dict:
+    """Enqueue a BankSyncRun (shared lock). Legacy auto_reconcile maps to auto_create_payments."""
+    from django.contrib.auth import get_user_model
+
     connection = BankConnection.all_objects.select_related('tenant', 'bank_provider').get(
         pk=connection_id,
     )
-    if auto_reconcile:
-        return sync_and_reconcile(connection, auto_create_payments=True)
-    created = sync_connection_transactions(connection)
-    return {'transactions_synced': created}
+    if auto_create_payments is None:
+        auto_create_payments = bool(auto_reconcile)
+    actor = None
+    if actor_id is not None:
+        actor = get_user_model().objects.filter(pk=actor_id).first()
+
+    run, created = create_or_get_active_sync_run(
+        connection=connection,
+        actor=actor,
+        auto_create_payments=auto_create_payments,
+    )
+    if created and run.status == BankSyncRun.STATUS_QUEUED:
+        from banking.services.sync_runs import enqueue_sync_run
+
+        enqueue_sync_run(run.pk)
+        run.refresh_from_db()
+    elif run.status == BankSyncRun.STATUS_QUEUED:
+        # Active queued without task — ensure worker pickup.
+        from banking.services.sync_runs import enqueue_sync_run
+
+        if not run.celery_task_id:
+            enqueue_sync_run(run.pk)
+            run.refresh_from_db()
+
+    return {
+        'sync_run_id': run.pk,
+        'created': created,
+        'status': run.status,
+        'transactions_created': run.transactions_created,
+    }
 
 
 @shared_task(name='banking.sync_all_active_connections')
@@ -26,7 +87,7 @@ def sync_all_active_connections_task():
     results = []
     for connection in BankConnection.all_objects.filter(status='connected').iterator():
         try:
-            result = sync_and_reconcile(connection, auto_create_payments=True)
+            result = sync_connection_task(connection.pk, auto_create_payments=True)
             results.append({'connection_id': connection.pk, **result})
         except Exception as exc:
             connection.status = 'error'
