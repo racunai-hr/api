@@ -1,4 +1,4 @@
-"""Partner MDM write/read services (ADR-0022)."""
+"""Partner MDM write/read services (ADR-0022 + ADR-0023)."""
 
 from __future__ import annotations
 
@@ -18,22 +18,51 @@ from domains.partners.services.dto import (
 )
 from domains.reporting.documents.snapshot import isoformat, read_snapshot
 from partners.models import Partner, PartnerBankAccount, PartnerContact
+from shared.countries import (
+    VALID_JURISDICTIONS,
+    country_display_name,
+    derive_jurisdiction,
+    is_valid_country_code,
+    normalize_country_code,
+)
 from shared.iban import normalize_iban
+from shared.oib import is_valid_oib, normalize_oib
+from shared.vat import (
+    eu_vat_format_valid,
+    looks_like_eu_vat,
+    normalize_vat_number,
+    vat_matches_country,
+)
 
 
 class PartnerTaxNumberConflict(Exception):
     """Duplicate tax_number within tenant."""
 
 
+class PartnerVatNumberConflict(Exception):
+    """Duplicate vat_number within tenant."""
+
+
 class PartnerIbanConflict(Exception):
     """Duplicate normalized IBAN within the same partner."""
 
 
+class PartnerFieldError(Exception):
+    """Structured 400 for partner MDM validation (ADR-0023)."""
+
+    def __init__(self, code: str, field: str, detail: str | None = None):
+        self.code = code
+        self.field = field
+        self.detail = detail or code
+        super().__init__(self.detail)
+
+
 @dataclass(frozen=True)
 class PartnerListFilters:
-    filter: str = 'active'  # active | all
+    filter: str = 'active'  # active | all | inactive
     partner_type: str | None = None
     status: str | None = None
+    jurisdiction: str | None = None
     search: str = ''
     page: int = 1
     page_size: int = 20
@@ -50,7 +79,7 @@ PARTNER_WRITE_FIELDS = (
     'address',
     'city',
     'postal_code',
-    'country',
+    'country_code',
     'email',
     'phone',
     'mobile',
@@ -89,6 +118,14 @@ BANK_ACCOUNT_WRITE_FIELDS = (
 CUSTOMER_TYPES = frozenset({'customer', 'both'})
 SUPPLIER_TYPES = frozenset({'supplier', 'both'})
 
+_EU_MEMBER_EXCL_HR = frozenset(
+    code for code in (
+        'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI',
+        'FR', 'GR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT',
+        'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
+    )
+)
+
 
 def parse_partner_list_filters(params) -> PartnerListFilters:
     raw_filter = (params.get('filter') or '').strip().lower()
@@ -108,6 +145,10 @@ def parse_partner_list_filters(params) -> PartnerListFilters:
     if status and status not in dict(Partner.STATUS_CHOICES):
         raise ValueError('invalid status')
 
+    jurisdiction = (params.get('jurisdiction') or '').strip().upper() or None
+    if jurisdiction and jurisdiction not in VALID_JURISDICTIONS:
+        raise ValueError('jurisdiction must be HR, EU, or NON_EU')
+
     search = (params.get('search') or params.get('q') or '').strip()
 
     try:
@@ -124,6 +165,7 @@ def parse_partner_list_filters(params) -> PartnerListFilters:
         filter=list_filter,
         partner_type=partner_type,
         status=status,
+        jurisdiction=jurisdiction,
         search=search,
         page=page,
         page_size=page_size,
@@ -152,13 +194,95 @@ def _money(value, field: str) -> Decimal:
         raise ValueError(f'{field} must be a decimal') from exc
 
 
+def _reject_legacy_country_write(data: dict) -> None:
+    if 'country' in data:
+        raise PartnerFieldError(
+            'partner_country_write_rejected',
+            'country',
+            'country is read-only; write country_code',
+        )
+
+
+def _apply_identity_fields(partner: Partner, data: dict, *, create: bool) -> None:
+    """Normalize and validate country_code / tax_number / vat_number (ADR-0023)."""
+    _reject_legacy_country_write(data)
+
+    if create and 'country_code' not in data:
+        raise PartnerFieldError('partner_country_invalid', 'country_code', 'country_code is required')
+
+    if 'country_code' in data:
+        code = normalize_country_code(str(data.get('country_code') or ''))
+        if not code or not is_valid_country_code(code):
+            raise PartnerFieldError('partner_country_invalid', 'country_code')
+        partner.country_code = code
+        partner.country = country_display_name(code)
+
+    if not partner.country_code:
+        raise PartnerFieldError('partner_country_invalid', 'country_code', 'country_code is required')
+
+    jurisdiction = derive_jurisdiction(partner.country_code)
+    identity_touched = create or any(k in data for k in ('country_code', 'tax_number', 'vat_number'))
+
+    if 'tax_number' in data or create:
+        raw_tax = data.get('tax_number', partner.tax_number if not create else '')
+        if jurisdiction == 'HR':
+            tax = normalize_oib(str(raw_tax or ''))
+            if not tax:
+                raise PartnerFieldError('partner_oib_required', 'tax_number')
+            if not is_valid_oib(tax):
+                raise PartnerFieldError('partner_oib_invalid', 'tax_number')
+            partner.tax_number = tax
+        else:
+            partner.tax_number = str(raw_tax or '').strip()
+
+    if 'vat_number' in data:
+        vat = normalize_vat_number(str(data.get('vat_number') or ''))
+        _assign_vat(partner, vat, jurisdiction)
+    elif identity_touched and partner.vat_number:
+        # Re-validate existing VAT when country/tax changes.
+        _assign_vat(partner, normalize_vat_number(partner.vat_number), jurisdiction)
+
+    if jurisdiction == 'HR':
+        if not partner.tax_number:
+            raise PartnerFieldError('partner_oib_required', 'tax_number')
+        if not is_valid_oib(partner.tax_number):
+            raise PartnerFieldError('partner_oib_invalid', 'tax_number')
+
+
+def _assign_vat(partner: Partner, vat: str, jurisdiction: str) -> None:
+    if not vat:
+        partner.vat_number = ''
+        return
+    if jurisdiction == 'HR':
+        if not eu_vat_format_valid(vat) or not vat_matches_country(vat, 'HR'):
+            raise PartnerFieldError('partner_vat_invalid', 'vat_number')
+        if vat[2:] != partner.tax_number:
+            raise PartnerFieldError('partner_vat_country_mismatch', 'vat_number')
+        partner.vat_number = vat
+        return
+    if jurisdiction == 'EU':
+        if not eu_vat_format_valid(vat):
+            raise PartnerFieldError('partner_vat_invalid', 'vat_number')
+        if not vat_matches_country(vat, partner.country_code):
+            raise PartnerFieldError('partner_vat_country_mismatch', 'vat_number')
+        partner.vat_number = vat
+        return
+    # NON_EU: reject EU-shaped VAT IDs (valid or invalid prefix body).
+    if looks_like_eu_vat(vat):
+        raise PartnerFieldError('partner_vat_invalid', 'vat_number')
+    partner.vat_number = vat
+
+
 def _apply_partner_fields(partner: Partner, data: dict, *, create: bool) -> None:
+    _apply_identity_fields(partner, data, create=create)
+
     for field in PARTNER_WRITE_FIELDS:
+        if field in ('country_code', 'tax_number', 'vat_number'):
+            continue
         if field not in data:
             if create and field in (
                 'name',
                 'partner_type',
-                'tax_number',
                 'address',
                 'city',
                 'postal_code',
@@ -185,6 +309,14 @@ def _apply_partner_fields(partner: Partner, data: dict, *, create: bool) -> None
             setattr(partner, field, value if value is not None else '')
 
 
+def _jurisdiction_q(jurisdiction: str) -> Q:
+    if jurisdiction == 'HR':
+        return Q(country_code='HR')
+    if jurisdiction == 'EU':
+        return Q(country_code__in=_EU_MEMBER_EXCL_HR)
+    return ~Q(country_code='HR') & ~Q(country_code__in=_EU_MEMBER_EXCL_HR)
+
+
 def list_partners(tenant, filters: PartnerListFilters) -> dict:
     with read_snapshot() as as_of:
         qs = Partner.all_objects.filter(tenant=tenant).order_by('name', 'id')
@@ -202,6 +334,9 @@ def list_partners(tenant, filters: PartnerListFilters) -> dict:
             qs = qs.filter(partner_type__in=SUPPLIER_TYPES)
         elif filters.partner_type:
             qs = qs.filter(partner_type=filters.partner_type)
+
+        if filters.jurisdiction:
+            qs = qs.filter(_jurisdiction_q(filters.jurisdiction))
 
         if filters.search:
             term = filters.search
@@ -227,35 +362,34 @@ def get_partner(tenant, partner_id: int) -> dict:
     return partner_dto(_get_partner(tenant, partner_id))
 
 
+def _save_partner(partner: Partner) -> None:
+    try:
+        with transaction.atomic():
+            partner.save()
+    except IntegrityError as exc:
+        message = str(exc).lower()
+        if 'unique_partner_vat_per_tenant' in message or 'vat_number' in message:
+            raise PartnerVatNumberConflict() from exc
+        if 'unique_partner_tax_per_tenant' in message or 'tax_number' in message:
+            raise PartnerTaxNumberConflict() from exc
+        if 'unique_partner_code_per_tenant' in message:
+            raise ValueError('partner_code conflict') from exc
+        raise
+
+
 def create_partner(tenant, data: dict, *, user=None) -> dict:
     partner = Partner(tenant=tenant, created_by=user if getattr(user, 'is_authenticated', False) else None)
     _apply_partner_fields(partner, data, create=True)
     if not partner.status:
         partner.status = 'active'
-    try:
-        with transaction.atomic():
-            partner.save()
-    except IntegrityError as exc:
-        if 'unique_partner_tax_per_tenant' in str(exc) or 'tax_number' in str(exc).lower():
-            raise PartnerTaxNumberConflict() from exc
-        if 'unique_partner_code_per_tenant' in str(exc):
-            raise ValueError('partner_code conflict') from exc
-        raise
+    _save_partner(partner)
     return partner_dto(partner)
 
 
 def update_partner(tenant, partner_id: int, data: dict) -> dict:
     partner = _get_partner(tenant, partner_id)
     _apply_partner_fields(partner, data, create=False)
-    try:
-        with transaction.atomic():
-            partner.save()
-    except IntegrityError as exc:
-        if 'unique_partner_tax_per_tenant' in str(exc) or 'tax_number' in str(exc).lower():
-            raise PartnerTaxNumberConflict() from exc
-        if 'unique_partner_code_per_tenant' in str(exc):
-            raise ValueError('partner_code conflict') from exc
-        raise
+    _save_partner(partner)
     return partner_dto(partner)
 
 
@@ -346,8 +480,8 @@ def _get_bank_account(tenant, partner_id: int, account_id: int) -> PartnerBankAc
 def _apply_bank_account_fields(account: PartnerBankAccount, data: dict, *, create: bool) -> None:
     for field in BANK_ACCOUNT_WRITE_FIELDS:
         if field not in data:
-            if create and field in ('bank_name', 'bic', 'iban'):
-                raise ValueError(f'{field} is required')
+            if create and field == 'iban':
+                raise ValueError('iban is required')
             continue
         value = data[field]
         if field == 'iban':

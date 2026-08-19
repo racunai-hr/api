@@ -1203,6 +1203,11 @@ paths:
           type: string
         description: Default active-only; "all" = every status; "inactive" = inactive+blocked
       - in: query
+        name: jurisdiction
+        schema:
+          type: string
+        description: HR|EU|NON_EU (orthogonal to status; EU never includes HR)
+      - in: query
         name: page
         schema:
           type: integer
@@ -1221,7 +1226,7 @@ paths:
         name: search
         schema:
           type: string
-        description: Search name, code, OIB, VAT
+        description: Search name, code, tax number, VAT
       - in: query
         name: status
         schema:
@@ -2830,6 +2835,10 @@ components:
           type: string
         status:
           type: string
+        jurisdiction:
+          type: string
+        country_code:
+          type: string
         tax_number:
           type: string
         vat_number:
@@ -2876,6 +2885,7 @@ components:
       - address
       - city
       - country
+      - country_code
       - created_at
       - credit_limit
       - discount_percentage
@@ -2883,6 +2893,7 @@ components:
       - fax
       - id
       - internal_notes
+      - jurisdiction
       - mobile
       - name
       - notes
@@ -3022,6 +3033,10 @@ components:
           type: string
         status:
           type: string
+        jurisdiction:
+          type: string
+        country_code:
+          type: string
         tax_number:
           type: string
         city:
@@ -3035,8 +3050,10 @@ components:
       required:
       - city
       - country
+      - country_code
       - email
       - id
+      - jurisdiction
       - name
       - partner_code
       - partner_type
@@ -3125,9 +3142,11 @@ components:
         status:
           type: string
           minLength: 1
-        tax_number:
+        country_code:
           type: string
           minLength: 1
+        tax_number:
+          type: string
         vat_number:
           type: string
         registration_number:
@@ -3141,8 +3160,6 @@ components:
         postal_code:
           type: string
           minLength: 1
-        country:
-          type: string
         email:
           type: string
           format: email
@@ -3228,9 +3245,11 @@ components:
         status:
           type: string
           minLength: 1
-        tax_number:
+        country_code:
           type: string
           minLength: 1
+        tax_number:
+          type: string
         vat_number:
           type: string
         registration_number:
@@ -3244,8 +3263,6 @@ components:
         postal_code:
           type: string
           minLength: 1
-        country:
-          type: string
         email:
           type: string
           format: email

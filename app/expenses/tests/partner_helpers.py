@@ -13,6 +13,7 @@ def create_supplier_partner(*, tenant, **overrides) -> Partner:
         'city': 'Zagreb',
         'postal_code': '10000',
         'country': 'Hrvatska',
+        'country_code': 'HR',
     }
     defaults.update(overrides)
     return Partner.all_objects.create(tenant=tenant, **defaults)

@@ -30,8 +30,10 @@ from domains.partners.api.schema import (
     PartnerWriteSerializer,
 )
 from domains.partners.services.partners import (
+    PartnerFieldError,
     PartnerIbanConflict,
     PartnerTaxNumberConflict,
+    PartnerVatNumberConflict,
     create_bank_account,
     create_contact,
     create_partner,
@@ -57,6 +59,13 @@ def _require_tenant(request):
 
 def _conflict(code: str, field: str):
     return Response({'code': code, 'field': field}, status=status.HTTP_409_CONFLICT)
+
+
+def _field_error(exc: PartnerFieldError):
+    return Response(
+        {'code': exc.code, 'field': exc.field, 'detail': exc.detail},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 class _PartnersApiView(APIView):
@@ -114,6 +123,10 @@ class PartnerListView(_PartnersReadWriteApiView):
             payload = create_partner(tenant, request.data, user=request.user)
         except PartnerTaxNumberConflict:
             return _conflict('partner_tax_number_conflict', 'tax_number')
+        except PartnerVatNumberConflict:
+            return _conflict('partner_vat_number_conflict', 'vat_number')
+        except PartnerFieldError as exc:
+            return _field_error(exc)
         except ValueError as exc:
             raise ValidationError({'detail': str(exc)}) from exc
         return Response(payload, status=status.HTTP_201_CREATED)
@@ -148,6 +161,10 @@ class PartnerDetailView(_PartnersReadWriteApiView):
             payload = update_partner(tenant, pk, request.data)
         except PartnerTaxNumberConflict:
             return _conflict('partner_tax_number_conflict', 'tax_number')
+        except PartnerVatNumberConflict:
+            return _conflict('partner_vat_number_conflict', 'vat_number')
+        except PartnerFieldError as exc:
+            return _field_error(exc)
         except ValueError as exc:
             raise ValidationError({'detail': str(exc)}) from exc
         return Response(payload)

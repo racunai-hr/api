@@ -42,15 +42,27 @@ SEARCH = OpenApiParameter(
     name='search',
     type=OpenApiTypes.STR,
     location=OpenApiParameter.QUERY,
-    description='Search name, code, OIB, VAT',
+    description='Search name, code, tax number, VAT',
+)
+JURISDICTION = OpenApiParameter(
+    name='jurisdiction',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='HR|EU|NON_EU (orthogonal to status; EU never includes HR)',
 )
 
-PARTNER_LIST_PARAMS = [FILTER, PARTNER_TYPE, STATUS, SEARCH, PAGE, PAGE_SIZE]
+PARTNER_LIST_PARAMS = [FILTER, PARTNER_TYPE, STATUS, JURISDICTION, SEARCH, PAGE, PAGE_SIZE]
 
 
 class PartnerConflictSerializer(serializers.Serializer):
     code = serializers.CharField()
     field = serializers.CharField()
+
+
+class PartnerFieldErrorSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    field = serializers.CharField()
+    detail = serializers.CharField()
 
 
 class PartnerListItemSerializer(serializers.Serializer):
@@ -60,7 +72,9 @@ class PartnerListItemSerializer(serializers.Serializer):
     short_name = serializers.CharField(allow_blank=True)
     partner_type = serializers.CharField()
     status = serializers.CharField()
-    tax_number = serializers.CharField()
+    jurisdiction = serializers.CharField()
+    country_code = serializers.CharField()
+    tax_number = serializers.CharField(allow_blank=True)
     city = serializers.CharField()
     country = serializers.CharField()
     email = serializers.CharField(allow_blank=True)
@@ -74,7 +88,9 @@ class PartnerSerializer(serializers.Serializer):
     short_name = serializers.CharField(allow_blank=True)
     partner_type = serializers.CharField()
     status = serializers.CharField()
-    tax_number = serializers.CharField()
+    jurisdiction = serializers.CharField()
+    country_code = serializers.CharField()
+    tax_number = serializers.CharField(allow_blank=True)
     vat_number = serializers.CharField(allow_blank=True)
     registration_number = serializers.CharField(allow_blank=True)
     address = serializers.CharField()
@@ -100,13 +116,13 @@ class PartnerWriteSerializer(serializers.Serializer):
     short_name = serializers.CharField(required=False, allow_blank=True)
     partner_type = serializers.CharField(required=False)
     status = serializers.CharField(required=False)
-    tax_number = serializers.CharField(required=False)
+    country_code = serializers.CharField(required=False)
+    tax_number = serializers.CharField(required=False, allow_blank=True)
     vat_number = serializers.CharField(required=False, allow_blank=True)
     registration_number = serializers.CharField(required=False, allow_blank=True)
     address = serializers.CharField(required=False)
     city = serializers.CharField(required=False)
     postal_code = serializers.CharField(required=False)
-    country = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
     phone = serializers.CharField(required=False, allow_blank=True)
     mobile = serializers.CharField(required=False, allow_blank=True)
@@ -168,8 +184,8 @@ class ContactListSerializer(serializers.Serializer):
 class PartnerBankAccountSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     partner_id = serializers.IntegerField()
-    bank_name = serializers.CharField()
-    bic = serializers.CharField()
+    bank_name = serializers.CharField(allow_blank=True)
+    bic = serializers.CharField(allow_blank=True)
     iban = serializers.CharField()
     currency = serializers.CharField()
     is_primary = serializers.BooleanField()

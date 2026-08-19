@@ -31,6 +31,7 @@ def resolve_partner(*, tenant, oib: str, name: str = '', partner_type: str = 'su
         address='',
         city='',
         postal_code='',
+        country_code='HR',
         country='Hrvatska',
         status='active',
     )
