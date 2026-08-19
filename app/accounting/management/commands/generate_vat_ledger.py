@@ -1,11 +1,15 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
-from accounting.services.vat import generate_vat_ledger
+from accounting.services.tax_projection.rebuild import RebuildOutcome, rebuild_vat_ledger
+from accounting.services.tax_projection.switch import SwitchState, read_projection_write_switch
 from tenants.models import Tenant
 
 
 class Command(BaseCommand):
-    help = 'Generira PDV knjige (I-RA izlazni, U-RA ulazni) za razdoblje.'
+    help = (
+        'Generira PDV knjige (I-RA/U-RA) za razdoblje. '
+        'Kad je vat_projection_write uključen, koristi ADR-0019 projection apply.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument('--tenant', type=str, required=True)
@@ -15,14 +19,23 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         tenant = Tenant.objects.get(slug=options['tenant'])
-        created, total = generate_vat_ledger(
+        replace = options['replace']
+        switch = read_projection_write_switch(tenant)
+        if switch == SwitchState.ON and replace:
+            self.stderr.write(
+                self.style.WARNING(
+                    'Engine put uvijek zamjenjuje origin=engine retke; '
+                    '--replace je kompatibilni alias.'
+                )
+            )
+        result = rebuild_vat_ledger(
             tenant,
             options['year'],
             options['month'],
-            replace=options['replace'],
+            actor=None,
+            replace=replace,
         )
-        self.stdout.write(
-            self.style.SUCCESS(
-                f'PDV {options["month"]:02d}/{options["year"]}: {created} novih stavki, ukupno {total}.'
-            )
-        )
+        if result.ok:
+            self.stdout.write(self.style.SUCCESS(result.message))
+            return
+        raise CommandError(result.message, returncode=result.exit_code())

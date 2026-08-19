@@ -228,10 +228,39 @@ def _journal_rc_line_amounts(
 
 @transaction.atomic
 def generate_vat_ledger(tenant, year: int, month: int, *, replace: bool = False) -> tuple[int, int]:
+    """Legacy VAT ledger writer.
+
+    Deprecated for production entry points — use
+    ``accounting.services.tax_projection.rebuild.rebuild_vat_ledger``.
+    Rejects closed/submitted periods. Raises when projection write switch is on.
+    """
     from expenses.models import Expense
     from invoices.models import Invoice
 
+    from accounting.services.tax_projection.rebuild import VATPeriodNotWritable, VATProjectionWriteEnabled
+    from accounting.services.tax_projection.switch import SwitchState, read_projection_write_switch
+
+    existing = VATPeriod.all_objects.filter(
+        tenant=tenant, year=year, month=month,
+    ).first()
+    if existing is not None and existing.status != 'open':
+        raise VATPeriodNotWritable(
+            f'VAT_PERIOD_NOT_WRITABLE: period {month:02d}/{year} status={existing.status}'
+        )
+
+    switch = read_projection_write_switch(tenant)
+    if switch == SwitchState.ON:
+        raise VATProjectionWriteEnabled(VATProjectionWriteEnabled.code)
+    if switch == SwitchState.INVALID:
+        from accounting.services.tax_projection.switch import VATProjectionSwitchInvalid
+
+        raise VATProjectionSwitchInvalid(VATProjectionSwitchInvalid.code)
+
     period = get_or_create_vat_period(tenant, year, month)
+    if period.status != 'open':
+        raise VATPeriodNotWritable(
+            f'VAT_PERIOD_NOT_WRITABLE: period {month:02d}/{year} status={period.status}'
+        )
     if replace:
         VATLedgerEntry.all_objects.filter(
             tenant=tenant,

@@ -20,6 +20,8 @@ def _get_system_user():
 
 @transaction.atomic
 def handle_payment_executed(event: PaymentExecuted):
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
     try:
         order = PaymentOrder.all_objects.select_related(
             'payment',
@@ -40,11 +42,14 @@ def handle_payment_executed(event: PaymentExecuted):
         return None
 
     payment = order.payment
+    invoice = payment.related_invoice
+    if invoice is not None:
+        lock_open_vat_period_for_source_mutation(order.tenant, invoice.issue_date)
+
     if payment.status != 'completed':
         payment.status = 'completed'
         payment.save(update_fields=['status', 'updated_at'])
 
-    invoice = payment.related_invoice
     if invoice is not None and invoice.status != 'paid':
         invoice.status = 'paid'
         invoice.save(update_fields=['status', 'updated_at'])

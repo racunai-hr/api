@@ -23,6 +23,9 @@ def _get_config(tenant) -> SuperTenantConfig:
 
 @transaction.atomic
 def send_outbound_invoice(invoice: Invoice, *, ubl_xml: str, correlation_id=None) -> SuperDocumentLink:
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+    lock_open_vat_period_for_source_mutation(invoice.tenant, invoice.issue_date)
     if not invoice.invoice_number:
         invoice.assign_invoice_number()
         invoice.save(update_fields=['invoice_number'])

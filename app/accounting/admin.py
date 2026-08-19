@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import admin, messages
 from django.contrib.contenttypes.admin import GenericTabularInline
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -39,6 +40,7 @@ from .models import (
     SubmissionEvent,
     SubmissionEventState,
     VATLedgerEntry,
+    VATLedgerOrigin,
     VATPeriod,
     VATReturn,
     VATReturnStatus,
@@ -316,7 +318,8 @@ class JournalEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
         posted = 0
         for entry in queryset.filter(status='draft'):
             try:
-                entry.post(request.user)
+                with transaction.atomic():
+                    entry.post(request.user)
                 posted += 1
             except ValidationError as exc:
                 messages.error(request, f'{entry.entry_number}: {exc}')
@@ -327,7 +330,8 @@ class JournalEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
         reversed_count = 0
         for entry in queryset.filter(status='posted'):
             try:
-                entry.reverse(request.user)
+                with transaction.atomic():
+                    entry.reverse(request.user)
                 reversed_count += 1
             except ValidationError as exc:
                 messages.error(request, f'{entry.entry_number}: {exc}')
@@ -699,16 +703,20 @@ class VATPeriodAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     @admin.action(description='Generiraj PDV knjige')
     def generate_ledger(self, request, queryset):
-        from accounting.services.vat import generate_vat_ledger
+        from accounting.services.tax_projection.rebuild import rebuild_vat_ledger
 
         for period in queryset:
-            created, total = generate_vat_ledger(
-                period.tenant, period.year, period.month, replace=True,
+            result = rebuild_vat_ledger(
+                period.tenant,
+                period.year,
+                period.month,
+                actor=request.user if request.user.is_authenticated else None,
+                replace=True,
             )
-            messages.success(
-                request,
-                f'PDV {period.month:02d}/{period.year}: {created} stavki (ukupno {total}).',
-            )
+            if result.ok:
+                messages.success(request, result.message)
+            else:
+                messages.error(request, result.message)
 
     @admin.action(description='Generiraj draft PDV obrasca')
     def generate_draft(self, request, queryset):
@@ -1499,14 +1507,64 @@ class SubmissionEventAdmin(TenantAdminMixin, admin.ModelAdmin):
 class VATLedgerEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
         'vat_period', 'ledger_type_display', 'entry_date', 'document_number',
-        'partner_name', 'base_amount', 'vat_rate', 'vat_amount',
+        'partner_name', 'base_amount', 'vat_rate', 'vat_amount', 'origin',
     )
-    list_filter = ('ledger_type', 'vat_period')
+    list_filter = ('ledger_type', 'vat_period', 'origin')
     search_fields = ('document_number', 'partner_name', 'partner_oib')
 
     @admin.display(description='Knjiga', ordering='ledger_type')
     def ledger_type_display(self, obj):
         return obj.get_ledger_type_display()
+
+    def _period_writable(self, period) -> None:
+        if period.status in ('closed', 'submitted'):
+            raise ValidationError(
+                f'PDV razdoblje {period.month:02d}/{period.year} je {period.status} — '
+                'ledger se ne smije mijenjati.'
+            )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.origin == VATLedgerOrigin.ENGINE:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.origin == VATLedgerOrigin.ENGINE:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.origin == VATLedgerOrigin.ENGINE:
+            return [f.name for f in self.model._meta.fields]
+        return readonly
+
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            period = VATPeriod.all_objects.select_for_update().get(pk=obj.vat_period_id)
+            self._period_writable(period)
+            if change and obj.origin == VATLedgerOrigin.ENGINE:
+                raise ValidationError('Engine ledger retci se ne mogu mijenjati kroz admin.')
+            obj.origin = VATLedgerOrigin.MANUAL
+            obj.is_manual = True
+            super().save_model(request, obj, form, change)
+
+    def delete_model(self, request, obj):
+        with transaction.atomic():
+            period = VATPeriod.all_objects.select_for_update().get(pk=obj.vat_period_id)
+            self._period_writable(period)
+            if obj.origin == VATLedgerOrigin.ENGINE:
+                raise ValidationError('Engine ledger retci se ne mogu brisati kroz admin.')
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        with transaction.atomic():
+            for entry in queryset.select_related('vat_period'):
+                period = VATPeriod.all_objects.select_for_update().get(pk=entry.vat_period_id)
+                self._period_writable(period)
+                if entry.origin == VATLedgerOrigin.ENGINE:
+                    raise ValidationError('Engine ledger retci se ne mogu brisati kroz admin.')
+            super().delete_queryset(request, queryset)
 
 
 from . import admin_subledger  # noqa: E402, F401 — SubledgerItem admin registracija

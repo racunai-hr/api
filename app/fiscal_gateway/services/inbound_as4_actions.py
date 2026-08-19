@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from lxml import etree
 
 from expenses.models import Expense
@@ -17,10 +18,15 @@ class InboundExpenseError(Exception):
     pass
 
 
+@transaction.atomic
 def approve_inbound_expense(expense: Expense, user=None) -> As4DocumentLink:
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+    lock_open_vat_period_for_source_mutation(expense.tenant, expense.expense_date)
     return _send_manual_application_response(expense, accepted=True, user=user)
 
 
+@transaction.atomic
 def reject_inbound_expense(expense: Expense, description: str = '') -> As4DocumentLink:
     return _send_manual_application_response(
         expense,

@@ -265,6 +265,9 @@ def post_invoice_payment(
     auto_post: bool = True,
 ) -> JournalEntry | None:
     """Knjiži jednu djelomičnu uplatu računa (banka / kupci)."""
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+    lock_open_vat_period_for_source_mutation(tenant, invoice.issue_date)
     if payment.tenant_id != tenant.id:
         raise ValueError('Uplata ne pripada tenantu.')
     if payment.related_invoice_id != invoice.pk:
@@ -346,6 +349,8 @@ def post_document(
     entry_date=None,
     description: str | None = None,
 ) -> JournalEntry | None:
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
     ct = ContentType.objects.get_for_model(source)
     marker = f"[{document_type}]"
     if JournalEntry.all_objects.filter(
@@ -356,6 +361,19 @@ def post_document(
         status__in=['draft', 'posted'],
     ).exists():
         return None
+
+    if entry_date is None:
+        entry_date = (
+            getattr(source, 'issue_date', None)
+            or getattr(source, 'expense_date', None)
+            or getattr(source, 'payment_date', None)
+            or timezone.now().date()
+        )
+    if isinstance(entry_date, str):
+        from datetime import datetime
+        entry_date = datetime.strptime(entry_date[:10], '%Y-%m-%d').date()
+
+    lock_open_vat_period_for_source_mutation(tenant, entry_date)
 
     rules = PostingRule.all_objects.filter(
         tenant=tenant,
@@ -370,17 +388,6 @@ def post_document(
             document_type=document_type,
             is_active=True,
         ).order_by('priority')
-
-    if entry_date is None:
-        entry_date = (
-            getattr(source, 'issue_date', None)
-            or getattr(source, 'expense_date', None)
-            or getattr(source, 'payment_date', None)
-            or timezone.now().date()
-        )
-    if isinstance(entry_date, str):
-        from datetime import datetime
-        entry_date = datetime.strptime(entry_date[:10], '%Y-%m-%d').date()
 
     lines_data = []
 
