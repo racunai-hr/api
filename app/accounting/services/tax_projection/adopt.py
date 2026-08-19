@@ -18,6 +18,7 @@ from accounting.models import (
 from accounting.services.tax_forms.pdv.mapping import PDV_MAPPING_VERSION
 from accounting.services.tax_projection.apply import (
     PostWriteFingerprintMismatch,
+    _attach_failed_run,
     _audit_rejection,
     _idempotent_existing_run,
     _insert_engine_rows,
@@ -90,9 +91,17 @@ def adopt_legacy_projection(
             return _adopt_in_transaction(period, candidate, actor)
     except Exception as exc:
         if isinstance(exc, PostWriteFingerprintMismatch):
-            _record_failed_run(period, candidate, actor, code='POST_WRITE_FINGERPRINT_MISMATCH')
+            _attach_failed_run(
+                exc,
+                _record_failed_run(
+                    period, candidate, actor, code='POST_WRITE_FINGERPRINT_MISMATCH',
+                ),
+            )
             raise
-        _record_failed_run(period, candidate, actor, code='ADOPT_FAILED')
+        _attach_failed_run(
+            exc,
+            _record_failed_run(period, candidate, actor, code='ADOPT_FAILED'),
+        )
         raise
 
 
