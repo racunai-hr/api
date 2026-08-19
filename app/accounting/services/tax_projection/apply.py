@@ -63,9 +63,17 @@ def apply_vat_projection(
             return _apply_in_transaction(period, candidate, actor)
     except Exception as exc:
         if isinstance(exc, PostWriteFingerprintMismatch):
-            _record_failed_run(period, candidate, actor, code='POST_WRITE_FINGERPRINT_MISMATCH')
+            _attach_failed_run(
+                exc,
+                _record_failed_run(
+                    period, candidate, actor, code='POST_WRITE_FINGERPRINT_MISMATCH',
+                ),
+            )
             raise
-        _record_failed_run(period, candidate, actor, code='APPLY_FAILED')
+        _attach_failed_run(
+            exc,
+            _record_failed_run(period, candidate, actor, code='APPLY_FAILED'),
+        )
         raise
 
 
@@ -356,16 +364,26 @@ def _audit_rejection(
     )
 
 
+def _attach_failed_run(exc: BaseException, run: VATProjectionRun | None) -> None:
+    """Bind the durable FAILED audit row to the original exception, if one was written."""
+    if run is None:
+        return
+    try:
+        exc.vat_projection_run = run
+    except Exception:
+        pass
+
+
 def _record_failed_run(
     period: VATPeriod,
     candidate: VatProjectionCandidate,
     actor: AbstractBaseUser | None,
     *,
     code: str,
-) -> None:
+) -> VATProjectionRun | None:
     try:
         with transaction.atomic():
-            VATProjectionRun.all_objects.create(
+            return VATProjectionRun.all_objects.create(
                 tenant_id=period.tenant_id,
                 vat_period_id=period.pk,
                 status=VATProjectionRunStatus.FAILED,
@@ -382,4 +400,4 @@ def _record_failed_run(
             )
     except Exception:
         # Audit must not mask the original failure.
-        pass
+        return None

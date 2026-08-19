@@ -73,6 +73,28 @@ class VATProjectionWriteEnabled(RuntimeError):
     code = 'VAT_PROJECTION_WRITE_ENABLED'
 
 
+_APPLY_FAILED_CODES = frozenset({'APPLY_FAILED', 'POST_WRITE_FINGERPRINT_MISMATCH'})
+_ADOPT_FAILED_CODES = frozenset({'ADOPT_FAILED', 'POST_WRITE_FINGERPRINT_MISMATCH'})
+
+
+def _matching_failed_run(exc, period, candidate, allowed_codes: frozenset[str]):
+    """Return the FAILED audit row bound to ``exc`` only if it matches this rebuild."""
+    run = getattr(exc, 'vat_projection_run', None)
+    if run is None:
+        return None
+    if run.status != VATProjectionRunStatus.FAILED:
+        return None
+    if run.vat_period_id != period.pk:
+        return None
+    if run.input_fingerprint != candidate.input_fingerprint:
+        return None
+    if run.output_fingerprint != candidate.output_fingerprint:
+        return None
+    if run.rejection_code not in allowed_codes:
+        return None
+    return run
+
+
 def rebuild_vat_ledger(
     tenant,
     year: int,
@@ -218,10 +240,37 @@ def rebuild_vat_ledger(
                 ),
             )
 
-        if period_needs_legacy_handoff(period):
-            run = adopt_legacy_projection(period, candidate, actor)
-        else:
-            run = apply_vat_projection(period, candidate, actor)
+        use_adopt = period_needs_legacy_handoff(period)
+        try:
+            if use_adopt:
+                run = adopt_legacy_projection(period, candidate, actor)
+            else:
+                run = apply_vat_projection(period, candidate, actor)
+        except Exception as exc:
+            logger.exception(
+                'vat_rebuild_apply_failed tenant=%s period_id=%s adopt=%s',
+                tenant.slug,
+                period.pk,
+                use_adopt,
+            )
+            allowed = _ADOPT_FAILED_CODES if use_adopt else _APPLY_FAILED_CODES
+            failed = _matching_failed_run(exc, period, candidate, allowed)
+            if failed is None:
+                raise
+            return RebuildResult(
+                outcome=RebuildOutcome.FAILED,
+                period_id=period.pk,
+                rejection_code=failed.rejection_code or failed.status,
+                run_id=failed.pk,
+                created=0,
+                total=VATLedgerEntry.all_objects.filter(vat_period=period).count(),
+                input_fingerprint=failed.input_fingerprint,
+                output_fingerprint=failed.output_fingerprint,
+                message=(
+                    f'PDV {month:02d}/{year}: apply {failed.status} '
+                    f'({failed.rejection_code}) run={failed.pk}'
+                ),
+            )
         if run.status == VATProjectionRunStatus.APPLIED:
             engine_count = VATLedgerEntry.all_objects.filter(
                 vat_period=period, origin='engine',
@@ -270,5 +319,8 @@ def rebuild_vat_ledger(
             total=VATLedgerEntry.all_objects.filter(vat_period=period).count(),
             input_fingerprint=run.input_fingerprint,
             output_fingerprint=run.output_fingerprint,
-            message=f'PDV {month:02d}/{year}: apply {run.status} ({run.rejection_code})',
+            message=(
+                f'PDV {month:02d}/{year}: apply {run.status} '
+                f'({run.rejection_code}) run={run.pk}'
+            ),
         )

@@ -1524,18 +1524,18 @@ class VATLedgerEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
             )
 
     def has_change_permission(self, request, obj=None):
-        if obj is not None and obj.origin == VATLedgerOrigin.ENGINE:
+        if obj is not None and obj.origin != VATLedgerOrigin.MANUAL:
             return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj is not None and obj.origin == VATLedgerOrigin.ENGINE:
+        if obj is not None and obj.origin != VATLedgerOrigin.MANUAL:
             return False
         return super().has_delete_permission(request, obj)
 
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
-        if obj is not None and obj.origin == VATLedgerOrigin.ENGINE:
+        if obj is not None and obj.origin != VATLedgerOrigin.MANUAL:
             return [f.name for f in self.model._meta.fields]
         return readonly
 
@@ -1543,8 +1543,12 @@ class VATLedgerEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
         with transaction.atomic():
             period = VATPeriod.all_objects.select_for_update().get(pk=obj.vat_period_id)
             self._period_writable(period)
-            if change and obj.origin == VATLedgerOrigin.ENGINE:
-                raise ValidationError('Engine ledger retci se ne mogu mijenjati kroz admin.')
+            if change:
+                locked = VATLedgerEntry.all_objects.select_for_update().get(pk=obj.pk)
+                if locked.origin != VATLedgerOrigin.MANUAL:
+                    raise ValidationError(
+                        'Generirani ledger retci se ne mogu mijenjati kroz admin.'
+                    )
             obj.origin = VATLedgerOrigin.MANUAL
             obj.is_manual = True
             super().save_model(request, obj, form, change)
@@ -1553,18 +1557,44 @@ class VATLedgerEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
         with transaction.atomic():
             period = VATPeriod.all_objects.select_for_update().get(pk=obj.vat_period_id)
             self._period_writable(period)
-            if obj.origin == VATLedgerOrigin.ENGINE:
-                raise ValidationError('Engine ledger retci se ne mogu brisati kroz admin.')
+            locked = VATLedgerEntry.all_objects.select_for_update().get(pk=obj.pk)
+            if locked.origin != VATLedgerOrigin.MANUAL:
+                raise ValidationError(
+                    'Generirani ledger retci se ne mogu brisati kroz admin.'
+                )
             super().delete_model(request, obj)
 
     def delete_queryset(self, request, queryset):
         with transaction.atomic():
-            for entry in queryset.select_related('vat_period'):
-                period = VATPeriod.all_objects.select_for_update().get(pk=entry.vat_period_id)
+            pks = list(queryset.values_list('pk', flat=True))
+            if not pks:
+                return
+            period_ids = (
+                VATLedgerEntry.all_objects.filter(pk__in=pks)
+                .order_by('vat_period_id')
+                .values_list('vat_period_id', flat=True)
+                .distinct()
+            )
+            for period in (
+                VATPeriod.all_objects.select_for_update()
+                .filter(pk__in=list(period_ids))
+                .order_by('pk')
+            ):
                 self._period_writable(period)
-                if entry.origin == VATLedgerOrigin.ENGINE:
-                    raise ValidationError('Engine ledger retci se ne mogu brisati kroz admin.')
-            super().delete_queryset(request, queryset)
+            locked = list(
+                VATLedgerEntry.all_objects.select_for_update()
+                .filter(pk__in=pks)
+                .order_by('pk')
+            )
+            if any(entry.origin != VATLedgerOrigin.MANUAL for entry in locked):
+                raise ValidationError(
+                    'Skup sadrži generirane ledger retke — ništa nije obrisano.'
+                )
+            locked_pks = [entry.pk for entry in locked]
+            super().delete_queryset(
+                request,
+                VATLedgerEntry.all_objects.filter(pk__in=locked_pks),
+            )
 
 
 from . import admin_subledger  # noqa: E402, F401 — SubledgerItem admin registracija
