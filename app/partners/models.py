@@ -186,6 +186,12 @@ class PartnerBankAccount(models.Model):
         verbose_name = "Bankovni račun partnera"
         verbose_name_plural = "Bankovni računi partnera"
         ordering = ['-is_primary', 'bank_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['partner', 'iban'],
+                name='unique_partner_iban',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.bank_name} - {self.iban}"

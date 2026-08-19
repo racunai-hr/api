@@ -29,6 +29,20 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('get', '/api/banking/statement-imports/{id}/'),
         ('post', '/api/banking/connections/{id}/sync/'),
         ('get', '/api/banking/connections/{id}/sync-status/'),
+        ('get', '/api/partners/'),
+        ('post', '/api/partners/'),
+        ('get', '/api/partners/{id}/'),
+        ('patch', '/api/partners/{id}/'),
+        ('get', '/api/partners/{id}/contacts/'),
+        ('post', '/api/partners/{id}/contacts/'),
+        ('patch', '/api/partners/{id}/contacts/{contact_id}/'),
+        ('delete', '/api/partners/{id}/contacts/{contact_id}/'),
+        ('get', '/api/partners/{id}/bank-accounts/'),
+        ('post', '/api/partners/{id}/bank-accounts/'),
+        ('patch', '/api/partners/{id}/bank-accounts/{account_id}/'),
+        ('delete', '/api/partners/{id}/bank-accounts/{account_id}/'),
+        ('get', '/api/finance/partners/{id}/financial-summary/'),
+        ('get', '/api/finance/partners/{id}/subledger/'),
     }
 )
 
@@ -55,6 +69,14 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     'banking-statement-import-detail': ('get', '/api/banking/statement-imports/{id}/'),
     'banking-connection-sync': ('post', '/api/banking/connections/{id}/sync/'),
     'banking-connection-sync-status': ('get', '/api/banking/connections/{id}/sync-status/'),
+    'partner-list': ('get', '/api/partners/'),
+    'partner-detail': ('get', '/api/partners/{id}/'),
+    'partner-contacts': ('get', '/api/partners/{id}/contacts/'),
+    'partner-contact-detail': ('patch', '/api/partners/{id}/contacts/{contact_id}/'),
+    'partner-bank-accounts': ('get', '/api/partners/{id}/bank-accounts/'),
+    'partner-bank-account-detail': ('patch', '/api/partners/{id}/bank-accounts/{account_id}/'),
+    'finance-partner-financial-summary': ('get', '/api/finance/partners/{id}/financial-summary/'),
+    'finance-partner-subledger': ('get', '/api/finance/partners/{id}/subledger/'),
 }
 
 EXCLUDED_URL_NAMES = frozenset(

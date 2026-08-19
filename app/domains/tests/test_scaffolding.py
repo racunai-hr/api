@@ -14,6 +14,7 @@ DOMAIN_MODULES = [
     'domains.integration',
     'domains.banking',
     'domains.reporting',
+    'domains.partners',
     'domains.assets',
     'domains.workflow',
     'domains.dms',

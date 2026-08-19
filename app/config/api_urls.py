@@ -16,6 +16,8 @@ urlpatterns = [
     path('fiscal/', include('fiscal_gateway.api.urls')),
     path('', include('domains.reporting.api.urls')),
     path('', include('domains.banking.api.urls')),
+    path('', include('domains.partners.api.urls')),
+    path('', include('domains.finance.api.urls')),
     path('auth/token/', AuthTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', AuthTokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', AuthMeView.as_view(), name='auth_me'),

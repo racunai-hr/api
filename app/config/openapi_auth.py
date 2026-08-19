@@ -24,5 +24,13 @@ class DocumentJWTAuthenticationExtension(_BearerJWTScheme):
     target_class = 'domains.reporting.api.authentication.DocumentJWTAuthentication'
 
 
+class PartnersJWTAuthenticationExtension(_BearerJWTScheme):
+    target_class = 'domains.partners.api.authentication.PartnersJWTAuthentication'
+
+
+class FinanceJWTAuthenticationExtension(_BearerJWTScheme):
+    target_class = 'domains.finance.api.authentication.FinanceJWTAuthentication'
+
+
 class SimpleJWTAuthenticationExtension(_BearerJWTScheme):
     target_class = 'rest_framework_simplejwt.authentication.JWTAuthentication'

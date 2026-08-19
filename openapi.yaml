@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: računAI API
   version: 1.0.0
-  description: Tenant JWT REST ugovor za auth, documents i banking. Fiscal/intermediary
+  description: Tenant JWT REST ugovor za auth, documents, banking i partners. Fiscal/intermediary
     i AS4 nisu dio ove sheme. openapi.yaml je generirani artefakt — ne uređivati ručno.
 paths:
   /api/auth/me/:
@@ -1118,6 +1118,689 @@ paths:
               schema:
                 $ref: '#/components/schemas/CodeDetail'
           description: Attachment content unavailable
+  /api/finance/partners/{id}/financial-summary/:
+    get:
+      operationId: finance_partner_financial_summary
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerFinancialSummary'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/partners/{id}/subledger/:
+    get:
+      operationId: finance_partner_subledger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerSubledgerList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/partners/:
+    get:
+      operationId: partners_list
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: query
+        name: filter
+        schema:
+          type: string
+        description: Default active-only; "all" = every status; "inactive" = inactive+blocked
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number (min 1, default 1)
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Page size (default 20, max 100)
+      - in: query
+        name: partner_type
+        schema:
+          type: string
+        description: customer|supplier|both|other|customers|suppliers
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search name, code, OIB, VAT
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Exact status filter (overrides default active when set)
+      tags:
+      - partners
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartners'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: partners_create
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerWriteRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerConflict'
+          description: ''
+  /api/partners/{id}/:
+    get:
+      operationId: partners_retrieve
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    patch:
+      operationId: partners_partial_update
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerWriteRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partner'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerConflict'
+          description: ''
+  /api/partners/{id}/bank-accounts/:
+    get:
+      operationId: partners_bank_accounts_list
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerBankAccountList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: partners_bank_accounts_create
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerBankAccountWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerBankAccountWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerBankAccountWriteRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerBankAccount'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerConflict'
+          description: ''
+  /api/partners/{id}/bank-accounts/{account_id}/:
+    patch:
+      operationId: partners_bank_accounts_partial_update
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerBankAccountWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerBankAccountWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPartnerBankAccountWriteRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerBankAccount'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerConflict'
+          description: ''
+    delete:
+      operationId: partners_bank_accounts_destroy
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/partners/{id}/contacts/:
+    get:
+      operationId: partners_contacts_list
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: partners_contacts_create
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ContactWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ContactWriteRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/partners/{id}/contacts/{contact_id}/:
+    patch:
+      operationId: partners_contacts_partial_update
+      parameters:
+      - in: path
+        name: contact_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedContactWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedContactWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedContactWriteRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    delete:
+      operationId: partners_contacts_destroy
+      parameters:
+      - in: path
+        name: contact_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - partners
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
 components:
   schemas:
     Allocation:
@@ -1352,6 +2035,100 @@ components:
       - last_sync_at
       - provider_code
       - status
+    Contact:
+      type: object
+      properties:
+        id:
+          type: integer
+        partner_id:
+          type: integer
+        contact_type:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        full_name:
+          type: string
+        position:
+          type: string
+        department:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        mobile:
+          type: string
+        notes:
+          type: string
+        is_primary:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          nullable: true
+      required:
+      - contact_type
+      - created_at
+      - department
+      - email
+      - first_name
+      - full_name
+      - id
+      - is_active
+      - is_primary
+      - last_name
+      - mobile
+      - notes
+      - partner_id
+      - phone
+      - position
+    ContactList:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contact'
+      required:
+      - as_of
+      - count
+      - results
+    ContactWriteRequest:
+      type: object
+      properties:
+        contact_type:
+          type: string
+          minLength: 1
+        first_name:
+          type: string
+          minLength: 1
+        last_name:
+          type: string
+          minLength: 1
+        position:
+          type: string
+        department:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        mobile:
+          type: string
+        notes:
+          type: string
+        is_primary:
+          type: boolean
+        is_active:
+          type: boolean
     CurrencySummary:
       type: object
       properties:
@@ -1954,6 +2731,27 @@ components:
       - page_size
       - results
       - summary
+    PaginatedPartners:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerListItem'
+      required:
+      - as_of
+      - count
+      - page
+      - page_size
+      - results
     PaginatedPaymentOrders:
       type: object
       properties:
@@ -2017,6 +2815,460 @@ components:
       - page
       - page_size
       - results
+    Partner:
+      type: object
+      properties:
+        id:
+          type: integer
+        partner_code:
+          type: string
+        name:
+          type: string
+        short_name:
+          type: string
+        partner_type:
+          type: string
+        status:
+          type: string
+        tax_number:
+          type: string
+        vat_number:
+          type: string
+        registration_number:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        mobile:
+          type: string
+        fax:
+          type: string
+        website:
+          type: string
+        payment_terms:
+          type: integer
+        credit_limit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        discount_percentage:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        notes:
+          type: string
+        internal_notes:
+          type: string
+        created_at:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          nullable: true
+      required:
+      - address
+      - city
+      - country
+      - created_at
+      - credit_limit
+      - discount_percentage
+      - email
+      - fax
+      - id
+      - internal_notes
+      - mobile
+      - name
+      - notes
+      - partner_code
+      - partner_type
+      - payment_terms
+      - phone
+      - postal_code
+      - registration_number
+      - short_name
+      - status
+      - tax_number
+      - updated_at
+      - vat_number
+      - website
+    PartnerBankAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        partner_id:
+          type: integer
+        bank_name:
+          type: string
+        bic:
+          type: string
+        iban:
+          type: string
+        currency:
+          type: string
+        is_primary:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          nullable: true
+      required:
+      - bank_name
+      - bic
+      - created_at
+      - currency
+      - iban
+      - id
+      - is_active
+      - is_primary
+      - partner_id
+    PartnerBankAccountList:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerBankAccount'
+      required:
+      - as_of
+      - count
+      - results
+    PartnerBankAccountWriteRequest:
+      type: object
+      properties:
+        bank_name:
+          type: string
+          minLength: 1
+        bic:
+          type: string
+          minLength: 1
+        iban:
+          type: string
+          minLength: 1
+        currency:
+          type: string
+          minLength: 1
+        is_primary:
+          type: boolean
+        is_active:
+          type: boolean
+    PartnerConflict:
+      type: object
+      properties:
+        code:
+          type: string
+        field:
+          type: string
+      required:
+      - code
+      - field
+    PartnerFinancialSummary:
+      type: object
+      properties:
+        partner_id:
+          type: integer
+        as_of_date:
+          type: string
+        currency:
+          type: string
+        receivables_open:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        payables_open:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        receivables_overdue:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        payables_overdue:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        net_balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - as_of_date
+      - currency
+      - net_balance
+      - partner_id
+      - payables_open
+      - payables_overdue
+      - receivables_open
+      - receivables_overdue
+    PartnerListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        partner_code:
+          type: string
+        name:
+          type: string
+        short_name:
+          type: string
+        partner_type:
+          type: string
+        status:
+          type: string
+        tax_number:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+      required:
+      - city
+      - country
+      - email
+      - id
+      - name
+      - partner_code
+      - partner_type
+      - phone
+      - short_name
+      - status
+      - tax_number
+    PartnerSubledgerItem:
+      type: object
+      properties:
+        item_id:
+          type: integer
+        partner_id:
+          type: integer
+        partner_name:
+          type: string
+        direction:
+          type: string
+        direction_label:
+          type: string
+        source_type:
+          type: string
+        source_id:
+          type: integer
+        source_label:
+          type: string
+        original_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        open_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        due_date:
+          type: string
+          nullable: true
+        days_overdue:
+          type: integer
+        aging_bucket:
+          type: string
+        status:
+          type: string
+      required:
+      - aging_bucket
+      - days_overdue
+      - direction
+      - direction_label
+      - due_date
+      - item_id
+      - open_amount
+      - original_amount
+      - partner_id
+      - partner_name
+      - source_id
+      - source_label
+      - source_type
+      - status
+    PartnerSubledgerList:
+      type: object
+      properties:
+        as_of_date:
+          type: string
+        partner_id:
+          type: integer
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerSubledgerItem'
+      required:
+      - as_of_date
+      - count
+      - partner_id
+      - results
+    PartnerWriteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        short_name:
+          type: string
+        partner_type:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          minLength: 1
+        tax_number:
+          type: string
+          minLength: 1
+        vat_number:
+          type: string
+        registration_number:
+          type: string
+        address:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        postal_code:
+          type: string
+          minLength: 1
+        country:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        mobile:
+          type: string
+        fax:
+          type: string
+        website:
+          type: string
+        payment_terms:
+          type: integer
+        credit_limit:
+          type: string
+          minLength: 1
+        discount_percentage:
+          type: string
+          minLength: 1
+        notes:
+          type: string
+        internal_notes:
+          type: string
+    PatchedContactWriteRequest:
+      type: object
+      properties:
+        contact_type:
+          type: string
+          minLength: 1
+        first_name:
+          type: string
+          minLength: 1
+        last_name:
+          type: string
+          minLength: 1
+        position:
+          type: string
+        department:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        mobile:
+          type: string
+        notes:
+          type: string
+        is_primary:
+          type: boolean
+        is_active:
+          type: boolean
+    PatchedPartnerBankAccountWriteRequest:
+      type: object
+      properties:
+        bank_name:
+          type: string
+          minLength: 1
+        bic:
+          type: string
+          minLength: 1
+        iban:
+          type: string
+          minLength: 1
+        currency:
+          type: string
+          minLength: 1
+        is_primary:
+          type: boolean
+        is_active:
+          type: boolean
+    PatchedPartnerWriteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        short_name:
+          type: string
+        partner_type:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          minLength: 1
+        tax_number:
+          type: string
+          minLength: 1
+        vat_number:
+          type: string
+        registration_number:
+          type: string
+        address:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        postal_code:
+          type: string
+          minLength: 1
+        country:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        mobile:
+          type: string
+        fax:
+          type: string
+        website:
+          type: string
+        payment_terms:
+          type: integer
+        credit_limit:
+          type: string
+          minLength: 1
+        discount_percentage:
+          type: string
+          minLength: 1
+        notes:
+          type: string
+        internal_notes:
+          type: string
     PaymentOrder:
       type: object
       description: Allowlist only — no SCA, tokens, provider secrets, or internal
@@ -2508,3 +3760,7 @@ tags:
   description: Document read model (ADR-0020)
 - name: banking
   description: Banking operational API (ADR-0021)
+- name: partners
+  description: Partner MDM API (ADR-0022)
+- name: finance
+  description: Finance partner projections (ADR-0022)
