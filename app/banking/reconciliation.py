@@ -16,6 +16,11 @@ from payments.models import Payment
 MATCH_DATE_TOLERANCE_DAYS = 0
 
 
+class MatchConflict(ValidationError):
+    """Target already taken or transaction already matched — API maps to HTTP 409."""
+
+
+
 def _ledger_line_matches_transaction(
     line: JournalEntryLine,
     ledger_account_id: int,
@@ -92,7 +97,7 @@ def _validate_journal_match(bank_tx: BankTransaction, journal_entry: JournalEntr
     if journal_entry.status != 'posted':
         raise ValidationError('Samo knjižena temeljnica se može uskladiti s bankovnom transakcijom.')
     if bank_tx.matched_payment_id:
-        raise ValidationError('Transakcija je već usklađena s plaćanjem.')
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem.')
     if abs((journal_entry.entry_date - bank_tx.transaction_date).days) > MATCH_DATE_TOLERANCE_DAYS:
         raise ValidationError(
             f'Datum temeljnice ({journal_entry.entry_date}) mora odgovarati '
@@ -119,7 +124,7 @@ def _assert_payment_not_linked_elsewhere(bank_tx: BankTransaction, payment: Paym
         .exists()
     )
     if conflict:
-        raise ValidationError('Plaćanje je već povezano s drugom bankovnom transakcijom.')
+        raise MatchConflict('Plaćanje je već povezano s drugom bankovnom transakcijom.')
 
 
 def _assert_journal_not_linked_elsewhere(
@@ -132,7 +137,7 @@ def _assert_journal_not_linked_elsewhere(
         .exists()
     )
     if conflict:
-        raise ValidationError('Temeljnica je već povezana s drugom bankovnom transakcijom.')
+        raise MatchConflict('Temeljnica je već povezana s drugom bankovnom transakcijom.')
 
 
 def suggest_matches(tenant, *, days_tolerance: int = 3) -> int:
@@ -204,13 +209,13 @@ def match_transaction(bank_tx: BankTransaction, payment: Payment) -> BankTransac
     locked_tx = _lock_bank_transaction(bank_tx.pk)
 
     if locked_tx.matched_journal_entry_id:
-        raise ValidationError('Transakcija je već usklađena s temeljnicom. Prvo poništi usklađenje.')
+        raise MatchConflict('Transakcija je već usklađena s temeljnicom. Prvo poništi usklađenje.')
     if (
         locked_tx.match_status == 'matched'
         and locked_tx.matched_payment_id
         and locked_tx.matched_payment_id != payment.pk
     ):
-        raise ValidationError('Transakcija je već usklađena s plaćanjem. Prvo poništi usklađenje.')
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem. Prvo poništi usklađenje.')
 
     locked_payment = Payment.all_objects.select_for_update().get(pk=payment.pk)
     _validate_payment_match(locked_tx, locked_payment)
@@ -245,11 +250,11 @@ def match_transaction_to_journal_entry(
     ):
         return locked_tx
     if locked_tx.matched_journal_entry_id and locked_tx.matched_journal_entry_id != journal_entry.id:
-        raise ValidationError(
+        raise MatchConflict(
             'Transakcija je već usklađena s drugom temeljnicom. Prvo poništi usklađenje.'
         )
     if locked_tx.matched_payment_id:
-        raise ValidationError('Transakcija je već usklađena s plaćanjem. Prvo poništi usklađenje.')
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem. Prvo poništi usklađenje.')
 
     locked_entry = JournalEntry.all_objects.select_for_update().get(pk=journal_entry.pk)
     _validate_journal_match(locked_tx, locked_entry)
@@ -309,9 +314,9 @@ def _post_reconciliation_if_needed(bank_tx: BankTransaction, payment: Payment) -
 def create_payment_from_transaction(bank_tx: BankTransaction, user) -> Payment:
     locked_tx = _lock_bank_transaction(bank_tx.pk)
     if locked_tx.matched_journal_entry_id:
-        raise ValidationError('Transakcija je već usklađena s temeljnicom.')
+        raise MatchConflict('Transakcija je već usklađena s temeljnicom.')
     if locked_tx.match_status == 'matched' and locked_tx.matched_payment_id:
-        raise ValidationError('Transakcija je već usklađena s plaćanjem.')
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem.')
 
     payment_type = _expected_payment_type(locked_tx)
     payment = Payment.all_objects.create(
