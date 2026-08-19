@@ -16,7 +16,7 @@ from accounting.services.tax_forms.zp.verify import (
     compare_zp_payload_fields,
     verify_zp_against_pdv_boxes,
 )
-from accounting.services.vat import generate_vat_ledger
+from accounting.services.tax_projection.rebuild import rebuild_vat_ledger
 from tenants.models import Tenant
 
 
@@ -57,11 +57,12 @@ class Command(BaseCommand):
 
         if options['regenerate_ledger']:
             t0 = time.perf_counter()
-            created, total = generate_vat_ledger(
-                tenant, year, month, replace=True,
-            )
-            timings['generate_vat_ledger'] = time.perf_counter() - t0
-            self.stdout.write(f'Knjige: {created} novih stavki (ukupno {total}).')
+            result = rebuild_vat_ledger(tenant, year, month, actor=None, replace=True)
+            timings['rebuild_vat_ledger'] = time.perf_counter() - t0
+            if not result.ok:
+                raise CommandError(result.message, returncode=result.exit_code())
+            self.stdout.write(result.message)
+            period = VATPeriod.all_objects.get(pk=result.period_id)
 
         if options['benchmark']:
             t0 = time.perf_counter()

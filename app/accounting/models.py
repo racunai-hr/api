@@ -263,54 +263,72 @@ class JournalEntry(TenantMixin, models.Model):
             raise ValidationError('Temeljnica mora biti uravnotežena (duguje = potražuje).')
 
     def post(self, user):
-        if self.status != 'draft':
-            raise ValidationError('Samo nacrt se može knjižiti.')
-        if self.balance_difference != Decimal('0.00'):
-            raise ValidationError('Temeljnica nije uravnotežena.')
-        self.status = 'posted'
-        self.posted_by = user
-        self.posted_at = timezone.now()
-        self.save(update_fields=['status', 'posted_by', 'posted_at'])
+        from django.db import transaction
+
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+        with transaction.atomic():
+            lock_open_vat_period_for_source_mutation(self.tenant, self.entry_date)
+            if self.status != 'draft':
+                raise ValidationError('Samo nacrt se može knjižiti.')
+            if self.balance_difference != Decimal('0.00'):
+                raise ValidationError('Temeljnica nije uravnotežena.')
+            self.status = 'posted'
+            self.posted_by = user
+            self.posted_at = timezone.now()
+            self.save(update_fields=['status', 'posted_by', 'posted_at'])
 
     def reverse(self, user):
-        if self.status != 'posted':
-            raise ValidationError('Samo knjižena temeljnica se može stornirati.')
-        if self.matched_bank_transactions.exists():
-            raise ValidationError(
-                'Temeljnica je usklađena s bankovnom transakcijom. '
-                'Prvo poništite usklađenje u bankovnoj transakciji.'
-            )
-        reversal = JournalEntry.objects.create(
-            tenant=self.tenant,
-            entry_number=f"{self.entry_number}-ST",
-            entry_date=timezone.now().date(),
-            status='posted',
-            description=f"Storno: {self.description}",
-            reference=self.reference,
-            is_auto=self.is_auto,
-            source_content_type=self.source_content_type,
-            source_object_id=self.source_object_id,
-            reversed_entry=self,
-            fiscal_period=self.fiscal_period,
-            created_by=user,
-            posted_by=user,
-            posted_at=timezone.now(),
-        )
-        for line in self.lines.all():
-            JournalEntryLine.objects.create(
-                journal_entry=reversal,
-                account=line.account,
-                analytic_account=line.analytic_account,
-                description=f"Storno: {line.description}",
-                debit_amount=line.credit_amount,
-                credit_amount=line.debit_amount,
-            )
-        self.status = 'reversed'
-        self.save(update_fields=['status'])
-        from domains.finance.services.subledger import handle_journal_entry_reversal
+        from django.db import transaction
 
-        handle_journal_entry_reversal(self)
-        return reversal
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+        with transaction.atomic():
+            lock_open_vat_period_for_source_mutation(self.tenant, self.entry_date)
+            reversal_date = timezone.now().date()
+            if (reversal_date.year, reversal_date.month) != (
+                self.entry_date.year,
+                self.entry_date.month,
+            ):
+                lock_open_vat_period_for_source_mutation(self.tenant, reversal_date)
+            if self.status != 'posted':
+                raise ValidationError('Samo knjižena temeljnica se može stornirati.')
+            if self.matched_bank_transactions.exists():
+                raise ValidationError(
+                    'Temeljnica je usklađena s bankovnom transakcijom. '
+                    'Prvo poništite usklađenje u bankovnoj transakciji.'
+                )
+            reversal = JournalEntry.objects.create(
+                tenant=self.tenant,
+                entry_number=f"{self.entry_number}-ST",
+                entry_date=reversal_date,
+                status='posted',
+                description=f"Storno: {self.description}",
+                reference=self.reference,
+                is_auto=self.is_auto,
+                source_content_type=self.source_content_type,
+                source_object_id=self.source_object_id,
+                reversed_entry=self,
+                fiscal_period=self.fiscal_period,
+                created_by=user,
+                posted_by=user,
+                posted_at=timezone.now(),
+            )
+            for line in self.lines.all():
+                JournalEntryLine.objects.create(
+                    journal_entry=reversal,
+                    account=line.account,
+                    analytic_account=line.analytic_account,
+                    description=f"Storno: {line.description}",
+                    debit_amount=line.credit_amount,
+                    credit_amount=line.debit_amount,
+                )
+            self.status = 'reversed'
+            self.save(update_fields=['status'])
+            from domains.finance.services.subledger import handle_journal_entry_reversal
+
+            handle_journal_entry_reversal(self)
+            return reversal
 
 
 class JournalEntryLine(models.Model):

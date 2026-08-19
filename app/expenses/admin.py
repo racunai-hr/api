@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
@@ -128,6 +129,14 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
     change_list_template = 'admin/expenses/expense/change_list.html'
     inlines = [ExpenseAttachmentInline, ExpenseImportMetadataInline, SubledgerSourceInline]
     actions = ['approve_inbound_action', 'reject_inbound_action']
+
+    def save_model(self, request, obj, form, change):
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+        with transaction.atomic():
+            if obj.status in {'approved', 'paid'} and obj.expense_date:
+                lock_open_vat_period_for_source_mutation(obj.tenant, obj.expense_date)
+            super().save_model(request, obj, form, change)
 
     fieldsets = (
         ('Osnovni podaci', {
