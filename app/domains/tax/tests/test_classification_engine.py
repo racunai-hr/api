@@ -11,10 +11,12 @@ from domains.tax.classification.contracts import (
     Direction,
     EventKind,
     OriginTaxEffect,
+    OriginTaxOwner,
     Outcome,
     PartnerProvenance,
     PartnerSnapshot,
     TaxDocumentInput,
+    TaxRelevance,
 )
 from domains.tax.classification.engine import _classified, classify, reconcile_rc_bases
 from domains.tax.classification.finalize import finalize_period
@@ -50,6 +52,8 @@ def _input(**overrides) -> TaxDocumentInput:
         originates_from=None,
         origin_tax_effects=(),
         origin_effects_ambiguous=False,
+        tax_relevance=TaxRelevance.TAX_RELEVANT,
+        origin_tax_owner=OriginTaxOwner.NONE,
         has_linked_journal_entry=False,
         account_code=None,
         debit_amount=Decimal('0.00'),
@@ -296,6 +300,8 @@ class ReversalTests(SimpleTestCase):
                 lifecycle_status='posted',
                 originates_from='journal_entry:1',
                 origin_tax_effects=(effect,),
+                tax_relevance=TaxRelevance.TAX_RELEVANT,
+                origin_tax_owner=OriginTaxOwner.JOURNAL_LINE,
                 account_code='1400',
                 debit_amount=Decimal('0.00'),
                 credit_amount=Decimal('25.00'),
@@ -313,11 +319,14 @@ class ReversalTests(SimpleTestCase):
                 lifecycle_status='posted',
                 originates_from='journal_entry:1',
                 origin_tax_effects=(),
+                tax_relevance=TaxRelevance.TAX_RELEVANT,
+                origin_tax_owner=OriginTaxOwner.JOURNAL_LINE,
             )
         )
         self.assertEqual(result.outcome, Outcome.INVALID)
+        self.assertEqual(result.rule_code, 'reversal_missing_ledger_evidence')
 
-    def test_ambiguous_origin_review(self):
+    def test_ambiguous_origin_invalid(self):
         result = classify(
             _input(
                 source_kind='journal_line',
@@ -326,9 +335,44 @@ class ReversalTests(SimpleTestCase):
                 originates_from='journal_entry:1',
                 origin_tax_effects=(),
                 origin_effects_ambiguous=True,
+                tax_relevance=TaxRelevance.TAX_RELEVANT,
+                origin_tax_owner=OriginTaxOwner.JOURNAL_LINE,
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.INVALID)
+        self.assertEqual(result.rule_code, 'REVERSAL_AMBIGUOUS_ORIGIN_EFFECT')
+
+    def test_not_tax_relevant_reversal(self):
+        result = classify(
+            _input(
+                source_kind='journal_line',
+                event_kind=EventKind.REVERSAL,
+                lifecycle_status='posted',
+                originates_from='journal_entry:1',
+                origin_tax_effects=(),
+                tax_relevance=TaxRelevance.NOT_TAX_RELEVANT,
+                origin_tax_owner=OriginTaxOwner.NONE,
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'REV_NOT_TAX_RELEVANT')
+        self.assertEqual(result.rows, ())
+
+    def test_undetermined_tax_owner_review(self):
+        result = classify(
+            _input(
+                source_kind='journal_line',
+                event_kind=EventKind.REVERSAL,
+                lifecycle_status='posted',
+                originates_from='journal_entry:1',
+                origin_tax_effects=(),
+                tax_relevance=TaxRelevance.UNDETERMINED,
+                origin_tax_owner=OriginTaxOwner.INVOICE,
             )
         )
         self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
+        self.assertEqual(result.rule_code, 'REVERSAL_TAX_OWNER_UNDETERMINED')
+        self.assertEqual(result.rows, ())
 
 
 class FinalizeAndInvariantTests(SimpleTestCase):

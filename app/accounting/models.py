@@ -214,6 +214,15 @@ class JournalEntry(TenantMixin, models.Model):
         related_name='reversals',
         verbose_name="Storno temeljnice",
     )
+    replaces_entry = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='replaced_by',
+        verbose_name='Zamjenjuje temeljnicu',
+        help_text='Eksplicitni replacement JE (tehničko preknjiženje); ne koristiti timestamp heuristiku.',
+    )
     fiscal_period = models.ForeignKey(
         FiscalPeriod,
         on_delete=models.SET_NULL,
