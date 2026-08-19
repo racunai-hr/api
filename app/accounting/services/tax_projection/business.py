@@ -17,11 +17,19 @@ def _money(value: Decimal | int | str | None) -> Decimal:
     return Decimal(value or 0).quantize(_TWO, rounding=ROUND_HALF_UP)
 
 
+def _category(value) -> str:
+    if value is None:
+        return ''
+    return str(getattr(value, 'value', value) or '')
+
+
 def _rate(*, base: Decimal, tax: Decimal, stored: Decimal | None = None) -> Decimal:
-    if stored is not None:
-        return _money(stored)
+    # Zero-base RC/output VAT lines must not treat a stored rate as a business identity
+    # (legacy often stores 25.00 on tax-only 207; candidate leaves rate unset → 0.00).
     if base == 0:
         return Decimal('0.00')
+    if stored is not None:
+        return _money(stored)
     return _money(tax / base * Decimal('100'))
 
 
@@ -41,7 +49,7 @@ def business_key_from_amounts(
         format(base, 'f'),
         format(tax, 'f'),
         format(rate, 'f'),
-        category or '',
+        _category(category),
     )
 
 
