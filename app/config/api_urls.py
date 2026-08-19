@@ -14,6 +14,7 @@ urlpatterns = [
     path('ready/', ready_view, name='api_ready'),
     path('', include(router.urls)),
     path('fiscal/', include('fiscal_gateway.api.urls')),
+    path('', include('domains.reporting.api.urls')),
     path('auth/token/', AuthTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', AuthTokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', AuthMeView.as_view(), name='auth_me'),

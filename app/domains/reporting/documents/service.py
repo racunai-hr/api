@@ -1,0 +1,167 @@
+"""Public read-model service: list, detail, export (ADR-0020)."""
+
+from __future__ import annotations
+
+from datetime import date
+
+from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Sum
+from django.http import Http404
+
+from accounting.models import SubledgerItem
+from expenses.models import Expense, ExpenseAttachment
+from invoices.models import Invoice
+
+from domains.reporting.documents.assemble import documents_from_keys
+from domains.reporting.documents.export import render_csv, render_xlsx
+from domains.reporting.documents.filters import DocumentListFilters, as_of_date
+from domains.reporting.documents.query import (
+    count_union,
+    filtered_expenses,
+    filtered_invoices,
+    paginate_union,
+    union_rows,
+)
+from domains.reporting.documents.relations import load_page_relations
+from domains.reporting.documents.snapshot import isoformat, read_snapshot
+
+
+class ExportLimitExceeded(Exception):
+    def __init__(self, limit: int, count: int):
+        self.limit = limit
+        self.count = count
+        super().__init__(f'Izvoz prelazi {limit} redaka ({count}).')
+
+
+def _keys_from_union_page(page_rows) -> list[tuple[str, int]]:
+    return [(row['_direction'], row['_doc_id']) for row in page_rows]
+
+
+def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
+    from django.db.models import Count
+
+    from domains.reporting.documents.projection import money
+
+    invoices = filtered_invoices(tenant, filters, today)
+    expenses = filtered_expenses(tenant, filters, today)
+    invoice_ct = ContentType.objects.get_for_model(Invoice)
+    expense_ct = ContentType.objects.get_for_model(Expense)
+
+    inv_count = invoices.count()
+    inv_gross = invoices.aggregate(total=Sum('total_amount'))['total']
+    exp_by_currency = list(
+        expenses.values('currency').annotate(count=Count('id'), total=Sum('amount'))
+    )
+    open_ar = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        direction='receivable',
+        status__in=('open', 'partial'),
+        source_content_type=invoice_ct,
+        source_object_id__in=invoices.values('pk'),
+    ).aggregate(total=Sum('open_amount'))['total']
+    open_ap = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        direction='payable',
+        status__in=('open', 'partial'),
+        source_content_type=expense_ct,
+        source_object_id__in=expenses.values('pk'),
+    ).aggregate(total=Sum('open_amount'))['total']
+
+    by_currency: dict[str, dict] = {}
+    eur = by_currency.setdefault('EUR', {
+        'outgoing_count': 0,
+        'incoming_count': 0,
+        'outgoing_gross': '0.00',
+        'incoming_gross': '0.00',
+        'open_receivables': '0.00',
+        'open_payables': '0.00',
+    })
+    eur['outgoing_count'] = inv_count
+    eur['outgoing_gross'] = money(inv_gross or 0)
+    eur['open_receivables'] = money(open_ar or 0)
+
+    for row in exp_by_currency:
+        currency = row['currency'] or 'EUR'
+        bucket = by_currency.setdefault(currency, {
+            'outgoing_count': 0,
+            'incoming_count': 0,
+            'outgoing_gross': '0.00',
+            'incoming_gross': '0.00',
+            'open_receivables': '0.00',
+            'open_payables': '0.00',
+        })
+        bucket['incoming_count'] = row['count']
+        bucket['incoming_gross'] = money(row['total'] or 0)
+    if 'EUR' in by_currency:
+        by_currency['EUR']['open_payables'] = money(open_ap or 0)
+    return {'by_currency': by_currency}
+
+
+def list_documents(tenant, filters: DocumentListFilters) -> dict:
+    with read_snapshot() as as_of:
+        today = as_of_date(as_of)
+        union = union_rows(tenant, filters, today)
+        total = count_union(union)
+        page_rows = paginate_union(union, filters.page, filters.page_size)
+        keys = _keys_from_union_page(page_rows)
+        rel = load_page_relations(tenant, keys)
+        results = documents_from_keys(tenant, keys, rel, today, detail=False)
+        summary = _kpi(tenant, filters, today)
+        return {
+            'as_of': isoformat(as_of),
+            'count': total,
+            'page': filters.page,
+            'page_size': filters.page_size,
+            'results': results,
+            'summary': summary,
+        }
+
+
+def get_document_detail(tenant, direction: str, pk: int) -> dict:
+    if direction not in ('outgoing', 'incoming'):
+        raise Http404()
+    with read_snapshot() as as_of:
+        today = as_of_date(as_of)
+        model = Invoice if direction == 'outgoing' else Expense
+        exists = model.all_objects.filter(tenant=tenant, pk=pk).exists()
+        if not exists:
+            raise Http404()
+        keys = [(direction, pk)]
+        rel = load_page_relations(tenant, keys)
+        rows = documents_from_keys(tenant, keys, rel, today, detail=True)
+        if not rows:
+            raise Http404()
+        payload = rows[0]
+        payload['as_of'] = isoformat(as_of)
+        return payload
+
+
+def export_documents(tenant, filters: DocumentListFilters, fmt: str) -> tuple[bytes, str, str]:
+    limit = int(getattr(settings, 'DOCUMENT_EXPORT_SYNC_MAX', 10000))
+    with read_snapshot() as as_of:
+        today = as_of_date(as_of)
+        union = union_rows(tenant, filters, today)
+        total = count_union(union)
+        if total > limit:
+            raise ExportLimitExceeded(limit, total)
+        page_rows = list(union)
+        keys = _keys_from_union_page(page_rows)
+        rel = load_page_relations(tenant, keys)
+        results = documents_from_keys(tenant, keys, rel, today, detail=False)
+        if fmt == 'xlsx':
+            body = render_xlsx(results, as_of)
+            return body, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'documents.xlsx'
+        body = render_csv(results, as_of)
+        return body, 'text/csv; charset=utf-8', 'documents.csv'
+
+
+def get_expense_attachment(tenant, expense_id: int, attachment_id: int) -> ExpenseAttachment:
+    attachment = ExpenseAttachment.all_objects.filter(
+        tenant=tenant,
+        expense_id=expense_id,
+        pk=attachment_id,
+    ).select_related('expense').first()
+    if attachment is None:
+        raise Http404()
+    return attachment

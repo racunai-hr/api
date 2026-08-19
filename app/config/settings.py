@@ -217,6 +217,9 @@ TURNSTILE_ADMIN_HOSTS = env.list(
     'TURNSTILE_ADMIN_HOSTS',
     default=['admin.racunai.hr'],
 )
+# Document read-model export (ADR-0020)
+DOCUMENT_EXPORT_SYNC_MAX = env.int('DOCUMENT_EXPORT_SYNC_MAX', default=10000)
+
 
 # Celery Configuration
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='')

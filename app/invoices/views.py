@@ -63,30 +63,19 @@ def invoice_detail(request, pk):
     return HttpResponse(html)
 
 
-def invoice_pdf(request, pk):
-    invoice = get_object_or_404(Invoice.objects.select_related('responsible_person'), pk=pk)
+def render_invoice_pdf_bytes(request, invoice) -> bytes:
     company = CompanySettings.objects.filter(tenant=invoice.tenant).first()
-
-    # Generiraj barcode
     barcode_data = generate_barcode_base64(invoice.invoice_number)
-
-    # Context s dodanom odgovornom osobom i barcodom
     context = {
-        "invoice": invoice, 
-        "company": company, 
+        "invoice": invoice,
+        "company": company,
         "responsible_person": invoice.responsible_person,
         "barcode_data": barcode_data,
         "company_logo_uri": _company_logo_uri(company),
-        "request": request
+        "request": request,
     }
-
-    # 1) isti HTML kao za preview
     html_string = render_to_string("invoices/invoice_detail.html", context)
-
-    # 2) base_url OBAVEZNO (logo, static, slike)
-    base_url = request.build_absolute_uri("/")  # ili settings.STATIC_ROOT uz file:// shemu
-
-    # 3) lokalni bootstrap + dodatni CSS za PDF
+    base_url = request.build_absolute_uri("/")
     bootstrap_path = os.path.join(settings.STATIC_ROOT, "vendor/bootstrap/bootstrap.min.css")
     custom_css = CSS(string="""
       body { font-family: "DejaVu Sans", Arial, sans-serif; }
@@ -98,14 +87,16 @@ def invoice_pdf(request, pk):
       .barcode-section { text-align: center; margin: 1rem 0; }
       .barcode-section img { max-width: 100%; height: auto; }
     """)
-
     styles = []
     if os.path.exists(bootstrap_path):
         styles.append(CSS(filename=bootstrap_path))
     styles.append(custom_css)
+    return HTML(string=html_string, base_url=base_url).write_pdf(stylesheets=styles)
 
-    pdf_bytes = HTML(string=html_string, base_url=base_url).write_pdf(stylesheets=styles)
 
+def invoice_pdf(request, pk):
+    invoice = get_object_or_404(Invoice.objects.select_related('responsible_person'), pk=pk)
+    pdf_bytes = render_invoice_pdf_bytes(request, invoice)
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'inline; filename="R-{invoice.invoice_number}.pdf"'
     return resp
