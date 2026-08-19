@@ -4,18 +4,39 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from banking.reconciliation import MatchConflict
 from banking.services.import_runs import IdempotencyConflict
+from config.schema_common import ERROR_400, ERROR_401, ERROR_404, ERROR_409, ERROR_422
 from domains.banking.api.authentication import BankingJWTAuthentication
 from domains.banking.api.permissions import (
     TenantBankingReadPermission,
     TenantBankingWritePermission,
+)
+from domains.banking.api.schema import (
+    BANK_ACCOUNT_PARAMS,
+    PAYMENT_ORDER_PARAMS,
+    STATEMENT_PARAMS,
+    TRANSACTION_PARAMS,
+    BankingOverviewSerializer,
+    ImportRunCreateResponseSerializer,
+    ImportRunDetailSerializer,
+    MatchRequestSerializer,
+    PaginatedBankAccountsSerializer,
+    PaginatedPaymentOrdersSerializer,
+    PaginatedStatementsSerializer,
+    PaginatedTransactionsSerializer,
+    StatementDetailSerializer,
+    SyncEnqueueResponseSerializer,
+    SyncStatusSerializer,
+    TransactionSerializer,
 )
 from domains.banking.read.filters import (
     parse_bank_account_filters,
@@ -77,11 +98,31 @@ class _BankingWriteApiView(_BankingApiView):
 
 
 class BankingOverviewView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_overview_retrieve',
+        responses={
+            200: BankingOverviewSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         return Response(get_overview(_require_tenant(request)))
 
 
 class BankAccountListView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_bank_accounts_list',
+        parameters=BANK_ACCOUNT_PARAMS,
+        responses={
+            200: PaginatedBankAccountsSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         tenant = _require_tenant(request)
         try:
@@ -92,6 +133,17 @@ class BankAccountListView(_BankingReadApiView):
 
 
 class StatementListView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_statements_list',
+        parameters=STATEMENT_PARAMS,
+        responses={
+            200: PaginatedStatementsSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         tenant = _require_tenant(request)
         try:
@@ -102,11 +154,31 @@ class StatementListView(_BankingReadApiView):
 
 
 class StatementDetailView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_statements_retrieve',
+        responses={
+            200: StatementDetailSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request, pk):
         return Response(get_statement(_require_tenant(request), pk))
 
 
 class TransactionListView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_transactions_list',
+        parameters=TRANSACTION_PARAMS,
+        responses={
+            200: PaginatedTransactionsSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         tenant = _require_tenant(request)
         try:
@@ -117,6 +189,17 @@ class TransactionListView(_BankingReadApiView):
 
 
 class PaymentOrderListView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_payment_orders_list',
+        parameters=PAYMENT_ORDER_PARAMS,
+        responses={
+            200: PaginatedPaymentOrdersSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         tenant = _require_tenant(request)
         try:
@@ -127,16 +210,64 @@ class PaymentOrderListView(_BankingReadApiView):
 
 
 class StatementImportDetailView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_statement_imports_retrieve',
+        responses={
+            200: ImportRunDetailSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request, pk):
         return Response(get_statement_import(_require_tenant(request), pk))
 
 
 class ConnectionSyncStatusView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_connections_sync_status_retrieve',
+        responses={
+            200: SyncStatusSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request, pk):
         return Response(get_connection_sync_status(_require_tenant(request), pk))
 
 
 class StatementImportCreateView(_BankingWriteApiView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_statement_imports_create',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request={
+            'multipart/form-data': {
+                'type': 'object',
+                'properties': {
+                    'file': {'type': 'string', 'format': 'binary'},
+                },
+                'required': ['file'],
+            }
+        },
+        responses={
+            202: ImportRunCreateResponseSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_422,
+        },
+    )
     def post(self, request):
         tenant = _require_tenant(request)
         upload = request.FILES.get('file')
@@ -166,6 +297,18 @@ class StatementImportCreateView(_BankingWriteApiView):
 
 
 class TransactionMatchView(_BankingWriteApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_transactions_match',
+        request=MatchRequestSerializer,
+        responses={
+            200: TransactionSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_422,
+        },
+    )
     def post(self, request, pk):
         tenant = _require_tenant(request)
         target_type = request.data.get('target_type')
@@ -196,6 +339,17 @@ class TransactionMatchView(_BankingWriteApiView):
 
 
 class TransactionUnmatchView(_BankingWriteApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_transactions_unmatch',
+        request=None,
+        responses={
+            200: TransactionSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            422: ERROR_422,
+        },
+    )
     def post(self, request, pk):
         tenant = _require_tenant(request)
         try:
@@ -213,6 +367,16 @@ class TransactionUnmatchView(_BankingWriteApiView):
 
 
 class ConnectionSyncEnqueueView(_BankingWriteApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_connections_sync_create',
+        request=None,
+        responses={
+            202: SyncEnqueueResponseSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def post(self, request, pk):
         tenant = _require_tenant(request)
         payload = start_sync_api(tenant=tenant, user=request.user, connection_id=pk)

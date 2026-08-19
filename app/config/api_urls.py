@@ -1,4 +1,5 @@
 from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from config.health import ready_view
@@ -12,6 +13,17 @@ router = DefaultRouter()
 
 urlpatterns = [
     path('ready/', ready_view, name='api_ready'),
+    path('schema/', SpectacularAPIView.as_view(), name='api-schema'),
+    path(
+        'schema/swagger-ui/',
+        SpectacularSwaggerView.as_view(url_name='api-schema'),
+        name='api-schema-swagger-ui',
+    ),
+    path(
+        'schema/redoc/',
+        SpectacularRedocView.as_view(url_name='api-schema'),
+        name='api-schema-redoc',
+    ),
     path('', include(router.urls)),
     path('fiscal/', include('fiscal_gateway.api.urls')),
     path('', include('domains.reporting.api.urls')),

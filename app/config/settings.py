@@ -57,6 +57,7 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     'rest_framework',
+    'drf_spectacular',
     'corsheaders',
     'django_celery_beat',
     'django_celery_results',
@@ -189,7 +190,36 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'računAI API',
+    'DESCRIPTION': (
+        'Tenant JWT REST ugovor za auth, documents i banking. '
+        'Fiscal/intermediary i AS4 nisu dio ove sheme. '
+        'openapi.yaml je generirani artefakt — ne uređivati ručno.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api',
+    'TAGS': [
+        {'name': 'auth', 'description': 'JWT token i trenutni korisnik'},
+        {'name': 'documents', 'description': 'Document read model (ADR-0020)'},
+        {'name': 'banking', 'description': 'Banking operational API (ADR-0021)'},
+    ],
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'config.openapi_hooks.postprocess_security',
+    ],
+    'PREPROCESSING_HOOKS': [
+        'config.openapi_hooks.preprocess_exclude_non_contract',
+    ],
+}
+
+# Register OpenApiAuthenticationExtension subclasses
+import config.openapi_auth  # noqa: E402,F401
 
 from datetime import timedelta
 

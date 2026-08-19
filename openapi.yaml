@@ -1,0 +1,2510 @@
+openapi: 3.0.3
+info:
+  title: računAI API
+  version: 1.0.0
+  description: Tenant JWT REST ugovor za auth, documents i banking. Fiscal/intermediary
+    i AS4 nisu dio ove sheme. openapi.yaml je generirani artefakt — ne uređivati ručno.
+paths:
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+  /api/auth/token/:
+    post:
+      operationId: auth_token_obtain
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainRequestRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+      security: []
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequestRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+      security: []
+  /api/banking/bank-accounts/:
+    get:
+      operationId: banking_bank_accounts_list
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number (min 1, default 1)
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Page size (default 20, max 100)
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBankAccounts'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/connections/{id}/sync/:
+    post:
+      operationId: banking_connections_sync_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncEnqueueResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/connections/{id}/sync-status/:
+    get:
+      operationId: banking_connections_sync_status_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/overview/:
+    get:
+      operationId: banking_overview_retrieve
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankingOverview'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/payment-orders/:
+    get:
+      operationId: banking_payment_orders_list
+      parameters:
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number (min 1, default 1)
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Page size (default 20, max 100)
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPaymentOrders'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/statement-imports/:
+    post:
+      operationId: banking_statement_imports_create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      tags:
+      - banking
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportRunCreateResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/banking/statement-imports/{id}/:
+    get:
+      operationId: banking_statement_imports_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportRunDetail'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/statements/:
+    get:
+      operationId: banking_statements_list
+      parameters:
+      - in: query
+        name: bank_account
+        schema:
+          type: integer
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number (min 1, default 1)
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Page size (default 20, max 100)
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - archived
+          - imported
+          - reconciled
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStatements'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/statements/{id}/:
+    get:
+      operationId: banking_statements_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementDetail'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/transactions/:
+    get:
+      operationId: banking_transactions_list
+      parameters:
+      - in: query
+        name: bank_account
+        schema:
+          type: integer
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: match_status
+        schema:
+          type: string
+          enum:
+          - matched
+          - suggested
+          - unmatched
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number (min 1, default 1)
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Page size (default 20, max 100)
+      - in: query
+        name: statement
+        schema:
+          type: integer
+      - in: query
+        name: transaction_type
+        schema:
+          type: string
+          enum:
+          - credit
+          - debit
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransactions'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/transactions/{id}/match/:
+    post:
+      operationId: banking_transactions_match
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MatchRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MatchRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/banking/transactions/{id}/unmatch/:
+    post:
+      operationId: banking_transactions_unmatch
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/documents/:
+    get:
+      operationId: documents_list
+      parameters:
+      - in: query
+        name: amount_max
+        schema:
+          type: number
+      - in: query
+        name: amount_min
+        schema:
+          type: number
+      - in: query
+        name: currency
+        schema:
+          type: string
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - incoming
+          - outgoing
+      - in: query
+        name: due_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: due_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: month
+        schema:
+          type: integer
+      - in: query
+        name: oib
+        schema:
+          type: string
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Default 20, max 100
+      - in: query
+        name: partner
+        schema:
+          type: integer
+        description: Partner id
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: view
+        schema:
+          type: string
+          enum:
+          - attention
+          - bank_unmatched
+          - eracun_rejected
+          - incoming_ready_to_pay
+          - overdue_outgoing
+          - partially_paid
+          - possible_duplicates
+          - unpaid_outgoing
+          - unposted
+          - vat_mismatch
+          - vat_pending
+      - in: query
+        name: year
+        schema:
+          type: integer
+      tags:
+      - documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocuments'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/documents/{direction}/{id}/:
+    get:
+      operationId: documents_retrieve
+      parameters:
+      - in: path
+        name: direction
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/documents/{direction}/{id}/pdf/:
+    get:
+      operationId: documents_pdf
+      parameters:
+      - in: path
+        name: direction
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: 'Outgoing invoice PDF. Content-Type: application/pdf. Header
+            Content-Disposition: inline; filename="R-....pdf". Incoming direction
+            returns 404.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeDetail'
+          description: Invoice PDF unavailable
+  /api/documents/export/:
+    get:
+      operationId: documents_export
+      parameters:
+      - in: query
+        name: amount_max
+        schema:
+          type: number
+      - in: query
+        name: amount_min
+        schema:
+          type: number
+      - in: query
+        name: currency
+        schema:
+          type: string
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - incoming
+          - outgoing
+      - in: query
+        name: due_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: due_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - xlsx
+        description: Export file type (default csv)
+      - in: query
+        name: month
+        schema:
+          type: integer
+      - in: query
+        name: oib
+        schema:
+          type: string
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Default 20, max 100
+      - in: query
+        name: partner
+        schema:
+          type: integer
+        description: Partner id
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: view
+        schema:
+          type: string
+          enum:
+          - attention
+          - bank_unmatched
+          - eracun_rejected
+          - incoming_ready_to_pay
+          - overdue_outgoing
+          - partially_paid
+          - possible_duplicates
+          - unpaid_outgoing
+          - unposted
+          - vat_mismatch
+          - vat_pending
+      - in: query
+        name: year
+        schema:
+          type: integer
+      tags:
+      - documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: 'File download. Content-Type is text/csv; charset=utf-8 or
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet. Header
+            Content-Disposition: attachment; filename="documents.csv|xlsx"'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportLimitError'
+          description: Export limit exceeded
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/documents/incoming/{id}/attachments/{attachment_id}/:
+    get:
+      operationId: documents_attachment_download
+      parameters:
+      - in: path
+        name: attachment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: 'Attachment bytes. Content-Type from storage. Header Content-Disposition:
+            inline; filename="<sanitized>".'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeDetail'
+          description: Attachment content unavailable
+components:
+  schemas:
+    Allocation:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        created_at:
+          type: string
+      required:
+      - amount
+      - created_at
+      - id
+    AmountsBlock:
+      type: object
+      properties:
+        currency:
+          type: string
+          nullable: true
+        net:
+          type: string
+          nullable: true
+        vat:
+          type: string
+          nullable: true
+        gross:
+          type: string
+          nullable: true
+        fx_rate:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - currency
+      - fx_rate
+      - gross
+      - net
+      - vat
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: integer
+        original_filename:
+          type: string
+        created_at:
+          type: string
+          nullable: true
+        uploaded_by:
+          type: string
+          nullable: true
+        download_available:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - created_at
+      - download_available
+      - id
+      - original_filename
+      - uploaded_by
+    AuthMeResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthMeUser'
+        tenants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthMeTenant'
+        platform_admin_url:
+          type: string
+      required:
+      - platform_admin_url
+      - tenants
+      - user
+    AuthMeTenant:
+      type: object
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        is_default:
+          type: boolean
+        admin_url:
+          type: string
+      required:
+      - admin_url
+      - is_default
+      - name
+      - role
+      - slug
+    AuthMeUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        is_superuser:
+          type: boolean
+      required:
+      - email
+      - id
+      - is_superuser
+      - username
+    Balance:
+      type: object
+      properties:
+        balance_type:
+          type: string
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+        as_of:
+          type: string
+          nullable: true
+        source:
+          type: string
+        is_stale:
+          type: boolean
+      required:
+      - amount
+      - as_of
+      - balance_type
+      - currency
+      - is_stale
+      - source
+    BankAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        account_name:
+          type: string
+        bank_name:
+          type: string
+        account_number:
+          type: string
+        iban:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+        is_active:
+          type: boolean
+        connection:
+          allOf:
+          - $ref: '#/components/schemas/ConnectionSummary'
+          nullable: true
+        balances:
+          type: array
+          items:
+            $ref: '#/components/schemas/Balance'
+      required:
+      - account_name
+      - account_number
+      - balances
+      - bank_name
+      - connection
+      - currency
+      - iban
+      - id
+      - is_active
+      - status
+    BankBlock:
+      type: object
+      properties:
+        match_status:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - match_status
+    BankingOverview:
+      type: object
+      properties:
+        as_of:
+          type: string
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankAccount'
+        account_count_by_currency:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Per-currency account counts; no cross-currency total balance
+        unmatched_transaction_count:
+          type: integer
+        suggested_transaction_count:
+          type: integer
+        statement_count:
+          type: integer
+      required:
+      - account_count_by_currency
+      - accounts
+      - as_of
+      - statement_count
+      - suggested_transaction_count
+      - unmatched_transaction_count
+    CodeDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        detail:
+          type: string
+      required:
+      - code
+      - detail
+    ConnectionSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        provider_code:
+          type: string
+        last_sync_at:
+          type: string
+          nullable: true
+      required:
+      - id
+      - last_sync_at
+      - provider_code
+      - status
+    CurrencySummary:
+      type: object
+      properties:
+        outgoing_count:
+          type: integer
+        incoming_count:
+          type: integer
+        outgoing_gross:
+          type: string
+          nullable: true
+        incoming_gross:
+          type: string
+          nullable: true
+        open_receivables:
+          type: string
+          nullable: true
+        open_payables:
+          type: string
+          nullable: true
+      required:
+      - incoming_count
+      - incoming_gross
+      - open_payables
+      - open_receivables
+      - outgoing_count
+      - outgoing_gross
+    DirectionEnum:
+      enum:
+      - incoming
+      - outgoing
+      type: string
+      description: |-
+        * `incoming` - incoming
+        * `outgoing` - outgoing
+    DocumentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        direction:
+          $ref: '#/components/schemas/DirectionEnum'
+        internal_number:
+          type: string
+          nullable: true
+        source_number:
+          type: string
+          nullable: true
+        partner_name:
+          type: string
+          nullable: true
+        partner_oib:
+          type: string
+          nullable: true
+        partner_vat_number:
+          type: string
+          nullable: true
+        document_date:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          nullable: true
+        document_status:
+          $ref: '#/components/schemas/Provenanced'
+        operational_status:
+          $ref: '#/components/schemas/Provenanced'
+        posting:
+          $ref: '#/components/schemas/PostingBlock'
+        subledger:
+          $ref: '#/components/schemas/SubledgerBlock'
+        bank:
+          $ref: '#/components/schemas/BankBlock'
+        payment_order:
+          $ref: '#/components/schemas/PaymentOrderBlock'
+        vat:
+          $ref: '#/components/schemas/VatBlock'
+        eracun:
+          $ref: '#/components/schemas/EracunBlock'
+        fiscal:
+          $ref: '#/components/schemas/FiscalBlock'
+        controls:
+          type: array
+          items:
+            type: string
+        notices:
+          type: array
+          items:
+            type: string
+        amounts:
+          $ref: '#/components/schemas/AmountsBlock'
+        partner_id:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentItem'
+        service_date:
+          type: string
+          nullable: true
+        journal_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalLine'
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentPayment'
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Allocation'
+        ledger_entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerEntry'
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        ubl_available:
+          type: boolean
+        as_of:
+          type: string
+      required:
+      - allocations
+      - amounts
+      - as_of
+      - attachments
+      - bank
+      - controls
+      - created_at
+      - created_by
+      - description
+      - direction
+      - document_date
+      - document_status
+      - due_date
+      - eracun
+      - fiscal
+      - id
+      - internal_number
+      - items
+      - journal_lines
+      - ledger_entries
+      - notes
+      - notices
+      - operational_status
+      - partner_id
+      - partner_name
+      - partner_oib
+      - partner_vat_number
+      - payment_order
+      - payments
+      - posting
+      - service_date
+      - source_number
+      - subledger
+      - ubl_available
+      - updated_at
+      - vat
+    DocumentItem:
+      type: object
+      properties:
+        item_name:
+          type: string
+        quantity:
+          type: string
+        unit_price:
+          type: string
+        tax_rate:
+          type: string
+        vat_procedure:
+          type: string
+          nullable: true
+        line_total:
+          type: string
+      required:
+      - item_name
+      - line_total
+      - quantity
+      - tax_rate
+      - unit_price
+      - vat_procedure
+    DocumentListSummary:
+      type: object
+      properties:
+        by_currency:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CurrencySummary'
+      required:
+      - by_currency
+    DocumentPayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        payment_number:
+          type: string
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        payment_date:
+          type: string
+          nullable: true
+        payment_method:
+          type: string
+        status:
+          type: string
+      required:
+      - amount
+      - id
+      - payment_date
+      - payment_method
+      - payment_number
+      - status
+    DocumentSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        direction:
+          $ref: '#/components/schemas/DirectionEnum'
+        internal_number:
+          type: string
+          nullable: true
+        source_number:
+          type: string
+          nullable: true
+        partner_name:
+          type: string
+          nullable: true
+        partner_oib:
+          type: string
+          nullable: true
+        partner_vat_number:
+          type: string
+          nullable: true
+        document_date:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          nullable: true
+        document_status:
+          $ref: '#/components/schemas/Provenanced'
+        operational_status:
+          $ref: '#/components/schemas/Provenanced'
+        posting:
+          $ref: '#/components/schemas/PostingBlock'
+        subledger:
+          $ref: '#/components/schemas/SubledgerBlock'
+        bank:
+          $ref: '#/components/schemas/BankBlock'
+        payment_order:
+          $ref: '#/components/schemas/PaymentOrderBlock'
+        vat:
+          $ref: '#/components/schemas/VatBlock'
+        eracun:
+          $ref: '#/components/schemas/EracunBlock'
+        fiscal:
+          $ref: '#/components/schemas/FiscalBlock'
+        controls:
+          type: array
+          items:
+            type: string
+        notices:
+          type: array
+          items:
+            type: string
+        amounts:
+          $ref: '#/components/schemas/AmountsBlock'
+      required:
+      - amounts
+      - bank
+      - controls
+      - direction
+      - document_date
+      - document_status
+      - due_date
+      - eracun
+      - fiscal
+      - id
+      - internal_number
+      - notices
+      - operational_status
+      - partner_name
+      - partner_oib
+      - partner_vat_number
+      - payment_order
+      - posting
+      - source_number
+      - subledger
+      - vat
+    EracunBlock:
+      type: object
+      properties:
+        as4_status:
+          $ref: '#/components/schemas/Provenanced'
+        message_id:
+          $ref: '#/components/schemas/Provenanced'
+        source:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - as4_status
+      - message_id
+      - source
+    ErrorDetail:
+      type: object
+      description: 'DRF-style error body: ``{"detail": ...}`` where detail may be
+        str or object.'
+      properties:
+        detail: {}
+      required:
+      - detail
+    ExportLimitError:
+      type: object
+      properties:
+        detail:
+          type: string
+        limit:
+          type: integer
+        count:
+          type: integer
+      required:
+      - count
+      - detail
+      - limit
+    FiscalBlock:
+      type: object
+      properties:
+        jir:
+          $ref: '#/components/schemas/Provenanced'
+        zki:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - jir
+      - zki
+    ImportRunCreateResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        run_uuid:
+          type: string
+        status:
+          type: string
+        source:
+          type: string
+        format:
+          type: string
+        original_filename:
+          type: string
+        statements_processed:
+          type: integer
+        statements_created:
+          type: integer
+        statements_updated:
+          type: integer
+        transactions_processed:
+          type: integer
+        transactions_created:
+          type: integer
+        transactions_skipped:
+          type: integer
+        error_count:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        created:
+          type: boolean
+      required:
+      - created
+      - created_at
+      - error_count
+      - errors
+      - finished_at
+      - format
+      - id
+      - original_filename
+      - run_uuid
+      - source
+      - started_at
+      - statements_created
+      - statements_processed
+      - statements_updated
+      - status
+      - transactions_created
+      - transactions_processed
+      - transactions_skipped
+      - warnings
+    ImportRunDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        run_uuid:
+          type: string
+        status:
+          type: string
+        source:
+          type: string
+        format:
+          type: string
+        original_filename:
+          type: string
+        statements_processed:
+          type: integer
+        statements_created:
+          type: integer
+        statements_updated:
+          type: integer
+        transactions_processed:
+          type: integer
+        transactions_created:
+          type: integer
+        transactions_skipped:
+          type: integer
+        error_count:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        as_of:
+          type: string
+      required:
+      - as_of
+      - created_at
+      - error_count
+      - errors
+      - finished_at
+      - format
+      - id
+      - original_filename
+      - run_uuid
+      - source
+      - started_at
+      - statements_created
+      - statements_processed
+      - statements_updated
+      - status
+      - transactions_created
+      - transactions_processed
+      - transactions_skipped
+      - warnings
+    JournalLine:
+      type: object
+      properties:
+        account_code:
+          type: string
+        account_name:
+          type: string
+        debit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        credit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        description:
+          type: string
+      required:
+      - account_code
+      - account_name
+      - credit
+      - debit
+      - description
+    LedgerEntry:
+      type: object
+      properties:
+        ledger_type:
+          type: string
+        vat_box:
+          type: string
+          nullable: true
+        vat_rate:
+          type: string
+          nullable: true
+        base_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        vat_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        entry_category:
+          type: string
+        entry_date:
+          type: string
+          nullable: true
+        document_number:
+          type: string
+      required:
+      - base_amount
+      - document_number
+      - entry_category
+      - entry_date
+      - ledger_type
+      - vat_amount
+      - vat_box
+      - vat_rate
+    MatchRequestRequest:
+      type: object
+      properties:
+        target_type:
+          $ref: '#/components/schemas/TargetTypeEnum'
+        target_id:
+          type: integer
+      required:
+      - target_id
+      - target_type
+    NullEnum:
+      enum:
+      - null
+    PaginatedBankAccounts:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankAccount'
+      required:
+      - as_of
+      - count
+      - page
+      - page_size
+      - results
+    PaginatedDocuments:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentSummary'
+        summary:
+          $ref: '#/components/schemas/DocumentListSummary'
+      required:
+      - as_of
+      - count
+      - page
+      - page_size
+      - results
+      - summary
+    PaginatedPaymentOrders:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentOrder'
+      required:
+      - as_of
+      - count
+      - page
+      - page_size
+      - results
+    PaginatedStatements:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementListItem'
+      required:
+      - as_of
+      - count
+      - page
+      - page_size
+      - results
+    PaginatedTransactions:
+      type: object
+      properties:
+        as_of:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+      required:
+      - as_of
+      - count
+      - page
+      - page_size
+      - results
+    PaymentOrder:
+      type: object
+      description: Allowlist only — no SCA, tokens, provider secrets, or internal
+        errors.
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+        debtor_iban:
+          type: string
+          description: Masked IBAN
+        creditor_iban:
+          type: string
+          description: Masked IBAN
+        creditor_name:
+          type: string
+        reference:
+          type: string
+        created_at:
+          type: string
+      required:
+      - amount
+      - created_at
+      - creditor_iban
+      - creditor_name
+      - currency
+      - debtor_iban
+      - id
+      - reference
+      - status
+    PaymentOrderBlock:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/Provenanced'
+        creditor_iban:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - creditor_iban
+      - status
+    PeriodReturn:
+      type: object
+      properties:
+        id:
+          type: integer
+        version:
+          type: integer
+        status:
+          type: string
+        superseded_by_id:
+          type: integer
+          nullable: true
+        submitted_at:
+          type: string
+          nullable: true
+        has_active_submission_event:
+          type: boolean
+        submission_nos:
+          type: array
+          items:
+            type: string
+      required:
+      - has_active_submission_event
+      - id
+      - status
+      - submission_nos
+      - submitted_at
+      - superseded_by_id
+      - version
+    PostingBlock:
+      type: object
+      properties:
+        state:
+          $ref: '#/components/schemas/Provenanced'
+        entry_number:
+          $ref: '#/components/schemas/Provenanced'
+        entry_date:
+          $ref: '#/components/schemas/Provenanced'
+        fiscal_period:
+          $ref: '#/components/schemas/Provenanced'
+        fiscal_locked:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - entry_date
+      - entry_number
+      - fiscal_locked
+      - fiscal_period
+      - state
+    Provenanced:
+      type: object
+      properties:
+        value:
+          nullable: true
+        reason:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        source:
+          type: string
+          nullable: true
+      required:
+      - reason
+      - source
+      - value
+    ReasonEnum:
+      enum:
+      - not_recorded
+      - not_provable
+      - not_applicable
+      type: string
+      description: |-
+        * `not_recorded` - not_recorded
+        * `not_provable` - not_provable
+        * `not_applicable` - not_applicable
+    StatementDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        statement_number:
+          type: string
+        bank_account_id:
+          type: integer
+        statement_date:
+          type: string
+          format: date
+          nullable: true
+        opening_balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        closing_balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        status:
+          type: string
+        currency:
+          type: string
+        imported_at:
+          type: string
+          nullable: true
+        reconciled_at:
+          type: string
+          nullable: true
+        transaction_count:
+          type: integer
+        match_summary:
+          type: object
+          additionalProperties:
+            type: integer
+        as_of:
+          type: string
+      required:
+      - as_of
+      - bank_account_id
+      - closing_balance
+      - currency
+      - id
+      - imported_at
+      - match_summary
+      - opening_balance
+      - reconciled_at
+      - statement_date
+      - statement_number
+      - status
+      - transaction_count
+    StatementListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        statement_number:
+          type: string
+        bank_account_id:
+          type: integer
+        statement_date:
+          type: string
+          format: date
+          nullable: true
+        opening_balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        closing_balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        status:
+          type: string
+        currency:
+          type: string
+        imported_at:
+          type: string
+          nullable: true
+        reconciled_at:
+          type: string
+          nullable: true
+        transaction_count:
+          type: integer
+      required:
+      - bank_account_id
+      - closing_balance
+      - currency
+      - id
+      - imported_at
+      - opening_balance
+      - reconciled_at
+      - statement_date
+      - statement_number
+      - status
+      - transaction_count
+    SubledgerBlock:
+      type: object
+      properties:
+        state:
+          $ref: '#/components/schemas/Provenanced'
+        open_amount:
+          $ref: '#/components/schemas/Provenanced'
+        original_amount:
+          $ref: '#/components/schemas/Provenanced'
+        aging_bucket:
+          $ref: '#/components/schemas/Provenanced'
+        days:
+          $ref: '#/components/schemas/Provenanced'
+      required:
+      - aging_bucket
+      - days
+      - open_amount
+      - original_amount
+      - state
+    SyncEnqueueResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        connection_id:
+          type: integer
+        status:
+          type: string
+        transactions_created:
+          type: integer
+        transactions_skipped:
+          type: integer
+        last_error:
+          type: string
+          nullable: true
+        correlation_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        created:
+          type: boolean
+        auto_create_payments:
+          type: boolean
+      required:
+      - auto_create_payments
+      - connection_id
+      - correlation_id
+      - created
+      - created_at
+      - finished_at
+      - id
+      - last_error
+      - started_at
+      - status
+      - transactions_created
+      - transactions_skipped
+    SyncRun:
+      type: object
+      properties:
+        id:
+          type: integer
+        connection_id:
+          type: integer
+        status:
+          type: string
+        transactions_created:
+          type: integer
+        transactions_skipped:
+          type: integer
+        last_error:
+          type: string
+          nullable: true
+        correlation_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+      required:
+      - connection_id
+      - correlation_id
+      - created_at
+      - finished_at
+      - id
+      - last_error
+      - started_at
+      - status
+      - transactions_created
+      - transactions_skipped
+    SyncStatus:
+      type: object
+      properties:
+        as_of:
+          type: string
+        connection_id:
+          type: integer
+        connection_status:
+          type: string
+        last_sync_at:
+          type: string
+          nullable: true
+        active_sync:
+          allOf:
+          - $ref: '#/components/schemas/SyncRun'
+          nullable: true
+        latest_sync:
+          allOf:
+          - $ref: '#/components/schemas/SyncRun'
+          nullable: true
+      required:
+      - active_sync
+      - as_of
+      - connection_id
+      - connection_status
+      - last_sync_at
+      - latest_sync
+    TargetTypeEnum:
+      enum:
+      - payment
+      - journal_entry
+      type: string
+      description: |-
+        * `payment` - payment
+        * `journal_entry` - journal_entry
+    TokenObtainRequestRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        turnstile_token:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - username
+    TokenPairResponse:
+      type: object
+      properties:
+        access:
+          type: string
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequestRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        bank_statement_id:
+          type: integer
+        bank_account_id:
+          type: integer
+        transaction_date:
+          type: string
+          format: date
+          nullable: true
+        value_date:
+          type: string
+          format: date
+          nullable: true
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+        transaction_type:
+          type: string
+        description:
+          type: string
+        reference:
+          type: string
+        counterparty_name:
+          type: string
+        counterparty_iban:
+          type: string
+        external_id:
+          type: string
+          nullable: true
+        match_status:
+          type: string
+        matched_payment_id:
+          type: integer
+          nullable: true
+        matched_journal_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - amount
+      - bank_account_id
+      - bank_statement_id
+      - counterparty_iban
+      - counterparty_name
+      - currency
+      - description
+      - external_id
+      - id
+      - match_status
+      - matched_journal_entry_id
+      - matched_payment_id
+      - reference
+      - transaction_date
+      - transaction_type
+      - value_date
+    VatBlock:
+      type: object
+      properties:
+        lifecycle:
+          $ref: '#/components/schemas/Provenanced'
+        ledger_type:
+          $ref: '#/components/schemas/Provenanced'
+        period:
+          $ref: '#/components/schemas/Provenanced'
+        boxes:
+          $ref: '#/components/schemas/Provenanced'
+        document_in_submitted_return:
+          $ref: '#/components/schemas/Provenanced'
+        period_returns:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeriodReturn'
+        disclaimer:
+          type: string
+          nullable: true
+      required:
+      - boxes
+      - disclaimer
+      - document_in_submitted_return
+      - ledger_type
+      - lifecycle
+      - period
+      - period_returns
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+tags:
+- name: auth
+  description: JWT token i trenutni korisnik
+- name: documents
+  description: Document read model (ADR-0020)
+- name: banking
+  description: Banking operational API (ADR-0021)

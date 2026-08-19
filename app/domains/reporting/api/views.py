@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 from django.http import FileResponse, Http404, HttpResponse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from config.schema_common import (
+    ERROR_400,
+    ERROR_401,
+    ERROR_404,
+    ERROR_410,
+    ERROR_503,
+    ERROR_EXPORT_LIMIT,
+)
 from domains.reporting.api.authentication import DocumentJWTAuthentication
 from domains.reporting.api.permissions import TenantDocumentReadPermission
+from domains.reporting.api.schema import (
+    DOCUMENT_EXPORT_PARAMS,
+    DOCUMENT_LIST_PARAMS,
+    DocumentDetailSerializer,
+    PaginatedDocumentsSerializer,
+)
 from domains.reporting.documents.attachments import (
     ATTACHMENT_CONTENT_UNAVAILABLE,
     is_missing_storage_error,
@@ -48,6 +64,17 @@ def _require_tenant(request):
 
 
 class DocumentListView(_DocumentApiView):
+    @extend_schema(
+        tags=['documents'],
+        operation_id='documents_list',
+        parameters=DOCUMENT_LIST_PARAMS,
+        responses={
+            200: PaginatedDocumentsSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         tenant = _require_tenant(request)
         try:
@@ -58,6 +85,15 @@ class DocumentListView(_DocumentApiView):
 
 
 class DocumentDetailView(_DocumentApiView):
+    @extend_schema(
+        tags=['documents'],
+        operation_id='documents_retrieve',
+        responses={
+            200: DocumentDetailSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request, direction, pk):
         tenant = _require_tenant(request)
         if direction not in ('outgoing', 'incoming'):
@@ -71,6 +107,24 @@ class DocumentExportView(_DocumentApiView):
         renderer = self.renderer_classes[0]()
         return renderer, renderer.media_type
 
+    @extend_schema(
+        tags=['documents'],
+        operation_id='documents_export',
+        parameters=DOCUMENT_EXPORT_PARAMS,
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.BINARY,
+                description=(
+                    'File download. Content-Type is text/csv; charset=utf-8 '
+                    'or application/vnd.openxmlformats-officedocument.spreadsheetml.sheet. '
+                    'Header Content-Disposition: attachment; filename="documents.csv|xlsx"'
+                ),
+            ),
+            400: ERROR_EXPORT_LIMIT,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
     def get(self, request):
         tenant = _require_tenant(request)
         try:
@@ -93,6 +147,23 @@ class DocumentExportView(_DocumentApiView):
 
 
 class DocumentPdfView(_DocumentApiView):
+    @extend_schema(
+        tags=['documents'],
+        operation_id='documents_pdf',
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.BINARY,
+                description=(
+                    'Outgoing invoice PDF. Content-Type: application/pdf. '
+                    'Header Content-Disposition: inline; filename="R-....pdf". '
+                    'Incoming direction returns 404.'
+                ),
+            ),
+            401: ERROR_401,
+            404: ERROR_404,
+            503: ERROR_503,
+        },
+    )
     def get(self, request, direction, pk):
         tenant = _require_tenant(request)
         if direction != 'outgoing':
@@ -116,6 +187,22 @@ class DocumentPdfView(_DocumentApiView):
 
 
 class DocumentAttachmentDownloadView(_DocumentApiView):
+    @extend_schema(
+        tags=['documents'],
+        operation_id='documents_attachment_download',
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.BINARY,
+                description=(
+                    'Attachment bytes. Content-Type from storage. '
+                    'Header Content-Disposition: inline; filename="<sanitized>".'
+                ),
+            ),
+            401: ERROR_401,
+            404: ERROR_404,
+            410: ERROR_410,
+        },
+    )
     def get(self, request, pk, attachment_id):
         tenant = _require_tenant(request)
         attachment = get_expense_attachment(tenant, pk, attachment_id)

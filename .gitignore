@@ -17,6 +17,7 @@ venv/
 # Runtime uploads / collectstatic (HEL1)
 /media/
 /static/
+/openapi.generated.yaml
 
 *.log
 .cursor/

@@ -1,11 +1,18 @@
 from django.conf import settings
-from rest_framework import status
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from config.schema_common import ERROR_401
 from tenants.models import Tenant, TenantMembership
+from tenants.schema import (
+    AuthMeResponseSerializer,
+    TokenObtainRequestSerializer,
+    TokenPairResponseSerializer,
+    TokenRefreshRequestSerializer,
+)
 from tenants.serializers import TurnstileTokenObtainPairSerializer
 
 
@@ -40,14 +47,39 @@ class AuthTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
     serializer_class = TurnstileTokenObtainPairSerializer
 
+    @extend_schema(
+        tags=['auth'],
+        operation_id='auth_token_obtain',
+        request=TokenObtainRequestSerializer,
+        responses={200: TokenPairResponseSerializer, 401: ERROR_401},
+        auth=[],
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
 
 class AuthTokenRefreshView(TokenRefreshView):
     permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=['auth'],
+        operation_id='auth_token_refresh',
+        request=TokenRefreshRequestSerializer,
+        responses={200: TokenPairResponseSerializer, 401: ERROR_401},
+        auth=[],
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
 class AuthMeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['auth'],
+        operation_id='auth_me_retrieve',
+        responses={200: AuthMeResponseSerializer, 401: ERROR_401},
+    )
     def get(self, request):
         user = request.user
 
