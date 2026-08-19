@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError, connection
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from banking.models import (
     BankImportRun,
@@ -247,7 +247,7 @@ class BankImportSyncMigrationTests(TestCase):
         self.assertIn('unique_active_bank_sync_per_connection', constraints)
 
 
-class AuditBankMatchDuplicatesTests(TestCase):
+class AuditBankMatchDuplicatesTests(TransactionTestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_user(username='auditusr', password='test')
@@ -275,6 +275,8 @@ class AuditBankMatchDuplicatesTests(TestCase):
         self.assertIn('Nema duplikata', out.getvalue())
 
     def test_detects_duplicate_matched_payment(self):
+        from django.db import connection
+
         payment = Payment.all_objects.create(
             tenant=self.tenant,
             payment_number='PAY-AUD-1',
@@ -288,20 +290,34 @@ class AuditBankMatchDuplicatesTests(TestCase):
             counterparty_name='X',
             created_by=self.user,
         )
-        for i in range(2):
-            BankTransaction.all_objects.create(
-                tenant=self.tenant,
-                bank_statement=self.statement,
-                transaction_date=date(2026, 8, 1),
-                amount=Decimal('50.00'),
-                transaction_type='credit',
-                description=f'tx-{i}',
-                external_id=f'ext-{i}',
-                match_status='matched',
-                matched_payment=payment,
+        with connection.cursor() as cursor:
+            cursor.execute('DROP INDEX IF EXISTS unique_banktx_matched_payment')
+        try:
+            for i in range(2):
+                BankTransaction.all_objects.create(
+                    tenant=self.tenant,
+                    bank_statement=self.statement,
+                    transaction_date=date(2026, 8, 1),
+                    amount=Decimal('50.00'),
+                    transaction_type='credit',
+                    description=f'tx-{i}',
+                    external_id=f'ext-{i}',
+                    match_status='matched',
+                    matched_payment=payment,
+                )
+            out = StringIO()
+            call_command('audit_bank_match_duplicates', tenant='audit-match-t', stdout=out)
+            text = out.getvalue()
+            self.assertIn('Duplikati matched_payment', text)
+            self.assertIn(f'payment_id={payment.pk}', text)
+        finally:
+            BankTransaction.all_objects.filter(matched_payment=payment).update(
+                matched_payment=None,
+                match_status='unmatched',
             )
-        out = StringIO()
-        call_command('audit_bank_match_duplicates', tenant='audit-match-t', stdout=out)
-        text = out.getvalue()
-        self.assertIn('Duplikati matched_payment', text)
-        self.assertIn(f'payment_id={payment.pk}', text)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'CREATE UNIQUE INDEX IF NOT EXISTS unique_banktx_matched_payment '
+                    'ON banking_banktransaction (matched_payment_id) '
+                    'WHERE matched_payment_id IS NOT NULL'
+                )

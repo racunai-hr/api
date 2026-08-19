@@ -1,11 +1,14 @@
-"""Audit duplicate BankTransaction match targets before 0017 constraints."""
+"""Audit duplicate BankTransaction match targets before/after 0017 constraints."""
 
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count
 
 from banking.models import BankTransaction
+from banking.services.match_duplicates import (
+    duplicate_matched_journal_groups,
+    duplicate_matched_payment_groups,
+)
 
 
 class Command(BaseCommand):
@@ -28,23 +31,8 @@ class Command(BaseCommand):
         if tenant_slug:
             qs = qs.filter(tenant__slug=tenant_slug)
 
-        payment_dupes = (
-            qs.filter(matched_payment_id__isnull=False)
-            .values('matched_payment_id')
-            .annotate(c=Count('id'))
-            .filter(c__gt=1)
-            .order_by('matched_payment_id')
-        )
-        journal_dupes = (
-            qs.filter(matched_journal_entry_id__isnull=False)
-            .values('matched_journal_entry_id')
-            .annotate(c=Count('id'))
-            .filter(c__gt=1)
-            .order_by('matched_journal_entry_id')
-        )
-
-        payment_groups = list(payment_dupes)
-        journal_groups = list(journal_dupes)
+        payment_groups = duplicate_matched_payment_groups(qs)
+        journal_groups = duplicate_matched_journal_groups(qs)
 
         if not payment_groups and not journal_groups:
             self.stdout.write(self.style.SUCCESS('Nema duplikata matched_payment ni matched_journal_entry.'))

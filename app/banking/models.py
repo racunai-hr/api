@@ -148,6 +148,23 @@ class BankTransaction(TenantMixin, models.Model):
                 condition=models.Q(external_id__gt=''),
                 name='unique_external_tx_per_statement',
             ),
+            models.UniqueConstraint(
+                fields=['matched_payment'],
+                condition=models.Q(matched_payment__isnull=False),
+                name='unique_banktx_matched_payment',
+            ),
+            models.UniqueConstraint(
+                fields=['matched_journal_entry'],
+                condition=models.Q(matched_journal_entry__isnull=False),
+                name='unique_banktx_matched_journal',
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(matched_payment__isnull=True)
+                    | models.Q(matched_journal_entry__isnull=True)
+                ),
+                name='banktx_at_most_one_match_target',
+            ),
         ]
 
     def __str__(self):
