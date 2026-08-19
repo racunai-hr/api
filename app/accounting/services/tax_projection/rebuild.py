@@ -190,7 +190,38 @@ def rebuild_vat_ledger(
                 message=f'PDV {month:02d}/{year}: prepare {candidate.status} ({code})',
             )
 
-        run = apply_vat_projection(period, candidate, actor)
+        from accounting.services.tax_projection.adopt import (
+            AMBIGUOUS_LEDGER_ORIGINS,
+            adopt_legacy_projection,
+            period_has_ambiguous_origins,
+            period_needs_legacy_handoff,
+        )
+
+        if period_has_ambiguous_origins(period):
+            logger.warning(
+                'vat_rebuild_ambiguous_origins tenant=%s period_id=%s',
+                tenant.slug,
+                period.pk,
+            )
+            return RebuildResult(
+                outcome=RebuildOutcome.REJECTED,
+                period_id=period.pk,
+                rejection_code=AMBIGUOUS_LEDGER_ORIGINS,
+                run_id=None,
+                created=0,
+                total=VATLedgerEntry.all_objects.filter(vat_period=period).count(),
+                input_fingerprint=candidate.input_fingerprint,
+                output_fingerprint=candidate.output_fingerprint,
+                message=(
+                    f'PDV {month:02d}/{year}: {AMBIGUOUS_LEDGER_ORIGINS} '
+                    '(legacy+engine); refuse apply'
+                ),
+            )
+
+        if period_needs_legacy_handoff(period):
+            run = adopt_legacy_projection(period, candidate, actor)
+        else:
+            run = apply_vat_projection(period, candidate, actor)
         if run.status == VATProjectionRunStatus.APPLIED:
             engine_count = VATLedgerEntry.all_objects.filter(
                 vat_period=period, origin='engine',
