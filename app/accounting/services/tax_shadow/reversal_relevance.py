@@ -1,12 +1,14 @@
 """Reversal tax-relevance assessment for PDV projection adapters.
 
 Adapter facts only: GFK/workflow, account structure, posting marker, legacy
-description. Engine decides outcomes from TaxRelevance / OriginTaxOwner.
+description, and explicit JournalEntry.replaces_entry provenance.
+Engine decides outcomes from TaxRelevance / OriginTaxOwner.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from accounting.models import JournalEntry
 from accounting.services.journal_markers import extract_document_type
@@ -16,6 +18,9 @@ from domains.tax.classification.contracts import OriginTaxOwner, TaxRelevance
 # Cash / bank / AR clearing — payment JE without VAT payable.
 _CLEARING_PREFIXES = ('100', '102', '120')
 _EU_ASSET_PPMV_DUAL = frozenset({'0373'})
+_VAT_OUTPUT_PREFIXES = ('2400',)
+_REVENUE_PREFIXES = ('75', '76')
+_ACTIVE_INVOICE = frozenset({'sent', 'paid', 'overdue'})
 
 
 def tenant_uses_cash_accounting(tenant_id: int) -> bool:
@@ -75,6 +80,98 @@ def _looks_like_ppmv_payment(codes: tuple[str, ...], description: str) -> bool:
     return has_0373 and has_clearing and not other
 
 
+def _issued_base_and_tax(entry: JournalEntry) -> tuple[Decimal, Decimal]:
+    base = Decimal('0.00')
+    tax = Decimal('0.00')
+    for line in entry.lines.select_related('account'):
+        if not line.account_id:
+            continue
+        code = line.account.account_code or ''
+        debit = line.debit_amount or Decimal('0.00')
+        credit = line.credit_amount or Decimal('0.00')
+        if code.startswith(_VAT_OUTPUT_PREFIXES):
+            tax += credit - debit
+        elif code.startswith(_REVENUE_PREFIXES):
+            base += credit - debit
+    return base.quantize(Decimal('0.01')), tax.quantize(Decimal('0.01'))
+
+
+def _same_invoice_gfk(left: JournalEntry, right: JournalEntry) -> bool:
+    return (
+        left.source_content_type_id is not None
+        and left.source_content_type_id == right.source_content_type_id
+        and left.source_object_id is not None
+        and left.source_object_id == right.source_object_id
+    )
+
+
+def _invoice_for(entry: JournalEntry):
+    app_label, model = _gfk_model(entry)
+    if app_label != 'invoices' or model != 'invoice' or not entry.source_object_id:
+        return None
+    from invoices.models import Invoice
+
+    return Invoice.all_objects.filter(tenant_id=entry.tenant_id, pk=entry.source_object_id).first()
+
+
+def _has_corrective_invoice_document(invoice) -> bool:
+    """No credit-note model yet; cancelled/void statuses are corrective lifecycle."""
+    if invoice is None:
+        return True
+    return invoice.status in {'cancelled', 'void', 'credit_note', 'corrected'}
+
+
+def _posted_invoice_issued_siblings(original: JournalEntry, *, exclude_pks: set[int]) -> list[JournalEntry]:
+    if not original.source_content_type_id or not original.source_object_id:
+        return []
+    siblings = []
+    qs = JournalEntry.all_objects.filter(
+        tenant_id=original.tenant_id,
+        source_content_type_id=original.source_content_type_id,
+        source_object_id=original.source_object_id,
+        status='posted',
+        reversed_entry__isnull=True,
+    ).exclude(pk__in=exclude_pks)
+    for entry in qs:
+        if extract_document_type(entry.description or '') == 'invoice_issued':
+            siblings.append(entry)
+    return siblings
+
+
+def _technical_repost_replacement(original: JournalEntry) -> JournalEntry | None:
+    """Return the unique valid replacement JE, or None if not a clean technical repost."""
+    replacements = list(
+        JournalEntry.all_objects.filter(
+            tenant_id=original.tenant_id,
+            replaces_entry_id=original.pk,
+        ).select_related('source_content_type')
+    )
+    if len(replacements) != 1:
+        return None
+    replacement = replacements[0]
+    if replacement.status != 'posted' or replacement.reversed_entry_id is not None:
+        return None
+    if extract_document_type(replacement.description or '') != 'invoice_issued':
+        return None
+    if not _same_invoice_gfk(original, replacement):
+        return None
+    invoice = _invoice_for(original)
+    if invoice is None or invoice.status not in _ACTIVE_INVOICE:
+        return None
+    if _has_corrective_invoice_document(invoice):
+        return None
+    base, tax = _issued_base_and_tax(replacement)
+    inv_base = (invoice.subtotal or Decimal('0.00')).quantize(Decimal('0.01'))
+    inv_tax = (invoice.tax_amount or Decimal('0.00')).quantize(Decimal('0.01'))
+    if base != inv_base or tax != inv_tax:
+        return None
+    # Accounting chain must be unambiguous: only the replacement remains as posted issued.
+    others = _posted_invoice_issued_siblings(original, exclude_pks={original.pk, replacement.pk})
+    if others:
+        return None
+    return replacement
+
+
 @dataclass(frozen=True)
 class ReversalRelevanceAssessment:
     tax_relevance: TaxRelevance
@@ -129,11 +226,11 @@ def assess_reversal_relevance(
             return ReversalRelevanceAssessment(TaxRelevance.UNDETERMINED, OriginTaxOwner.NONE)
         return ReversalRelevanceAssessment(TaxRelevance.NOT_TAX_RELEVANT, OriginTaxOwner.NONE)
 
-    # --- invoice_issued without JE-line ledger ownership (e.g. Fine Star JE 36) ---
+    # --- invoice_issued: NTR only with explicit replaces_entry provenance ---
     issued_by_marker = marker == 'invoice_issued'
     if is_invoice and (issued_by_marker or has_pdv_family):
-        # Active invoice supply remains on Invoice CT; JE storno is undetermined
-        # until Gate 0 proves corrective document or technical repost → NTR.
+        if _technical_repost_replacement(original) is not None:
+            return ReversalRelevanceAssessment(TaxRelevance.NOT_TAX_RELEVANT, OriginTaxOwner.NONE)
         return ReversalRelevanceAssessment(TaxRelevance.UNDETERMINED, OriginTaxOwner.INVOICE)
 
     if is_expense and (marker == 'expense_approved' or has_pdv_family):

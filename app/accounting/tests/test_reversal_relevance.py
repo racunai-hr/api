@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
-from accounting.models import JournalEntry, JournalEntryLine, VATPeriod
+from accounting.models import ChartOfAccounts, JournalEntry, JournalEntryLine, VATPeriod
 from accounting.services.chart import provision_tenant_chart
 from accounting.services.rrif_import import import_rrif_chart
 from accounting.services.tax_shadow.adapters import adapt_reversal_entry
@@ -220,3 +220,278 @@ class ReversalRelevanceTests(TestCase):
         assessment = assess_reversal_relevance(entry, effects_present=True, effects_ambiguous=False)
         self.assertEqual(assessment.tax_relevance, TaxRelevance.TAX_RELEVANT)
         self.assertEqual(assessment.origin_tax_owner, OriginTaxOwner.JOURNAL_LINE)
+
+    def test_explicit_replaces_entry_technical_repost_ntr(self):
+        invoice = self._invoice(status='paid')
+        partial = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-partial',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] partial',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('1201'), debit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('7510'), credit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('1201'), debit_amount=Decimal('320.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('24001'), credit_amount=Decimal('320.00'),
+        )
+        reversal = partial.reverse(self.user)
+        replacement = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-full',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] full',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+            replaces_entry=partial,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('1201'), debit_amount=Decimal('2560.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('7510'), credit_amount=Decimal('2560.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('1201'), debit_amount=Decimal('640.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('24001'), credit_amount=Decimal('640.00'),
+        )
+        assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.NOT_TAX_RELEVANT)
+        document = adapt_reversal_entry(reversal, period=self.period)
+        result = classify(document)
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'REV_NOT_TAX_RELEVANT')
+
+    def test_perfect_amounts_without_replaces_entry_still_review(self):
+        invoice = self._invoice(status='paid')
+        partial = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-no-link',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] partial',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('1201'), debit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('7510'), credit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('1201'), debit_amount=Decimal('320.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('24001'), credit_amount=Decimal('320.00'),
+        )
+        JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-full-nolink',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] full',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        # amounts match would require lines; even with sibling present, no replaces_entry → REVIEW
+        assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+
+    def test_two_replaces_links_review(self):
+        invoice = self._invoice(status='paid')
+        partial = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-two',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] partial',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('7510'), credit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('24001'), credit_amount=Decimal('320.00'),
+        )
+        for suffix in ('a', 'b'):
+            repl = JournalEntry.all_objects.create(
+                tenant=self.tenant,
+                entry_number=f'202607-repl-{suffix}',
+                entry_date=date(2026, 7, 3),
+                status='posted',
+                description='[invoice_issued] full',
+                created_by=self.user,
+                source_content_type=self.invoice_ct,
+                source_object_id=invoice.pk,
+                replaces_entry=partial,
+            )
+            JournalEntryLine.objects.create(
+                journal_entry=repl, account=self._account('7510'), credit_amount=Decimal('2560.00'),
+            )
+            JournalEntryLine.objects.create(
+                journal_entry=repl, account=self._account('24001'), credit_amount=Decimal('640.00'),
+            )
+        assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+
+    def test_replacement_later_reversed_review(self):
+        invoice = self._invoice(status='paid')
+        partial = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-revlater',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] partial',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('7510'), credit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('24001'), credit_amount=Decimal('320.00'),
+        )
+        replacement = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-full-rev',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] full',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+            replaces_entry=partial,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('7510'), credit_amount=Decimal('2560.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('24001'), credit_amount=Decimal('640.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('1201'), debit_amount=Decimal('3200.00'),
+        )
+        replacement.reverse(self.user)
+        assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+
+    def test_replaces_wrong_invoice_review(self):
+        invoice_a = self._invoice(status='paid')
+        invoice_b = Invoice.all_objects.create(
+            tenant=self.tenant,
+            company_to=self.partner,
+            issue_date=date(2026, 7, 4),
+            due_date=date(2026, 7, 20),
+            status='paid',
+            invoice_number='2026-T002',
+            subtotal=Decimal('2560.00'),
+            tax_amount=Decimal('640.00'),
+            total_amount=Decimal('3200.00'),
+            created_by=self.user,
+        )
+        partial = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-wronginv',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] partial',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice_a.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('7510'), credit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('24001'), credit_amount=Decimal('320.00'),
+        )
+        replacement = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-full-wrong',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] full',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice_b.pk,
+            replaces_entry=partial,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('7510'), credit_amount=Decimal('2560.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('24001'), credit_amount=Decimal('640.00'),
+        )
+        assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+
+    def test_second_active_issued_je_review(self):
+        invoice = self._invoice(status='paid')
+        partial = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-second',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] partial',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('7510'), credit_amount=Decimal('1280.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=partial, account=self._account('24001'), credit_amount=Decimal('320.00'),
+        )
+        replacement = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-full-second',
+            entry_date=date(2026, 7, 3),
+            status='posted',
+            description='[invoice_issued] full',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+            replaces_entry=partial,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('7510'), credit_amount=Decimal('2560.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('24001'), credit_amount=Decimal('640.00'),
+        )
+        extra = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202607-extra-issued',
+            entry_date=date(2026, 7, 4),
+            status='posted',
+            description='[invoice_issued] extra',
+            created_by=self.user,
+            source_content_type=self.invoice_ct,
+            source_object_id=invoice.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=extra, account=self._account('7510'), credit_amount=Decimal('100.00'),
+        )
+        assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
