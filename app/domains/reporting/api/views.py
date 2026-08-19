@@ -6,7 +6,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from domains.reporting.api.authentication import DocumentJWTAuthentication
 from domains.reporting.api.permissions import TenantDocumentReadPermission
+from domains.reporting.documents.attachments import (
+    ATTACHMENT_CONTENT_UNAVAILABLE,
+    is_missing_storage_error,
+    safe_download_filename,
+)
 from domains.reporting.documents.filters import parse_filters
 from domains.reporting.documents.service import (
     ExportLimitExceeded,
@@ -15,11 +21,17 @@ from domains.reporting.documents.service import (
     get_expense_attachment,
     list_documents,
 )
+from domains.reporting.documents.pdf import (
+    INVOICE_PDF_UNAVAILABLE,
+    InvoicePdfUnavailable,
+    outgoing_pdf_filename,
+    render_outgoing_invoice_pdf,
+)
 from invoices.models import Invoice
-from invoices.views import render_invoice_pdf_bytes
 
 
 class _DocumentApiView(APIView):
+    authentication_classes = [DocumentJWTAuthentication]
     permission_classes = [IsAuthenticated, TenantDocumentReadPermission]
 
     def permission_denied(self, request, message=None, code=None):
@@ -87,15 +99,19 @@ class DocumentPdfView(_DocumentApiView):
             raise Http404()
         invoice = (
             Invoice.all_objects.filter(tenant=tenant, pk=pk)
-            .select_related('responsible_person')
+            .select_related('responsible_person', 'company_to')
+            .prefetch_related('items')
             .first()
         )
         if invoice is None:
             raise Http404()
-        pdf_bytes = render_invoice_pdf_bytes(request, invoice)
+        try:
+            pdf_bytes = render_outgoing_invoice_pdf(request, invoice)
+        except InvoicePdfUnavailable:
+            return Response(INVOICE_PDF_UNAVAILABLE, status=503)
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
-        number = invoice.invoice_number or invoice.pk
-        response['Content-Disposition'] = f'inline; filename="R-{number}.pdf"'
+        filename = outgoing_pdf_filename(invoice)
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
 
@@ -104,6 +120,12 @@ class DocumentAttachmentDownloadView(_DocumentApiView):
         tenant = _require_tenant(request)
         attachment = get_expense_attachment(tenant, pk, attachment_id)
         if not attachment.file:
-            raise Http404()
-        filename = attachment.original_filename or 'attachment.pdf'
-        return FileResponse(attachment.file.open('rb'), as_attachment=False, filename=filename)
+            return Response(ATTACHMENT_CONTENT_UNAVAILABLE, status=410)
+        filename = safe_download_filename(attachment.original_filename)
+        try:
+            handle = attachment.file.open('rb')
+        except OSError as exc:
+            if is_missing_storage_error(exc):
+                return Response(ATTACHMENT_CONTENT_UNAVAILABLE, status=410)
+            raise
+        return FileResponse(handle, as_attachment=False, filename=filename)

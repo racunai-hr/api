@@ -7,8 +7,9 @@ import io
 from datetime import datetime
 
 import xlsxwriter
+from django.conf import settings
 
-from domains.reporting.documents.filters import EXPORT_COLUMNS
+from domains.reporting.documents.filters import EXPORT_COLUMNS, DocumentListFilters, as_of_date
 
 FORMULA_PREFIXES = ('=', '+', '-', '@')
 
@@ -63,3 +64,53 @@ def render_xlsx(rows: list[dict], as_of: datetime) -> bytes:
             sheet.write(row_idx, col, escape_spreadsheet_cell(_cell(row, name)))
     workbook.close()
     return buffer.getvalue()
+
+
+class ExportLimitExceeded(Exception):
+    def __init__(self, limit: int, count: int):
+        self.limit = limit
+        self.count = count
+        super().__init__(f'Izvoz prelazi {limit} redaka ({count}).')
+
+
+class DocumentExportService:
+    """Internal reporting export: same filters and UNION ALL builder as the list."""
+
+    CONTENT_TYPES = {
+        'csv': 'text/csv; charset=utf-8',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }
+    FILENAMES = {
+        'csv': 'documents.csv',
+        'xlsx': 'documents.xlsx',
+    }
+
+    def __init__(self, tenant, filters: DocumentListFilters, *, limit: int | None = None):
+        self.tenant = tenant
+        self.filters = filters
+        self.limit = limit if limit is not None else int(
+            getattr(settings, 'DOCUMENT_EXPORT_SYNC_MAX', 10000)
+        )
+
+    def export(self, fmt: str) -> tuple[bytes, str, str]:
+        if fmt not in self.CONTENT_TYPES:
+            raise ValueError('format mora biti csv ili xlsx')
+        from domains.reporting.documents.assemble import documents_from_keys
+        from domains.reporting.documents.query import count_union, materialize_union, union_rows
+        from domains.reporting.documents.relations import load_page_relations
+        from domains.reporting.documents.snapshot import read_snapshot
+
+        with read_snapshot() as as_of:
+            today = as_of_date(as_of)
+            union = union_rows(self.tenant, self.filters, today)
+            total = count_union(union)
+            if total > self.limit:
+                raise ExportLimitExceeded(self.limit, total)
+            keys = [(row['_direction'], row['_doc_id']) for row in materialize_union(union)]
+            rel = load_page_relations(self.tenant, keys)
+            rows = documents_from_keys(self.tenant, keys, rel, today, detail=False)
+            if fmt == 'xlsx':
+                body = render_xlsx(rows, as_of)
+            else:
+                body = render_csv(rows, as_of)
+            return body, self.CONTENT_TYPES[fmt], self.FILENAMES[fmt]

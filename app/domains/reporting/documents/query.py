@@ -343,17 +343,26 @@ def _expense_values(qs):
     )
 
 
+# Canonical list/export order. Applied only on the outer combined queryset.
+UNION_ORDER = ('-_document_date', '_direction', '-_doc_id')
+
+
 def union_rows(tenant, filters: DocumentListFilters, today: date):
-    inv = _invoice_values(filtered_invoices(tenant, filters, today))
-    exp = _expense_values(filtered_expenses(tenant, filters, today))
+    """Database-level UNION ALL. Branch querysets must have no ORDER BY."""
+    inv = _invoice_values(filtered_invoices(tenant, filters, today)).order_by()
+    exp = _expense_values(filtered_expenses(tenant, filters, today)).order_by()
     combined = inv.union(exp, all=True)
-    return combined.order_by('-_document_date', '_direction', '-_doc_id')
+    return combined.order_by(*UNION_ORDER)
+
+
+def materialize_union(union_qs) -> list:
+    """Evaluate the full combined queryset (export). Same SQL as paginated list."""
+    return list(union_qs)
 
 
 def paginate_union(union_qs, page: int, page_size: int):
     offset = (page - 1) * page_size
-    rows = list(union_qs[offset:offset + page_size])
-    return rows
+    return materialize_union(union_qs[offset:offset + page_size])
 
 
 def count_union(union_qs) -> int:

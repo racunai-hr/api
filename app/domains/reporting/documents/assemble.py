@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from domains.reporting.documents.attachments import download_available_field
 from domains.reporting.documents.provenance import provenanced
 from domains.reporting.documents.projection import (
     bank_block,
@@ -134,10 +135,10 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         vat_returns.extend(rel['returns_by_period'].get(period_id, []))
     versions, disclaimer = period_returns_context(vat_returns, rel['events_by_return'])
 
-    disputed = (
-        document.status == 'paid'
-        and (subledger is None or subledger.status != 'closed')
-    )
+    disputed = as4_status in {
+        As4DocumentLink.STATUS_REJECTED,
+        As4DocumentLink.STATUS_FAILED,
+    }
     has_receipt = bool(attachments) or bool(source and source != 'manual')
     if direction == 'outgoing':
         operational = operational_outgoing(
@@ -302,6 +303,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             'original_filename': att.original_filename,
             'created_at': att.created_at.isoformat() if att.created_at else None,
             'uploaded_by': att.uploaded_by.username if att.uploaded_by_id else None,
+            'download_available': download_available_field(att),
         }
         for att in attachments
     ]

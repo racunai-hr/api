@@ -1,8 +1,14 @@
 """Acceptance tests for ADR-0020 document read model."""
 
+import csv
+import io
+import os
+import zipfile
+import xml.etree.ElementTree as ET
 from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -33,7 +39,15 @@ from accounting.models import (
 from accounting.services.chart import provision_tenant_chart
 from accounting.services.rrif_import import import_rrif_chart
 from domains.reporting.documents.export import escape_spreadsheet_cell
-from domains.reporting.documents.projection import collect_controls, vat_amount_check
+from domains.reporting.documents.filters import parse_filters
+from domains.reporting.documents.pdf import INVOICE_PDF_UNAVAILABLE
+from domains.reporting.documents.query import materialize_union, union_rows
+from domains.reporting.documents.projection import (
+    collect_controls,
+    operational_incoming,
+    operational_outgoing,
+    vat_amount_check,
+)
 from expenses.models import Expense, ExpenseAttachment, ExpenseCategory
 from invoices.models import Invoice, InvoiceItem
 from partners.models import Partner, PartnerBankAccount
@@ -107,6 +121,7 @@ class DocumentReadModelTests(TestCase):
         return client
 
     def _invoice(self, **overrides):
+        with_item = overrides.pop('with_item', True)
         defaults = {
             'tenant': self.tenant,
             'company_to': self.partner,
@@ -121,13 +136,14 @@ class DocumentReadModelTests(TestCase):
         }
         defaults.update(overrides)
         invoice = Invoice.all_objects.create(**defaults)
-        InvoiceItem.objects.create(
-            invoice=invoice,
-            item_name='Usluga',
-            quantity=1,
-            unit_price=Decimal('100.00'),
-            tax_rate=Decimal('25.00'),
-        )
+        if with_item:
+            InvoiceItem.objects.create(
+                invoice=invoice,
+                item_name='Usluga',
+                quantity=1,
+                unit_price=Decimal('100.00'),
+                tax_rate=Decimal('25.00'),
+            )
         return invoice
 
     def _expense(self, **overrides):
@@ -222,6 +238,17 @@ class DocumentReadModelTests(TestCase):
             entry_category=category,
         )
 
+    def test_anonymous_list_returns_401_bearer(self):
+        client = APIClient()
+        client.defaults['HTTP_HOST'] = HOST
+        response = client.get('/api/documents/')
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response['WWW-Authenticate'], 'Bearer')
+        self.assertEqual(
+            response.json(),
+            {'detail': 'Authentication credentials were not provided.'},
+        )
+
     def test_paid_document_open_subledger_is_not_paid(self):
         invoice = self._invoice(status='paid')
         self._subledger(invoice, status='open')
@@ -233,7 +260,73 @@ class DocumentReadModelTests(TestCase):
         self.assertNotEqual(body['subledger']['state']['value'], 'closed')
         self.assertNotEqual(body['subledger']['state']['value'], 'paid')
         self.assertIn('paid_status_subledger_open', body['controls'])
+        self.assertNotIn('paid_status_subledger_missing', body['controls'])
         self.assertNotEqual(body['operational_status']['value'], 'paid')
+
+    def test_paid_document_missing_subledger_is_not_provable(self):
+        invoice = self._invoice(status='paid')
+        body = self._auth_client().get(f'/api/documents/outgoing/{invoice.pk}/').json()
+        self.assertEqual(body['document_status']['value'], 'paid')
+        self.assertIsNone(body['subledger']['state']['value'])
+        self.assertEqual(body['subledger']['state']['reason'], 'not_recorded')
+        self.assertIsNone(body['operational_status']['value'])
+        self.assertEqual(body['operational_status']['reason'], 'not_provable')
+        self.assertIn('paid_status_subledger_missing', body['controls'])
+        self.assertNotIn('paid_status_subledger_open', body['controls'])
+        alerts, _ = collect_controls({
+            'document': invoice,
+            'direction': 'outgoing',
+            'partner': self.partner,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 19),
+            'bank_matched': True,
+            'payments': [SimpleNamespace(payment_method='bank_transfer')],
+            'has_pdf_xml': True,
+            'items': list(invoice.items.all()),
+        })
+        self.assertIn('paid_status_subledger_missing', alerts)
+        self.assertNotIn('paid_status_subledger_open', alerts)
+        operational = operational_outgoing(
+            document=invoice,
+            subledger=None,
+            as4_status=None,
+            as_of_day=date(2026, 8, 19),
+        )
+        self.assertIsNone(operational['value'])
+        self.assertEqual(operational['reason'], 'not_provable')
+
+    def test_incoming_paid_missing_subledger_is_not_disputed(self):
+        expense = self._expense(status='paid')
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['document_status']['value'], 'paid')
+        self.assertIsNone(body['subledger']['state']['value'])
+        self.assertEqual(body['subledger']['state']['reason'], 'not_recorded')
+        self.assertIsNone(body['operational_status']['value'])
+        self.assertEqual(body['operational_status']['reason'], 'not_provable')
+        self.assertIsNone(body['operational_status']['source'])
+        self.assertNotEqual(body['operational_status']['value'], 'disputed')
+        self.assertNotEqual(body['operational_status']['value'], 'paid')
+        self.assertIn('paid_status_subledger_missing', body['controls'])
+        self.assertNotIn('paid_status_subledger_open', body['controls'])
+        mismatch = operational_incoming(
+            document=expense,
+            subledger=None,
+            disputed=False,
+            as_of_day=date(2026, 8, 19),
+            has_receipt_evidence=False,
+        )
+        self.assertIsNone(mismatch['value'])
+        self.assertEqual(mismatch['reason'], 'not_provable')
+        explicit = operational_incoming(
+            document=expense,
+            subledger=None,
+            disputed=True,
+            as_of_day=date(2026, 8, 19),
+            has_receipt_evidence=False,
+        )
+        self.assertEqual(explicit['value'], 'disputed')
+        self.assertEqual(explicit['source'], 'as4_document_link')
 
     def test_closed_subledger_with_allocation_no_bank_alarm(self):
         invoice = self._invoice(status='sent')
@@ -425,13 +518,230 @@ class DocumentReadModelTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(client.get(f'/api/documents/outgoing/{invoice.pk}/').status_code, 200)
 
-    def test_foreign_attachment_404(self):
+    def _assert_safe_pdf(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertTrue(response.content.startswith(b'%PDF-'))
+        disposition = response['Content-Disposition']
+        self.assertIn('filename', disposition.lower())
+        self.assertNotIn('/', disposition)
+        self.assertNotIn('\\', disposition)
+        self.assertNotIn('\r', disposition)
+        self.assertNotIn('\n', disposition)
+
+    def test_outgoing_pdf_valid_invoice_is_pdf(self):
+        invoice = self._invoice()
+        response = self._auth_client().get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+        self._assert_safe_pdf(response)
+        self.assertIn(f'R-{invoice.invoice_number}.pdf', response['Content-Disposition'])
+
+    def test_outgoing_pdf_viewer_can_download(self):
+        invoice = self._invoice()
+        membership = TenantMembership.objects.get(user=self.user, tenant=self.tenant)
+        self.assertEqual(membership.role, 'viewer')
+        response = self._auth_client().get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+        self._assert_safe_pdf(response)
+
+    def test_outgoing_pdf_foreign_tenant_or_id_is_404(self):
+        invoice = self._invoice()
+        other_invoice = Invoice.all_objects.create(
+            tenant=self.other,
+            company_to=self.other_partner,
+            invoice_number='PDF-X-1',
+            issue_date=date(2026, 5, 1),
+            due_date=date(2026, 5, 10),
+            status='sent',
+            created_by=self.user,
+        )
+        client = self._auth_client()
+        self.assertEqual(client.get(f'/api/documents/outgoing/{other_invoice.pk}/pdf/').status_code, 404)
+        self.assertEqual(client.get(f'/api/documents/outgoing/{invoice.pk + 99999}/pdf/').status_code, 404)
+        expense = self._expense()
+        self.assertEqual(client.get(f'/api/documents/incoming/{expense.pk}/pdf/').status_code, 404)
+        outsider = self._auth_client(self.outsider, host=OTHER_HOST)
+        TenantMembership.objects.create(user=self.outsider, tenant=self.other, role='viewer')
+        self.assertEqual(
+            outsider.get(f'/api/documents/outgoing/{invoice.pk}/pdf/').status_code,
+            404,
+        )
+
+    def test_outgoing_pdf_draft_cancelled_incomplete_still_generate(self):
+        """On-demand preview, same Admin renderer; no numbering or status write."""
+        draft = self._invoice(status='draft', invoice_number='DRAFT-PREVIEW')
+        cancelled = self._invoice(status='cancelled')
+        incomplete = self._invoice(
+            status='draft',
+            invoice_number='',
+            with_item=False,
+            subtotal=Decimal('0.00'),
+            tax_amount=Decimal('0.00'),
+            total_amount=Decimal('0.00'),
+        )
+        client = self._auth_client()
+        for invoice in (draft, cancelled, incomplete):
+            before = (
+                invoice.status,
+                invoice.invoice_number,
+                invoice.updated_at,
+                invoice.total_amount,
+            )
+            response = client.get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+            self._assert_safe_pdf(response)
+            invoice.refresh_from_db()
+            self.assertEqual(
+                (invoice.status, invoice.invoice_number, invoice.updated_at, invoice.total_amount),
+                before,
+            )
+        self.assertEqual(draft.items.count(), 1)
+        self.assertEqual(incomplete.items.count(), 0)
+
+    def test_outgoing_pdf_renderer_failure_is_controlled_json(self):
+        invoice = self._invoice()
+        client = self._auth_client()
+        cases = (
+            patch(
+                'invoices.services.pdf.render_invoice_pdf_bytes',
+                side_effect=RuntimeError('disk /secret/path'),
+            ),
+            patch('invoices.services.pdf.render_invoice_pdf_bytes', return_value=b'not-a-pdf'),
+            patch('invoices.services.pdf.render_invoice_pdf_bytes', new=None),
+        )
+        for mocked in cases:
+            with mocked:
+                response = client.get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+            self.assertEqual(response.status_code, 503)
+            self.assertIn('application/json', response['Content-Type'])
+            self.assertEqual(response.json(), INVOICE_PDF_UNAVAILABLE)
+            raw = response.content.decode()
+            self.assertNotIn('<html', raw.lower())
+            self.assertNotIn('Traceback', raw)
+            self.assertNotIn('/secret/path', raw)
+            self.assertNotIn('RuntimeError', raw)
+
+    def test_outgoing_pdf_filename_strips_path_and_crlf(self):
+        invoice = self._invoice(invoice_number='../dir/evil\r\n2026-0099')
+        response = self._auth_client().get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+        self._assert_safe_pdf(response)
+        self.assertIn('filename="R-evil2026-0099.pdf"', response['Content-Disposition'])
+
+    def test_outgoing_pdf_repeat_download_does_not_mutate(self):
+        invoice = self._invoice()
+        invoices_before = Invoice.all_objects.filter(tenant=self.tenant).count()
+        items_before = InvoiceItem.objects.filter(invoice=invoice).count()
+        snapshot = (
+            invoice.status,
+            invoice.invoice_number,
+            invoice.updated_at,
+            invoice.subtotal,
+            invoice.tax_amount,
+            invoice.total_amount,
+        )
+        client = self._auth_client()
+        first = client.get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+        second = client.get(f'/api/documents/outgoing/{invoice.pk}/pdf/')
+        self._assert_safe_pdf(first)
+        self._assert_safe_pdf(second)
+        invoice.refresh_from_db()
+        self.assertEqual(
+            (
+                invoice.status,
+                invoice.invoice_number,
+                invoice.updated_at,
+                invoice.subtotal,
+                invoice.tax_amount,
+                invoice.total_amount,
+            ),
+            snapshot,
+        )
+        self.assertEqual(Invoice.all_objects.filter(tenant=self.tenant).count(), invoices_before)
+        self.assertEqual(InvoiceItem.objects.filter(invoice=invoice).count(), items_before)
+
+    def test_existing_attachment_blob_downloads(self):
+        expense = self._expense()
+        payload = b'%PDF-1.4 minimal'
+        attachment = ExpenseAttachment.all_objects.create(
+            tenant=self.tenant,
+            expense=expense,
+            uploaded_by=self.user,
+            original_filename='../../dir/invoice.pdf\r\n',
+            file=SimpleUploadedFile('invoice.pdf', payload, content_type='application/pdf'),
+        )
+        client = self._auth_client()
+        response = client.get(
+            f'/api/documents/incoming/{expense.pk}/attachments/{attachment.pk}/',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('json', (response['Content-Type'] or '').lower())
+        disposition = response['Content-Disposition']
+        self.assertIn('filename', disposition.lower())
+        self.assertNotIn('/', disposition)
+        self.assertNotIn('\\', disposition)
+        self.assertNotIn('\r', disposition)
+        self.assertNotIn('\n', disposition)
+        self.assertNotIn('..', disposition)
+        self.assertIn('invoice.pdf', disposition)
+        self.assertEqual(b''.join(response.streaming_content), payload)
+        detail = client.get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(
+            detail['attachments'][0]['download_available'],
+            {'value': True, 'reason': None, 'source': 'storage'},
+        )
+
+    def test_missing_attachment_blob_is_410(self):
         expense = self._expense()
         attachment = ExpenseAttachment.all_objects.create(
             tenant=self.tenant,
             expense=expense,
             uploaded_by=self.user,
             file=_minimal_pdf(),
+        )
+        stored_path = attachment.file.path
+        os.remove(stored_path)
+        self.assertTrue(ExpenseAttachment.all_objects.filter(pk=attachment.pk).exists())
+        client = self._auth_client()
+        response = client.get(
+            f'/api/documents/incoming/{expense.pk}/attachments/{attachment.pk}/',
+        )
+        self.assertEqual(response.status_code, 410)
+        self.assertIn('application/json', response['Content-Type'])
+        self.assertEqual(
+            response.json(),
+            {
+                'code': 'attachment_content_unavailable',
+                'detail': 'Attachment content is unavailable.',
+            },
+        )
+        raw = response.content.decode()
+        self.assertNotIn(stored_path, raw)
+        self.assertNotIn('FileNotFoundError', raw)
+        self.assertNotIn('<html', raw.lower())
+        detail = client.get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(
+            detail['attachments'][0]['download_available'],
+            {'value': False, 'reason': 'not_recorded', 'source': 'storage'},
+        )
+
+    def test_foreign_attachment_404(self):
+        expense = self._expense()
+        other_expense = self._expense()
+        attachment = ExpenseAttachment.all_objects.create(
+            tenant=self.tenant,
+            expense=expense,
+            uploaded_by=self.user,
+            file=_minimal_pdf(),
+        )
+        client = self._auth_client()
+        self.assertEqual(
+            client.get(
+                f'/api/documents/incoming/{expense.pk}/attachments/{attachment.pk + 999}/',
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            client.get(
+                f'/api/documents/incoming/{other_expense.pk}/attachments/{attachment.pk}/',
+            ).status_code,
+            404,
         )
         outsider = self._auth_client(self.outsider, host=OTHER_HOST)
         TenantMembership.objects.create(user=self.outsider, tenant=self.other, role='viewer')
@@ -452,6 +762,102 @@ class DocumentReadModelTests(TestCase):
         self.assertEqual(escape_spreadsheet_cell('+x'), "'+x")
         self.assertEqual(escape_spreadsheet_cell('-x'), "'-x")
         self.assertEqual(escape_spreadsheet_cell('@x'), "'@x")
+
+    def _export_id_order_from_csv(self, content: bytes) -> list[tuple[str, int]]:
+        rows = list(csv.reader(io.StringIO(content.decode('utf-8-sig'))))
+        header = rows[1]
+        data = rows[2:]
+        direction = header.index('direction')
+        doc_id = header.index('id')
+        return [(row[direction], int(row[doc_id])) for row in data]
+
+    def _export_id_order_from_xlsx(self, content: bytes) -> list[tuple[str, int]]:
+        ns = {'m': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            shared = []
+            if 'xl/sharedStrings.xml' in archive.namelist():
+                root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+                for item in root.findall('m:si', ns):
+                    shared.append(''.join(
+                        node.text or ''
+                        for node in item.iter('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t')
+                    ))
+            sheet = ET.fromstring(archive.read('xl/worksheets/sheet1.xml'))
+
+            def cell_value(cell):
+                value = cell.find('m:v', ns)
+                if cell.get('t') == 's' and value is not None:
+                    return shared[int(value.text)]
+                if value is not None:
+                    return value.text or ''
+                inline = cell.find('m:is', ns)
+                if inline is None:
+                    return ''
+                return ''.join(
+                    node.text or ''
+                    for node in inline.iter('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t')
+                )
+
+            parsed = []
+            for row in sheet.findall('m:sheetData/m:row', ns):
+                parsed.append([cell_value(cell) for cell in row.findall('m:c', ns)])
+        header = parsed[1]
+        direction = header.index('direction')
+        doc_id = header.index('id')
+        return [(row[direction], int(row[doc_id])) for row in parsed[2:]]
+
+    def test_union_and_exports_materialize_full_combined_queryset(self):
+        first = self._invoice(invoice_number='2026-0101', issue_date=date(2026, 6, 1))
+        second = self._invoice(invoice_number='2026-0102', issue_date=date(2026, 5, 15))
+        incoming = self._expense(expense_date=date(2026, 6, 1))
+        filters = parse_filters({'direction': None})
+        union = union_rows(self.tenant, filters, date(2026, 8, 19))
+        materialized = materialize_union(union)
+        self.assertGreaterEqual(len(materialized), 3)
+        keys = [(row['_direction'], row['_doc_id']) for row in materialized]
+        self.assertEqual(len(keys), len(set(keys)))
+        client = self._auth_client()
+        csv_response = client.get('/api/documents/export/?format=csv')
+        xlsx_response = client.get('/api/documents/export/?format=xlsx')
+        self.assertEqual(csv_response.status_code, 200)
+        self.assertEqual(xlsx_response.status_code, 200)
+        self.assertIn('text/csv', csv_response['Content-Type'])
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            xlsx_response['Content-Type'],
+        )
+        csv_ids = self._export_id_order_from_csv(csv_response.content)
+        xlsx_ids = self._export_id_order_from_xlsx(xlsx_response.content)
+        self.assertEqual(csv_ids, keys)
+        self.assertEqual(xlsx_ids, keys)
+        self.assertIn(('outgoing', first.pk), csv_ids)
+        self.assertIn(('outgoing', second.pk), csv_ids)
+        self.assertIn(('incoming', incoming.pk), csv_ids)
+
+    def test_list_csv_xlsx_parity_same_set_and_order(self):
+        self._invoice(invoice_number='2026-0201', issue_date=date(2026, 6, 2))
+        self._invoice(invoice_number='2026-0202', issue_date=date(2026, 5, 10))
+        self._expense(expense_date=date(2026, 6, 2))
+        self._expense(expense_date=date(2026, 5, 10))
+        client = self._auth_client()
+        listed = []
+        page = 1
+        while True:
+            body = client.get(f'/api/documents/?page={page}&page_size=2').json()
+            listed.extend((row['direction'], row['id']) for row in body['results'])
+            if page * 2 >= body['count']:
+                break
+            page += 1
+        csv_ids = self._export_id_order_from_csv(
+            client.get('/api/documents/export/?format=csv').content,
+        )
+        xlsx_ids = self._export_id_order_from_xlsx(
+            client.get('/api/documents/export/?format=xlsx').content,
+        )
+        self.assertEqual(listed, csv_ids)
+        self.assertEqual(listed, xlsx_ids)
+        self.assertEqual(set(listed), set(csv_ids))
+        self.assertGreaterEqual(len(listed), 4)
 
     def test_query_count_does_not_scale_with_page_size(self):
         for i in range(12):

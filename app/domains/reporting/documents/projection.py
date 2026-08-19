@@ -195,19 +195,37 @@ def payment_order_block(order) -> dict:
     }
 
 
+def _subledger_settled(subledger) -> bool:
+    """Paid is provable only from a subledger that is closed or has no open amount."""
+    if subledger is None or subledger.status == 'cancelled':
+        return False
+    if subledger.status == 'closed':
+        return True
+    return subledger.open_amount is not None and subledger.open_amount <= MONEY_TOLERANCE
+
+
+def _subledger_openish(subledger) -> bool:
+    return (
+        subledger is not None
+        and subledger.status in ('open', 'partial')
+        and subledger.open_amount is not None
+        and subledger.open_amount > MONEY_TOLERANCE
+    )
+
+
 def operational_outgoing(*, document, subledger, as4_status: str | None, as_of_day: date) -> dict:
     if document.status == 'cancelled':
         return provenanced('cancelled', source='document_read_model')
     if as4_status in {As4DocumentLink.STATUS_REJECTED, As4DocumentLink.STATUS_FAILED}:
         return provenanced('eracun_rejected', source='document_read_model')
-    if subledger is not None and subledger.status == 'closed':
-        return provenanced('paid', source='document_read_model')
+    if _subledger_settled(subledger):
+        return provenanced('paid', source='subledger_item')
     if subledger is not None and subledger.status == 'partial':
         return provenanced('partially_paid', source='document_read_model')
-    open_amount = subledger.open_amount if subledger is not None else None
-    still_open = (
-        (subledger is not None and subledger.status in ('open', 'partial') and open_amount > 0)
-        or (subledger is None and document.status not in ('paid', 'cancelled'))
+    if document.status == 'paid' and subledger is None:
+        return provenanced(None, reason='not_provable')
+    still_open = _subledger_openish(subledger) or (
+        subledger is None and document.status not in ('paid', 'cancelled')
     )
     if still_open and document.due_date and document.due_date < as_of_day:
         return provenanced('overdue', source='document_read_model')
@@ -221,6 +239,8 @@ def operational_outgoing(*, document, subledger, as4_status: str | None, as_of_d
         return provenanced('issued', source='document_read_model')
     if document.status == 'draft':
         return provenanced('draft', source='document_read_model')
+    if document.status == 'paid':
+        return provenanced(None, reason='not_provable')
     return provenanced(document.status, source='document_status')
 
 
@@ -235,12 +255,14 @@ def operational_incoming(
     if document.status == 'rejected':
         return provenanced('rejected', source='document_read_model')
     if disputed:
-        return provenanced('disputed', source='document_read_model')
-    if subledger is not None and subledger.status == 'closed':
-        return provenanced('paid', source='document_read_model')
+        return provenanced('disputed', source='as4_document_link')
+    if _subledger_settled(subledger):
+        return provenanced('paid', source='subledger_item')
     if subledger is not None and subledger.status == 'partial':
         return provenanced('partially_paid', source='document_read_model')
-    openish = subledger is not None and subledger.status in ('open', 'partial') and subledger.open_amount > 0
+    if document.status == 'paid' and subledger is None:
+        return provenanced(None, reason='not_provable')
+    openish = _subledger_openish(subledger)
     if openish and document.due_date and document.due_date < as_of_day:
         return provenanced('overdue', source='document_read_model')
     if document.status == 'approved' and openish:
@@ -253,6 +275,8 @@ def operational_incoming(
         return provenanced('received', source='document_read_model')
     if document.status == 'draft':
         return provenanced('draft', source='document_read_model')
+    if document.status == 'paid':
+        return provenanced(None, reason='not_provable')
     return provenanced(document.status, source='document_status')
 
 
@@ -323,11 +347,16 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
         if abs(debit - credit) > MONEY_TOLERANCE:
             alerts.append('journal_unbalanced')
 
-    openish = subledger is not None and subledger.status in ('open', 'partial') and subledger.open_amount > 0
+    openish = _subledger_openish(subledger)
     if openish and document.due_date and document.due_date < as_of_day:
         alerts.append('overdue_unpaid')
-    if document.status == 'paid' and (subledger is None or subledger.status != 'closed'):
-        alerts.append('paid_status_subledger_open')
+    if document.status == 'paid':
+        if subledger is None:
+            alerts.append('paid_status_subledger_missing')
+        elif subledger.status in ('open', 'partial') and (
+            subledger.open_amount is not None and subledger.open_amount > MONEY_TOLERANCE
+        ):
+            alerts.append('paid_status_subledger_open')
 
     if subledger is not None and subledger.status == 'closed':
         if not has_settlement_evidence(

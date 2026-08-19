@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Sum
 from django.http import Http404
@@ -14,7 +13,7 @@ from expenses.models import Expense, ExpenseAttachment
 from invoices.models import Invoice
 
 from domains.reporting.documents.assemble import documents_from_keys
-from domains.reporting.documents.export import render_csv, render_xlsx
+from domains.reporting.documents.export import DocumentExportService, ExportLimitExceeded
 from domains.reporting.documents.filters import DocumentListFilters, as_of_date
 from domains.reporting.documents.query import (
     count_union,
@@ -25,13 +24,6 @@ from domains.reporting.documents.query import (
 )
 from domains.reporting.documents.relations import load_page_relations
 from domains.reporting.documents.snapshot import isoformat, read_snapshot
-
-
-class ExportLimitExceeded(Exception):
-    def __init__(self, limit: int, count: int):
-        self.limit = limit
-        self.count = count
-        super().__init__(f'Izvoz prelazi {limit} redaka ({count}).')
 
 
 def _keys_from_union_page(page_rows) -> list[tuple[str, int]]:
@@ -138,22 +130,7 @@ def get_document_detail(tenant, direction: str, pk: int) -> dict:
 
 
 def export_documents(tenant, filters: DocumentListFilters, fmt: str) -> tuple[bytes, str, str]:
-    limit = int(getattr(settings, 'DOCUMENT_EXPORT_SYNC_MAX', 10000))
-    with read_snapshot() as as_of:
-        today = as_of_date(as_of)
-        union = union_rows(tenant, filters, today)
-        total = count_union(union)
-        if total > limit:
-            raise ExportLimitExceeded(limit, total)
-        page_rows = list(union)
-        keys = _keys_from_union_page(page_rows)
-        rel = load_page_relations(tenant, keys)
-        results = documents_from_keys(tenant, keys, rel, today, detail=False)
-        if fmt == 'xlsx':
-            body = render_xlsx(results, as_of)
-            return body, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'documents.xlsx'
-        body = render_csv(results, as_of)
-        return body, 'text/csv; charset=utf-8', 'documents.csv'
+    return DocumentExportService(tenant, filters).export(fmt)
 
 
 def get_expense_attachment(tenant, expense_id: int, attachment_id: int) -> ExpenseAttachment:
