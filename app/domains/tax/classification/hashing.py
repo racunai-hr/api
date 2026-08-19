@@ -65,6 +65,8 @@ def hash_tax_input(document: TaxDocumentInput) -> str:
         'originates_from': document.originates_from or '',
         'origin_tax_effects': [_effect(item) for item in document.origin_tax_effects],
         'origin_effects_ambiguous': document.origin_effects_ambiguous,
+        'tax_relevance': document.tax_relevance.value,
+        'origin_tax_owner': document.origin_tax_owner.value,
         'has_linked_journal_entry': document.has_linked_journal_entry,
         'account_code': document.account_code or '',
         'debit_amount': _dec(document.debit_amount),

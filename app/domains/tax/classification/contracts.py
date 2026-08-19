@@ -34,6 +34,19 @@ class PartnerProvenance(StrEnum):
     LEDGER_RECONSTRUCTION = 'ledger_reconstruction'
 
 
+class TaxRelevance(StrEnum):
+    TAX_RELEVANT = 'TAX_RELEVANT'
+    NOT_TAX_RELEVANT = 'NOT_TAX_RELEVANT'
+    UNDETERMINED = 'UNDETERMINED'
+
+
+class OriginTaxOwner(StrEnum):
+    INVOICE = 'INVOICE'
+    EXPENSE = 'EXPENSE'
+    JOURNAL_LINE = 'JOURNAL_LINE'
+    NONE = 'NONE'
+
+
 class ClassifiedWithoutRowsError(RuntimeError):
     """CLASSIFIED must carry at least one proposed ledger row."""
 
@@ -109,6 +122,8 @@ class TaxDocumentInput:
     originates_from: str | None
     origin_tax_effects: tuple[OriginTaxEffect, ...]
     origin_effects_ambiguous: bool
+    tax_relevance: TaxRelevance
+    origin_tax_owner: OriginTaxOwner
     has_linked_journal_entry: bool
     account_code: str | None
     debit_amount: Decimal

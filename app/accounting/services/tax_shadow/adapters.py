@@ -10,13 +10,16 @@ from django.contrib.contenttypes.models import ContentType
 from accounting.models import JournalEntry, JournalEntryLine, VATLedgerEntry, VATPeriod
 from accounting.services.tax_forms.pdv.mapping import partner_eu_vat_id
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
+from accounting.services.tax_shadow.reversal_relevance import assess_reversal_relevance
 from domains.tax.classification.contracts import (
     Direction,
     EventKind,
     OriginTaxEffect,
+    OriginTaxOwner,
     PartnerProvenance,
     PartnerSnapshot,
     TaxDocumentInput,
+    TaxRelevance,
 )
 from domains.tax.classification.hashing import hash_tax_input
 
@@ -68,6 +71,8 @@ def adapt_invoice_item(item, *, period: VATPeriod) -> TaxDocumentInput:
             originates_from=None,
             origin_tax_effects=(),
             origin_effects_ambiguous=False,
+            tax_relevance=TaxRelevance.TAX_RELEVANT,
+            origin_tax_owner=OriginTaxOwner.NONE,
             has_linked_journal_entry=False,
             account_code=None,
             debit_amount=Decimal('0.00'),
@@ -104,6 +109,8 @@ def adapt_invoice_header(invoice, *, period: VATPeriod) -> TaxDocumentInput:
             originates_from=None,
             origin_tax_effects=(),
             origin_effects_ambiguous=False,
+            tax_relevance=TaxRelevance.TAX_RELEVANT,
+            origin_tax_owner=OriginTaxOwner.NONE,
             has_linked_journal_entry=False,
             account_code=None,
             debit_amount=Decimal('0.00'),
@@ -148,6 +155,8 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
             originates_from=None,
             origin_tax_effects=(),
             origin_effects_ambiguous=False,
+            tax_relevance=TaxRelevance.TAX_RELEVANT,
+            origin_tax_owner=OriginTaxOwner.NONE,
             has_linked_journal_entry=has_je,
             account_code=None,
             debit_amount=Decimal('0.00'),
@@ -223,10 +232,23 @@ def adapt_journal_line(line: JournalEntryLine, *, period: VATPeriod) -> TaxDocum
     originates = None
     effects: tuple[OriginTaxEffect, ...] = ()
     ambiguous = False
+    tax_relevance = TaxRelevance.TAX_RELEVANT
+    origin_tax_owner = OriginTaxOwner.NONE
     if event_kind == EventKind.REVERSAL:
         originates = f'journal_entry:{entry.reversed_entry_id}'
         effects, ambiguous = origin_tax_effects_for_reversal(entry, period=period)
         direction = Direction.CORRECTIVE
+        assessment = assess_reversal_relevance(
+            entry.reversed_entry,
+            effects_present=bool(effects),
+            effects_ambiguous=ambiguous,
+        )
+        tax_relevance = assessment.tax_relevance
+        origin_tax_owner = assessment.origin_tax_owner
+        if tax_relevance != TaxRelevance.TAX_RELEVANT:
+            # Do not invent Invoice CT amount-match / REV_INVERT for undetermined owners.
+            effects = ()
+            ambiguous = False
     return _finalize(
         TaxDocumentInput(
             tenant_id=entry.tenant_id,
@@ -250,6 +272,8 @@ def adapt_journal_line(line: JournalEntryLine, *, period: VATPeriod) -> TaxDocum
             originates_from=originates,
             origin_tax_effects=effects,
             origin_effects_ambiguous=ambiguous,
+            tax_relevance=tax_relevance,
+            origin_tax_owner=origin_tax_owner,
             has_linked_journal_entry=False,
             account_code=line.account.account_code if line.account_id else None,
             debit_amount=line.debit_amount or Decimal('0.00'),

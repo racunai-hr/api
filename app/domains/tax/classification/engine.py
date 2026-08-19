@@ -34,6 +34,7 @@ from domains.tax.classification.contracts import (
     ProposedLedgerRow,
     TaxClassificationResult,
     TaxDocumentInput,
+    TaxRelevance,
 )
 
 _ACTIVE_INVOICE = frozenset({'sent', 'paid', 'overdue'})
@@ -168,10 +169,32 @@ def _classify_reversal(
     document: TaxDocumentInput,
     warnings: list[str],
 ) -> TaxClassificationResult:
+    if document.tax_relevance == TaxRelevance.NOT_TAX_RELEVANT:
+        return _empty(
+            document,
+            Outcome.NOT_TAX_RELEVANT,
+            'reversal_not_tax_relevant',
+            warnings,
+            rule_code='REV_NOT_TAX_RELEVANT',
+        )
+    if document.tax_relevance == TaxRelevance.UNDETERMINED:
+        return _empty(
+            document,
+            Outcome.REVIEW_REQUIRED,
+            'reversal_tax_owner_undetermined',
+            warnings,
+            rule_code='REVERSAL_TAX_OWNER_UNDETERMINED',
+        )
     if not document.originates_from:
         return _empty(document, Outcome.INVALID, 'reversal_missing_origin', warnings)
     if document.origin_effects_ambiguous:
-        return _empty(document, Outcome.REVIEW_REQUIRED, 'reversal_ambiguous_origin', warnings)
+        return _empty(
+            document,
+            Outcome.INVALID,
+            'reversal_ambiguous_origin_effect',
+            warnings,
+            rule_code='REVERSAL_AMBIGUOUS_ORIGIN_EFFECT',
+        )
     if not document.origin_tax_effects:
         return _empty(document, Outcome.INVALID, 'reversal_missing_ledger_evidence', warnings)
 
