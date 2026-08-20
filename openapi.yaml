@@ -668,6 +668,113 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/banking/transactions/{id}/open-item-candidates/:
+    get:
+      operationId: banking_transactions_open_item_candidates
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: q
+        schema:
+          type: string
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenItemCandidateList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/transactions/{id}/reconcile-open-item/:
+    post:
+      operationId: banking_transactions_reconcile_open_item
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconcileOpenItemRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReconcileOpenItemRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReconcileOpenItemRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
   /api/banking/transactions/{id}/unmatch/:
     post:
       operationId: banking_transactions_unmatch
@@ -742,6 +849,7 @@ paths:
         schema:
           type: string
           enum:
+          - deposit
           - incoming
           - outgoing
       - in: query
@@ -962,6 +1070,7 @@ paths:
         schema:
           type: string
           enum:
+          - deposit
           - incoming
           - outgoing
       - in: query
@@ -1119,6 +1228,393 @@ paths:
               schema:
                 $ref: '#/components/schemas/CodeDetail'
           description: Attachment content unavailable
+  /api/finance/deposits/:
+    get:
+      operationId: finance_deposits_list
+      parameters:
+      - in: query
+        name: partner_id
+        schema:
+          type: integer
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: finance_deposits_create
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepositRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreateDepositRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateDepositRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deposit'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/deposits/{id}/:
+    get:
+      operationId: finance_deposits_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deposit'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/deposits/{id}/cancel/:
+    post:
+      operationId: finance_deposits_cancel
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deposit'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
+  /api/finance/deposits/{id}/post/:
+    post:
+      operationId: finance_deposits_post
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deposit'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
+  /api/finance/deposits/{id}/return/:
+    post:
+      operationId: finance_deposits_return
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnDepositRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReturnDepositRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReturnDepositRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deposit'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
+  /api/finance/deposits/{id}/reverse/:
+    post:
+      operationId: finance_deposits_reverse
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deposit'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
+  /api/finance/expenses/{id}/approve/:
+    post:
+      operationId: finance_expenses_approve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseApproveResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
   /api/finance/partners/{id}/financial-summary/:
     get:
       operationId: finance_partner_financial_summary
@@ -2521,6 +3017,30 @@ components:
           type: boolean
         is_active:
           type: boolean
+    CreateDepositRequest:
+      type: object
+      properties:
+        partner_id:
+          type: integer
+        amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+          minLength: 1
+          default: EUR
+        deposit_date:
+          type: string
+          format: date
+        reference:
+          type: string
+        notes:
+          type: string
+      required:
+      - amount
+      - deposit_date
+      - partner_id
     CreatePartnerFromImportRequest:
       type: object
       properties:
@@ -2529,7 +3049,6 @@ components:
           minLength: 1
         tax_number:
           type: string
-          minLength: 1
         address:
           type: string
           minLength: 1
@@ -2555,7 +3074,6 @@ components:
       - city
       - name
       - postal_code
-      - tax_number
     CurrencySummary:
       type: object
       properties:
@@ -2582,19 +3100,113 @@ components:
       - open_receivables
       - outgoing_count
       - outgoing_gross
+    Deposit:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: string
+        partner_id:
+          type: integer
+        partner_name:
+          type: string
+        direction:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        deposit_date:
+          type: string
+          nullable: true
+        workflow_status:
+          type: string
+        operational_status:
+          type: string
+        open_amount:
+          type: string
+        reference:
+          type: string
+        notes:
+          type: string
+        return_date:
+          type: string
+          nullable: true
+        return_bank_account_id:
+          type: integer
+          nullable: true
+        given_journal_entry_id:
+          type: integer
+          nullable: true
+        return_journal_entry_id:
+          type: integer
+          nullable: true
+        reverse_journal_entry_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - created_at
+      - currency
+      - deposit_date
+      - direction
+      - given_journal_entry_id
+      - id
+      - notes
+      - number
+      - open_amount
+      - operational_status
+      - partner_id
+      - partner_name
+      - reference
+      - return_bank_account_id
+      - return_date
+      - return_journal_entry_id
+      - reverse_journal_entry_id
+      - workflow_status
+    DepositConflict:
+      type: object
+      properties:
+        code:
+          type: string
+        detail:
+          type: string
+      required:
+      - code
+      - detail
+    DepositList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Deposit'
+      required:
+      - count
+      - results
     DirectionEnum:
       enum:
       - incoming
       - outgoing
+      - deposit
       type: string
       description: |-
         * `incoming` - incoming
         * `outgoing` - outgoing
+        * `deposit` - deposit
     DocumentDetail:
       type: object
       properties:
         id:
           type: integer
+        kind:
+          $ref: '#/components/schemas/KindEnum'
         direction:
           $ref: '#/components/schemas/DirectionEnum'
         internal_number:
@@ -2715,6 +3327,7 @@ components:
       - internal_number
       - items
       - journal_lines
+      - kind
       - ledger_entries
       - notes
       - notices
@@ -2793,6 +3406,8 @@ components:
       properties:
         id:
           type: integer
+        kind:
+          $ref: '#/components/schemas/KindEnum'
         direction:
           $ref: '#/components/schemas/DirectionEnum'
         internal_number:
@@ -2856,6 +3471,7 @@ components:
       - fiscal
       - id
       - internal_number
+      - kind
       - notices
       - operational_status
       - partner_name
@@ -2905,6 +3521,44 @@ components:
         detail: {}
       required:
       - detail
+    ExpenseApproveResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        expense_number:
+          type: string
+        status:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        expense_date:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          nullable: true
+        supplier_id:
+          type: integer
+          nullable: true
+        settlement_method:
+          type: string
+        approved_by_id:
+          type: integer
+          nullable: true
+      required:
+      - amount
+      - approved_by_id
+      - currency
+      - due_date
+      - expense_date
+      - expense_number
+      - id
+      - settlement_method
+      - status
+      - supplier_id
     ExportLimitError:
       type: object
       properties:
@@ -3196,6 +3850,16 @@ components:
       - credit
       - debit
       - description
+    KindEnum:
+      enum:
+      - invoice
+      - expense
+      - deposit
+      type: string
+      description: |-
+        * `invoice` - invoice
+        * `expense` - expense
+        * `deposit` - deposit
     LedgerEntry:
       type: object
       properties:
@@ -3242,6 +3906,55 @@ components:
     NullEnum:
       enum:
       - null
+    OpenItemCandidate:
+      type: object
+      properties:
+        item_id:
+          type: integer
+        partner_id:
+          type: integer
+          nullable: true
+        partner_name:
+          type: string
+        direction:
+          type: string
+        source_type:
+          type: string
+        source_id:
+          type: integer
+        source_label:
+          type: string
+        open_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        due_date:
+          type: string
+          nullable: true
+        action_label:
+          type: string
+      required:
+      - action_label
+      - direction
+      - due_date
+      - item_id
+      - open_amount
+      - partner_id
+      - partner_name
+      - source_id
+      - source_label
+      - source_type
+    OpenItemCandidateList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenItemCandidate'
+      required:
+      - count
+      - results
     PaginatedBankAccounts:
       type: object
       properties:
@@ -3892,10 +4605,10 @@ components:
           type: string
         debtor_iban:
           type: string
-          description: Masked IBAN
+          description: IBAN dužnika
         creditor_iban:
           type: string
-          description: Masked IBAN
+          description: IBAN vjerovnika
         creditor_name:
           type: string
         reference:
@@ -4007,6 +4720,27 @@ components:
         * `not_recorded` - not_recorded
         * `not_provable` - not_provable
         * `not_applicable` - not_applicable
+    ReconcileOpenItemRequestRequest:
+      type: object
+      properties:
+        subledger_item_id:
+          type: integer
+      required:
+      - subledger_item_id
+    ReturnDepositRequest:
+      type: object
+      properties:
+        return_bank_account_id:
+          type: integer
+        return_date:
+          type: string
+          format: date
+        amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - return_bank_account_id
     StatementDetail:
       type: object
       properties:

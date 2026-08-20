@@ -52,7 +52,7 @@ def _subledger_source_label(item: SubledgerItem) -> str:
     source = item.source
     if source is None:
         return f'{item.source_content_type.model}#{item.source_object_id}'
-    for attr in ('invoice_number', 'expense_number'):
+    for attr in ('invoice_number', 'expense_number', 'number'):
         value = getattr(source, attr, None)
         if value:
             return str(value)

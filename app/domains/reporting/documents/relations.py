@@ -7,6 +7,7 @@ from collections import defaultdict
 from django.contrib.contenttypes.models import ContentType
 
 from accounting.models import (
+    Deposit,
     JournalEntry,
     JournalEntryLine,
     SubledgerAllocation,
@@ -34,8 +35,10 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     """keys: list of (direction, id). Returns a dict of batched maps."""
     outgoing_ids = [pk for direction, pk in keys if direction == 'outgoing']
     incoming_ids = [pk for direction, pk in keys if direction == 'incoming']
+    deposit_ids = [pk for direction, pk in keys if direction == 'deposit']
     invoice_ct = _ct(Invoice)
     expense_ct = _ct(Expense)
+    deposit_ct = _ct(Deposit)
 
     invoices = {
         inv.pk: inv
@@ -49,6 +52,12 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
             'supplier', 'created_by', 'category',
         )
     }
+    deposits = {
+        dep.pk: dep
+        for dep in Deposit.all_objects.filter(tenant=tenant, pk__in=deposit_ids).select_related(
+            'partner', 'created_by', 'return_bank_account',
+        )
+    }
     items_by_invoice = defaultdict(list)
     for item in InvoiceItem.objects.filter(invoice_id__in=outgoing_ids):
         items_by_invoice[item.invoice_id].append(item)
@@ -57,9 +66,11 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     for att in ExpenseAttachment.all_objects.filter(tenant=tenant, expense_id__in=incoming_ids):
         attachments_by_expense[att.expense_id].append(att)
 
-    partner_ids = {inv.company_to_id for inv in invoices.values()} | {
-        exp.supplier_id for exp in expenses.values()
-    }
+    partner_ids = (
+        {inv.company_to_id for inv in invoices.values()}
+        | {exp.supplier_id for exp in expenses.values()}
+        | {dep.partner_id for dep in deposits.values()}
+    )
     partners = {
         p.pk: p
         for p in Partner.all_objects.filter(tenant=tenant, pk__in=partner_ids)
@@ -76,8 +87,10 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
 
     je_out = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), invoice_ct, outgoing_ids)
     je_in = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), expense_ct, incoming_ids)
+    je_dep = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), deposit_ct, deposit_ids)
     sub_out = _gfk_map(SubledgerItem.all_objects, invoice_ct, outgoing_ids)
     sub_in = _gfk_map(SubledgerItem.all_objects, expense_ct, incoming_ids)
+    sub_dep = _gfk_map(SubledgerItem.all_objects, deposit_ct, deposit_ids)
     vat_out = _gfk_map(
         VATLedgerEntry.all_objects.select_related('vat_period'),
         invoice_ct,
@@ -89,12 +102,20 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         incoming_ids,
     )
 
-    je_ids = [e.pk for rows in list(je_out.values()) + list(je_in.values()) for e in rows]
+    je_ids = [
+        e.pk
+        for rows in list(je_out.values()) + list(je_in.values()) + list(je_dep.values())
+        for e in rows
+    ]
     lines_by_je = defaultdict(list)
     for line in JournalEntryLine.objects.filter(journal_entry_id__in=je_ids).select_related('account'):
         lines_by_je[line.journal_entry_id].append(line)
 
-    sub_ids = [s.pk for rows in list(sub_out.values()) + list(sub_in.values()) for s in rows]
+    sub_ids = [
+        s.pk
+        for rows in list(sub_out.values()) + list(sub_in.values()) + list(sub_dep.values())
+        for s in rows
+    ]
     alloc_by_sub = defaultdict(list)
     for alloc in SubledgerAllocation.all_objects.filter(tenant=tenant, subledger_item_id__in=sub_ids):
         alloc_by_sub[alloc.subledger_item_id].append(alloc)
@@ -162,14 +183,17 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     return {
         'invoices': invoices,
         'expenses': expenses,
+        'deposits': deposits,
         'items_by_invoice': items_by_invoice,
         'attachments_by_expense': attachments_by_expense,
         'partners': partners,
         'ibans_by_partner': ibans_by_partner,
         'je_out': je_out,
         'je_in': je_in,
+        'je_dep': je_dep,
         'sub_out': sub_out,
         'sub_in': sub_in,
+        'sub_dep': sub_dep,
         'vat_out': vat_out,
         'vat_in': vat_in,
         'lines_by_je': lines_by_je,

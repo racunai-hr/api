@@ -86,8 +86,8 @@ def _date(raw: str | None) -> date | None:
 
 def parse_filters(query) -> DocumentListFilters:
     direction = query.get('direction') or None
-    if direction not in (None, 'incoming', 'outgoing'):
-        raise ValueError('direction mora biti incoming ili outgoing')
+    if direction not in (None, 'incoming', 'outgoing', 'deposit'):
+        raise ValueError('direction mora biti incoming, outgoing ili deposit')
     view = query.get('view') or None
     if view and view not in SYSTEM_VIEWS:
         raise ValueError(f'Nepoznat view: {view}')

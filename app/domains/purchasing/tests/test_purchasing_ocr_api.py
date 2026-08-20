@@ -245,6 +245,92 @@ class PurchasingOcrApiTests(TestCase):
         self.assertEqual(unknown.data['code'], 'partner_country_invalid')
         self.assertFalse(Partner.all_objects.filter(tenant=self.tenant, tax_number='27759560625').exists())
 
+    def test_de_supplier_empty_tax_vat_create_and_rematch(self):
+        de_payload = {
+            'supplier': {
+                'name': 'SaM Automobile',
+                'oib': '',
+                'vat_number': 'DE355497142',
+                'address': 'Saegmuehlweg 4',
+                'city': 'Sinsheim',
+                'postal_code': '74889',
+                'country': 'Deutschland',
+                'iban': 'DE02672922000047505100',
+            },
+            'invoice_number': '2026-213',
+            'issue_date': '2026-07-30',
+            'due_date': None,
+            'currency': 'EUR',
+            'net_amount': '33000.00',
+            'tax_amount': '0.00',
+            'total_amount': '33000.00',
+            'iban': 'DE02672922000047505100',
+            'vat_breakdown': [{'rate': '0.00', 'base': '33000.00', 'amount': '0.00'}],
+            'line_items': [
+                {
+                    'description': 'Audi A8 Lang 50 TDI',
+                    'quantity': '1',
+                    'unit_price': '33000.00',
+                    'amount': '33000.00',
+                }
+            ],
+            'warnings': [],
+        }
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=de_payload):
+            first = self._create_import(key='de-sam-1')
+        self.assertEqual(first.status_code, 202, getattr(first, 'data', first.content))
+        self.assertEqual(first.data['status'], 'extracted')
+        self.assertEqual(first.data['partner']['match'], 'missing')
+        self.assertEqual(first.data['extracted']['supplier']['country_code'], 'DE')
+        self.assertEqual(first.data['extracted']['supplier']['vat_number'], 'DE355497142')
+
+        created = self.client.post(
+            f"/api/purchasing/invoices/import/{first.data['id']}/create-partner/",
+            {
+                'name': 'SaM Automobile',
+                'tax_number': '',
+                'vat_number': 'DE355497142',
+                'address': 'Saegmuehlweg 4',
+                'city': 'Sinsheim',
+                'postal_code': '74889',
+                'country_code': 'DE',
+                'iban': 'DE02672922000047505100',
+            },
+            format='json',
+        )
+        self.assertEqual(created.status_code, 200, getattr(created, 'data', created.content))
+        partner = Partner.all_objects.get(tenant=self.tenant, vat_number='DE355497142')
+        self.assertEqual(partner.tax_number, '')
+        self.assertEqual(partner.country_code, 'DE')
+        self.assertEqual(created.data['partner']['match'], 'vat')
+
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=de_payload):
+            second = self._create_import(key='de-sam-2')
+        self.assertEqual(second.status_code, 202)
+        self.assertEqual(second.data['partner']['match'], 'vat')
+        self.assertEqual(second.data['partner']['partner_id'], partner.pk)
+        self.assertEqual(
+            Partner.all_objects.filter(tenant=self.tenant, vat_number='DE355497142').count(),
+            1,
+        )
+
+        confirmed = self.client.post(
+            f"/api/purchasing/invoices/import/{first.data['id']}/confirm/",
+            {},
+            format='json',
+        )
+        self.assertEqual(confirmed.status_code, 200)
+        expense = Expense.all_objects.get(pk=confirmed.data['confirmed_expense_id'])
+        self.assertEqual(expense.status, 'draft')
+        self.assertEqual(expense.amount, Decimal('33000.00'))
+        ct = ContentType.objects.get_for_model(Expense)
+        self.assertFalse(
+            JournalEntry.all_objects.filter(
+                source_content_type=ct,
+                source_object_id=expense.pk,
+            ).exists()
+        )
+
     def test_discard_while_processing_returns_409(self):
         run = IncomingInvoiceImport.all_objects.create(
             tenant=self.tenant,

@@ -85,7 +85,7 @@ class IncomingInvoiceImportSerializer(serializers.Serializer):
 
 class CreatePartnerFromImportSerializer(serializers.Serializer):
     name = serializers.CharField()
-    tax_number = serializers.CharField()
+    tax_number = serializers.CharField(required=False, allow_blank=True)
     address = serializers.CharField()
     city = serializers.CharField()
     postal_code = serializers.CharField()

@@ -405,29 +405,54 @@ def create_partner_from_import(*, tenant, import_id: int, data: dict, user=None)
             country=legacy_country,
         )
         payload['vat_number'] = normalize_vat_number(str(payload.get('vat_number') or ''))
-        oib = str(payload.get('tax_number') or '').strip()
+        payload['tax_number'] = str(payload.get('tax_number') or '').strip()
+        oib = payload['tax_number']
+        vat = payload['vat_number']
+
+        existing = None
+        match_kind = IncomingInvoiceImport.MATCH_EXACT_OIB
         if oib:
             existing = Partner.all_objects.select_for_update().filter(tenant=tenant, tax_number=oib).first()
-            if existing is not None:
-                if existing.partner_type == 'customer':
-                    update_partner(tenant, existing.pk, {'partner_type': 'both'})
-                    existing.refresh_from_db()
-                run.matched_partner = existing
-                run.partner_match = IncomingInvoiceImport.MATCH_EXACT_OIB
-                run.partner_diff = compute_partner_diff(
-                    existing,
-                    supplier_from_payload(run.extracted_payload or {}),
-                )
-                run.save(update_fields=['matched_partner', 'partner_match', 'partner_diff', 'updated_at'])
-                return import_dto(run)
+            match_kind = IncomingInvoiceImport.MATCH_EXACT_OIB
+        if existing is None and vat:
+            existing = (
+                Partner.all_objects.select_for_update()
+                .filter(tenant=tenant, vat_number=vat)
+                .exclude(vat_number='')
+                .first()
+            )
+            match_kind = IncomingInvoiceImport.MATCH_VAT
+        if existing is not None:
+            if existing.partner_type == 'customer':
+                update_partner(tenant, existing.pk, {'partner_type': 'both'})
+                existing.refresh_from_db()
+            run.matched_partner = existing
+            run.partner_match = match_kind
+            run.partner_diff = compute_partner_diff(
+                existing,
+                supplier_from_payload(run.extracted_payload or {}),
+            )
+            run.save(update_fields=['matched_partner', 'partner_match', 'partner_diff', 'updated_at'])
+            return import_dto(run)
         try:
             created = create_partner(tenant, payload, user=user)
-        except (PartnerTaxNumberConflict, PartnerVatNumberConflict):
-            existing = Partner.all_objects.filter(tenant=tenant, tax_number=oib).first()
+        except (PartnerTaxNumberConflict, PartnerVatNumberConflict) as conflict:
+            if isinstance(conflict, PartnerVatNumberConflict) and vat:
+                existing = (
+                    Partner.all_objects.filter(tenant=tenant, vat_number=vat)
+                    .exclude(vat_number='')
+                    .first()
+                )
+                match_kind = IncomingInvoiceImport.MATCH_VAT
+            elif oib:
+                existing = Partner.all_objects.filter(tenant=tenant, tax_number=oib).first()
+                match_kind = IncomingInvoiceImport.MATCH_EXACT_OIB
+            else:
+                existing = None
             if existing is None:
                 raise
             run.matched_partner_id = existing.pk
-            run.partner_match = IncomingInvoiceImport.MATCH_EXACT_OIB
+            run.partner_match = match_kind
             run.partner_diff = compute_partner_diff(
                 existing,
                 supplier_from_payload(run.extracted_payload or {}),
@@ -444,7 +469,9 @@ def create_partner_from_import(*, tenant, import_id: int, data: dict, user=None)
             except (PartnerIbanConflict, ValueError):
                 pass
         run.matched_partner = partner
-        run.partner_match = IncomingInvoiceImport.MATCH_EXACT_OIB
+        run.partner_match = (
+            IncomingInvoiceImport.MATCH_VAT if vat and not oib else IncomingInvoiceImport.MATCH_EXACT_OIB
+        )
         run.partner_diff = compute_partner_diff(
             partner,
             supplier_from_payload(run.extracted_payload or {}),

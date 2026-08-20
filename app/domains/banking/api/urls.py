@@ -12,6 +12,8 @@ from domains.banking.api.views import (
     StatementListView,
     TransactionListView,
     TransactionMatchView,
+    TransactionOpenItemCandidatesView,
+    TransactionReconcileOpenItemView,
     TransactionUnmatchView,
 )
 
@@ -30,6 +32,16 @@ urlpatterns = [
         'banking/transactions/<int:pk>/unmatch/',
         TransactionUnmatchView.as_view(),
         name='banking-transaction-unmatch',
+    ),
+    path(
+        'banking/transactions/<int:pk>/open-item-candidates/',
+        TransactionOpenItemCandidatesView.as_view(),
+        name='banking-transaction-open-item-candidates',
+    ),
+    path(
+        'banking/transactions/<int:pk>/reconcile-open-item/',
+        TransactionReconcileOpenItemView.as_view(),
+        name='banking-transaction-reconcile-open-item',
     ),
     path('banking/payment-orders/', PaymentOrderListView.as_view(), name='banking-payment-orders'),
     path(

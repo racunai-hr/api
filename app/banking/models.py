@@ -314,3 +314,30 @@ class BankSyncRun(TenantMixin, models.Model):
 
     def __str__(self):
         return f'SyncRun #{self.pk} conn={self.connection_id} ({self.status})'
+
+
+class BankReconcileIdempotency(TenantMixin, models.Model):
+    """Idempotency store for reconcile-open-item (ADR-0025)."""
+
+    bank_transaction = models.ForeignKey(
+        BankTransaction,
+        on_delete=models.CASCADE,
+        related_name='reconcile_idempotency_keys',
+    )
+    idempotency_key = models.CharField(max_length=128)
+    subledger_item_id = models.PositiveIntegerField()
+    result_payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Idempotency usklađivanja'
+        verbose_name_plural = 'Idempotency usklađivanja'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'bank_transaction', 'idempotency_key'],
+                name='unique_bank_reconcile_idempotency',
+            ),
+        ]
+
+    def __str__(self):
+        return f'ReconcileIdempotency tx={self.bank_transaction_id} key={self.idempotency_key}'

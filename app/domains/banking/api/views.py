@@ -29,10 +29,12 @@ from domains.banking.api.schema import (
     ImportRunCreateResponseSerializer,
     ImportRunDetailSerializer,
     MatchRequestSerializer,
+    OpenItemCandidateListSerializer,
     PaginatedBankAccountsSerializer,
     PaginatedPaymentOrdersSerializer,
     PaginatedStatementsSerializer,
     PaginatedTransactionsSerializer,
+    ReconcileOpenItemRequestSerializer,
     StatementDetailSerializer,
     SyncEnqueueResponseSerializer,
     SyncStatusSerializer,
@@ -53,6 +55,12 @@ from domains.banking.read.service import (
     list_payment_orders,
     list_statements,
     list_transactions,
+)
+from domains.banking.write.reconcile import (
+    AlreadyReconciled,
+    ReconcileIdempotencyConflict,
+    list_open_item_candidates,
+    reconcile_open_item_api,
 )
 from domains.banking.write.service import (
     match_transaction_api,
@@ -358,6 +366,80 @@ class TransactionUnmatchView(_BankingWriteApiView):
                 user=request.user,
                 transaction_id=pk,
             )
+        except DjangoValidationError as exc:
+            return Response(
+                {'detail': _error_detail(exc)},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class TransactionOpenItemCandidatesView(_BankingReadApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_transactions_open_item_candidates',
+        parameters=[
+            OpenApiParameter('q', str, OpenApiParameter.QUERY, required=False),
+        ],
+        responses={
+            200: OpenItemCandidateListSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, pk):
+        tenant = _require_tenant(request)
+        return Response(
+            list_open_item_candidates(
+                tenant=tenant,
+                transaction_id=pk,
+                q=request.query_params.get('q'),
+            )
+        )
+
+
+class TransactionReconcileOpenItemView(_BankingWriteApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_transactions_reconcile_open_item',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=ReconcileOpenItemRequestSerializer,
+        responses={
+            200: TransactionSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_422,
+        },
+    )
+    def post(self, request, pk):
+        tenant = _require_tenant(request)
+        raw_id = request.data.get('subledger_item_id')
+        try:
+            item_id = int(raw_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': {'subledger_item_id': 'subledger_item_id mora biti cijeli broj.'}},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        idempotency_key = request.headers.get('Idempotency-Key', '')
+        try:
+            payload = reconcile_open_item_api(
+                tenant=tenant,
+                user=request.user,
+                transaction_id=pk,
+                subledger_item_id=item_id,
+                idempotency_key=idempotency_key,
+            )
+        except (AlreadyReconciled, ReconcileIdempotencyConflict, MatchConflict) as exc:
+            return Response({'detail': _error_detail(exc)}, status=status.HTTP_409_CONFLICT)
         except DjangoValidationError as exc:
             return Response(
                 {'detail': _error_detail(exc)},

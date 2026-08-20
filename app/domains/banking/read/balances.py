@@ -22,10 +22,8 @@ def money(value: Decimal | None) -> str:
 
 
 def mask_iban(iban: str | None) -> str:
-    raw = (iban or '').replace(' ', '')
-    if len(raw) <= 8:
-        return raw
-    return f'{raw[:4]}{"*" * (len(raw) - 8)}{raw[-4:]}'
+    """Normalize IBAN for display (full value; no masking)."""
+    return (iban or '').replace(' ', '')
 
 
 def _as_of_from_date(d: date) -> str:

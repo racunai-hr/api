@@ -468,6 +468,70 @@ class DocumentReadModelTests(TestCase):
         })
         self.assertNotIn('iban_mismatch', alerts)
 
+    def test_foreign_partner_with_vat_not_missing_oib(self):
+        eu = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='SaM DE',
+            tax_number='',
+            vat_number='DE355497142',
+            partner_type='supplier',
+            status='active',
+            address='X',
+            city='Sinsheim',
+            postal_code='74889',
+            country_code='DE',
+        )
+        expense = self._expense(supplier=eu, due_date=date(2026, 7, 30), status='draft')
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': eu,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertNotIn('missing_partner_or_oib', alerts)
+        self.assertNotIn('missing_due_date', alerts)
+
+    def test_hr_partner_without_oib_is_missing(self):
+        hr = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='HR bez OIB',
+            tax_number='',
+            vat_number='',
+            partner_type='supplier',
+            status='active',
+            address='X',
+            city='Zagreb',
+            postal_code='10000',
+            country_code='HR',
+        )
+        expense = self._expense(supplier=hr, due_date=date(2026, 7, 30))
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': hr,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertIn('missing_partner_or_oib', alerts)
+
+    def test_missing_due_date_still_alerts(self):
+        expense = self._expense(due_date=None, status='draft')
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertIn('missing_due_date', alerts)
+
     def test_attachment_after_posting_is_notice_not_mismatch(self):
         invoice = self._invoice()
         je = self._journal(invoice)

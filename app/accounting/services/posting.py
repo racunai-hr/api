@@ -283,14 +283,21 @@ def post_invoice_payment(
 
     marker = invoice_payment_marker(payment)
     payment_ct = ContentType.objects.get_for_model(payment)
-    if JournalEntry.all_objects.filter(
-        tenant=tenant,
-        source_content_type=payment_ct,
-        source_object_id=payment.pk,
-        description__startswith=marker,
-        status__in=['draft', 'posted'],
-    ).exists():
-        return None
+    existing = (
+        JournalEntry.all_objects.filter(
+            tenant=tenant,
+            source_content_type=payment_ct,
+            source_object_id=payment.pk,
+            description__startswith=marker,
+            status__in=['draft', 'posted'],
+        )
+        .order_by('id')
+        .first()
+    )
+    if existing is not None:
+        # Heal missing allocation when payment JE already exists (legacy / partial sync).
+        sync_subledger_for_invoice_payment(tenant, invoice, payment, existing)
+        return existing
 
     entry_date = payment.payment_date
     analytic = get_or_create_analytic_for_partner(tenant, partner)
@@ -353,14 +360,21 @@ def post_document(
 
     ct = ContentType.objects.get_for_model(source)
     marker = f"[{document_type}]"
-    if JournalEntry.all_objects.filter(
-        tenant=tenant,
-        source_content_type=ct,
-        source_object_id=source.pk,
-        description__startswith=marker,
-        status__in=['draft', 'posted'],
-    ).exists():
-        return None
+    existing = (
+        JournalEntry.all_objects.filter(
+            tenant=tenant,
+            source_content_type=ct,
+            source_object_id=source.pk,
+            description__startswith=marker,
+            status__in=['draft', 'posted'],
+        )
+        .order_by('id')
+        .first()
+    )
+    if existing is not None:
+        # Heal missing subledger when posting JE already exists (legacy / partial sync).
+        sync_subledger_for_document_posting(tenant, source, document_type, existing)
+        return existing
 
     if entry_date is None:
         entry_date = (

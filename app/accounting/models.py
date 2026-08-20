@@ -1434,3 +1434,112 @@ class SubledgerAllocation(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.amount} → {self.subledger_item_id}'
+
+
+class Deposit(TenantMixin, models.Model):
+    """Dana kaucija/depozit (ADR-0024) — potraživanje prema partneru, bez P&L/PDV."""
+
+    STATUS_DRAFT = 'draft'
+    STATUS_OPEN = 'open'
+    STATUS_RETURNED = 'returned'
+    STATUS_REVERSED = 'reversed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Nacrt'),
+        (STATUS_OPEN, 'Otvoreno'),
+        (STATUS_RETURNED, 'Vraćeno'),
+        (STATUS_REVERSED, 'Stornirano'),
+        (STATUS_CANCELLED, 'Otkazano'),
+    ]
+
+    DIRECTION_GIVEN = 'given'
+    DIRECTION_CHOICES = [
+        (DIRECTION_GIVEN, 'Dana kaucija'),
+    ]
+
+    number = models.CharField(max_length=32, verbose_name='Broj')
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.PROTECT,
+        related_name='deposits',
+        verbose_name='Partner',
+    )
+    direction = models.CharField(
+        max_length=10,
+        choices=DIRECTION_CHOICES,
+        default=DIRECTION_GIVEN,
+        verbose_name='Smjer',
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Iznos',
+    )
+    currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
+    deposit_date = models.DateField(verbose_name='Datum davanja')
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        verbose_name='Workflow status',
+    )
+    reference = models.CharField(max_length=100, blank=True, verbose_name='Referenca')
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+
+    return_date = models.DateField(null=True, blank=True, verbose_name='Datum povrata')
+    return_bank_account = models.ForeignKey(
+        'payments.BankAccount',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='deposit_returns',
+        verbose_name='Račun povrata',
+    )
+
+    given_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deposit_given_for',
+        verbose_name='JE davanja',
+    )
+    return_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deposit_return_for',
+        verbose_name='JE povrata',
+    )
+    reverse_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deposit_reverse_for',
+        verbose_name='JE storna',
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_deposits',
+        verbose_name='Kreirao',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Kaucija / depozit'
+        verbose_name_plural = 'Kaucije / depoziti'
+        ordering = ['-deposit_date', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'number'], name='unique_deposit_number_per_tenant'),
+        ]
+
+    def __str__(self):
+        return f'{self.number} — {self.amount} {self.currency}'

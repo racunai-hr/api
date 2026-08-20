@@ -13,7 +13,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from banking.models import BankImportRun, BankStatement, BankSyncRun, BankTransaction
 from banking.provider_models import BankConnection, BankProvider, PaymentOrder
-from domains.banking.read.balances import mask_iban
 from domains.banking.read.dto import PAYMENT_ORDER_ALLOWLIST, payment_order_dto
 from payments.models import BankAccount
 from tenants.models import Tenant, TenantMembership
@@ -213,7 +212,7 @@ class BankingReadApiTests(TestCase):
         bad = client.get('/api/banking/transactions/', {'match_status': 'ignored'})
         self.assertEqual(bad.status_code, 400)
 
-    def test_payment_orders_allowlist_and_masked_iban(self):
+    def test_payment_orders_allowlist_and_full_iban(self):
         client = self._auth_client()
         response = client.get('/api/banking/payment-orders/')
         self.assertEqual(response.status_code, 200)
@@ -223,7 +222,7 @@ class BankingReadApiTests(TestCase):
         self.assertNotIn('authorization_id', row)
         self.assertNotIn('otp_payment_id', row)
         self.assertNotIn('last_error', row)
-        self.assertEqual(row['debtor_iban'], mask_iban(IBAN))
+        self.assertEqual(row['debtor_iban'], IBAN)
         self.assertEqual(row['amount'], '42.50')
 
         dto = payment_order_dto(self.order)

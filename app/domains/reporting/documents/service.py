@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Sum
 from django.http import Http404
 
-from accounting.models import SubledgerItem
+from accounting.models import Deposit, SubledgerItem
 from expenses.models import Expense, ExpenseAttachment
 from invoices.models import Invoice
 
@@ -17,6 +17,7 @@ from domains.reporting.documents.export import DocumentExportService, ExportLimi
 from domains.reporting.documents.filters import DocumentListFilters, as_of_date
 from domains.reporting.documents.query import (
     count_union,
+    filtered_deposits,
     filtered_expenses,
     filtered_invoices,
     paginate_union,
@@ -37,21 +38,33 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
 
     invoices = filtered_invoices(tenant, filters, today)
     expenses = filtered_expenses(tenant, filters, today)
+    deposits = filtered_deposits(tenant, filters, today)
     invoice_ct = ContentType.objects.get_for_model(Invoice)
     expense_ct = ContentType.objects.get_for_model(Expense)
+    deposit_ct = ContentType.objects.get_for_model(Deposit)
 
     inv_count = invoices.count()
     inv_gross = invoices.aggregate(total=Sum('total_amount'))['total']
+    dep_count = deposits.count()
+    dep_gross = deposits.aggregate(total=Sum('amount'))['total']
     exp_by_currency = list(
         expenses.values('currency').annotate(count=Count('id'), total=Sum('amount'))
     )
-    open_ar = SubledgerItem.all_objects.filter(
+    open_ar_inv = SubledgerItem.all_objects.filter(
         tenant=tenant,
         direction='receivable',
         status__in=('open', 'partial'),
         source_content_type=invoice_ct,
         source_object_id__in=invoices.values('pk'),
     ).aggregate(total=Sum('open_amount'))['total']
+    open_ar_dep = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        direction='receivable',
+        status__in=('open', 'partial'),
+        source_content_type=deposit_ct,
+        source_object_id__in=deposits.values('pk'),
+    ).aggregate(total=Sum('open_amount'))['total']
+    open_ar = (open_ar_inv or 0) + (open_ar_dep or 0)
     open_ap = SubledgerItem.all_objects.filter(
         tenant=tenant,
         direction='payable',
@@ -69,9 +82,9 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
         'open_receivables': '0.00',
         'open_payables': '0.00',
     })
-    eur['outgoing_count'] = inv_count
-    eur['outgoing_gross'] = money(inv_gross or 0)
-    eur['open_receivables'] = money(open_ar or 0)
+    eur['outgoing_count'] = inv_count + dep_count
+    eur['outgoing_gross'] = money((inv_gross or 0) + (dep_gross or 0))
+    eur['open_receivables'] = money(open_ar)
 
     for row in exp_by_currency:
         currency = row['currency'] or 'EUR'
@@ -111,11 +124,16 @@ def list_documents(tenant, filters: DocumentListFilters) -> dict:
 
 
 def get_document_detail(tenant, direction: str, pk: int) -> dict:
-    if direction not in ('outgoing', 'incoming'):
+    if direction not in ('outgoing', 'incoming', 'deposit'):
         raise Http404()
     with read_snapshot() as as_of:
         today = as_of_date(as_of)
-        model = Invoice if direction == 'outgoing' else Expense
+        if direction == 'outgoing':
+            model = Invoice
+        elif direction == 'incoming':
+            model = Expense
+        else:
+            model = Deposit
         exists = model.all_objects.filter(tenant=tenant, pk=pk).exists()
         if not exists:
             raise Http404()

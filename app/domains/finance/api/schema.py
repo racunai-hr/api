@@ -1,4 +1,4 @@
-"""OpenAPI schema for finance partner read API (ADR-0022)."""
+"""OpenAPI schema for finance partner read API and deposits (ADR-0022 / ADR-0024)."""
 
 from __future__ import annotations
 
@@ -40,3 +40,63 @@ class PartnerSubledgerListSerializer(serializers.Serializer):
     partner_id = serializers.IntegerField()
     count = serializers.IntegerField()
     results = PartnerSubledgerItemSerializer(many=True)
+
+
+class DepositSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    number = serializers.CharField()
+    partner_id = serializers.IntegerField()
+    partner_name = serializers.CharField()
+    direction = serializers.CharField()
+    amount = serializers.CharField()
+    currency = serializers.CharField()
+    deposit_date = serializers.CharField(allow_null=True)
+    workflow_status = serializers.CharField()
+    operational_status = serializers.CharField()
+    open_amount = serializers.CharField()
+    reference = serializers.CharField(allow_blank=True)
+    notes = serializers.CharField(allow_blank=True)
+    return_date = serializers.CharField(allow_null=True)
+    return_bank_account_id = serializers.IntegerField(allow_null=True)
+    given_journal_entry_id = serializers.IntegerField(allow_null=True)
+    return_journal_entry_id = serializers.IntegerField(allow_null=True)
+    reverse_journal_entry_id = serializers.IntegerField(allow_null=True)
+    created_at = serializers.CharField(allow_null=True)
+
+
+class DepositListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = DepositSerializer(many=True)
+
+
+class CreateDepositSerializer(serializers.Serializer):
+    partner_id = serializers.IntegerField()
+    amount = money_field()
+    currency = serializers.CharField(required=False, default='EUR')
+    deposit_date = serializers.DateField()
+    reference = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ReturnDepositSerializer(serializers.Serializer):
+    return_bank_account_id = serializers.IntegerField()
+    return_date = serializers.DateField(required=False)
+    amount = money_field(required=False)
+
+
+class DepositConflictSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    detail = serializers.CharField()
+
+
+class ExpenseApproveResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    expense_number = serializers.CharField()
+    status = serializers.CharField()
+    amount = serializers.CharField()
+    currency = serializers.CharField()
+    expense_date = serializers.CharField(allow_null=True)
+    due_date = serializers.CharField(allow_null=True)
+    supplier_id = serializers.IntegerField(allow_null=True)
+    settlement_method = serializers.CharField(allow_blank=True)
+    approved_by_id = serializers.IntegerField(allow_null=True)

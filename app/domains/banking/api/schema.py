@@ -108,8 +108,8 @@ class PaymentOrderSerializer(serializers.Serializer):
     status = serializers.CharField()
     amount = money_field()
     currency = serializers.CharField()
-    debtor_iban = serializers.CharField(help_text='Masked IBAN')
-    creditor_iban = serializers.CharField(help_text='Masked IBAN')
+    debtor_iban = serializers.CharField(help_text='IBAN dužnika')
+    creditor_iban = serializers.CharField(help_text='IBAN vjerovnika')
     creditor_name = serializers.CharField(allow_blank=True)
     reference = serializers.CharField(allow_blank=True)
     created_at = serializers.CharField()
@@ -206,6 +206,28 @@ class PaginatedPaymentOrdersSerializer(serializers.Serializer):
 class MatchRequestSerializer(serializers.Serializer):
     target_type = serializers.ChoiceField(choices=['payment', 'journal_entry'])
     target_id = serializers.IntegerField()
+
+
+class OpenItemCandidateSerializer(serializers.Serializer):
+    item_id = serializers.IntegerField()
+    partner_id = serializers.IntegerField(allow_null=True)
+    partner_name = serializers.CharField(allow_blank=True)
+    direction = serializers.CharField()
+    source_type = serializers.CharField()
+    source_id = serializers.IntegerField()
+    source_label = serializers.CharField()
+    open_amount = money_field()
+    due_date = serializers.CharField(allow_null=True)
+    action_label = serializers.CharField()
+
+
+class OpenItemCandidateListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = OpenItemCandidateSerializer(many=True)
+
+
+class ReconcileOpenItemRequestSerializer(serializers.Serializer):
+    subledger_item_id = serializers.IntegerField()
 
 
 BANK_ACCOUNT_PARAMS = [PAGE, PAGE_SIZE]

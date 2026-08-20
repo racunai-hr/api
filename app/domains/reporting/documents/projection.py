@@ -40,6 +40,22 @@ BANK_EXPECTED_SETTLEMENT = frozenset({'business_account', 'transfer'})
 BANK_EXPECTED_EXPENSE_METHOD = frozenset({'transfer'})
 
 
+def partner_tax_identity_missing(partner) -> bool:
+    """True when partner identity required for document controls is absent (ADR-0023).
+
+    HR: local tax ID (OIB) required.
+    Foreign: local tax ID **or** VAT registration is enough — empty OIB alone is not an error.
+    """
+    if partner is None:
+        return True
+    tax = (getattr(partner, 'tax_number', None) or '').strip()
+    vat = (getattr(partner, 'vat_number', None) or '').strip()
+    country = (getattr(partner, 'country_code', None) or '').strip().upper()
+    if country == 'HR':
+        return not tax
+    return not tax and not vat
+
+
 def money(value) -> str | None:
     if value is None:
         return None
@@ -280,6 +296,27 @@ def operational_incoming(
     return provenanced(document.status, source='document_status')
 
 
+def operational_deposit(*, document, subledger) -> dict:
+    """Operational status for kaucija — SubledgerItem SSOT when present (ADR-0024)."""
+    if document.status == 'cancelled':
+        return provenanced('cancelled', source='document_status')
+    if document.status == 'reversed':
+        return provenanced('reversed', source='document_status')
+    if document.status == 'draft':
+        return provenanced('draft', source='document_status')
+    if subledger is not None:
+        if subledger.status == 'closed' or document.status == 'returned':
+            return provenanced('closed', source='subledger_item')
+        if subledger.status == 'cancelled':
+            return provenanced('cancelled', source='subledger_item')
+        return provenanced(subledger.status, source='subledger_item')
+    if document.status == 'returned':
+        return provenanced('closed', source='document_status')
+    if document.status == 'open':
+        return provenanced('open', source='document_status')
+    return provenanced(document.status, source='document_status')
+
+
 def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
     alerts: list[str] = []
     notices: list[str] = []
@@ -301,8 +338,7 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
     possible_duplicate = ctx.get('possible_duplicate')
     has_pdf_xml = ctx.get('has_pdf_xml')
 
-    oib = (getattr(partner, 'tax_number', None) or '') if partner is not None else ''
-    if partner is None or not oib.strip():
+    if partner_tax_identity_missing(partner):
         alerts.append('missing_partner_or_oib')
     if not document.due_date:
         alerts.append('missing_due_date')

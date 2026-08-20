@@ -96,7 +96,7 @@ class DocumentDetailView(_DocumentApiView):
     )
     def get(self, request, direction, pk):
         tenant = _require_tenant(request)
-        if direction not in ('outgoing', 'incoming'):
+        if direction not in ('outgoing', 'incoming', 'deposit'):
             raise Http404()
         return Response(get_document_detail(tenant, direction, pk))
 

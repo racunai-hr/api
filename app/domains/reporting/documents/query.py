@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import (
     CharField,
+    DecimalField,
     Exists,
     F,
     OuterRef,
@@ -15,7 +17,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 
-from accounting.models import JournalEntry, SubledgerItem, VATLedgerEntry
+from accounting.models import Deposit, JournalEntry, SubledgerItem, VATLedgerEntry
 from expenses.models import Expense
 from fiscal_gateway.models import As4DocumentLink
 from integrations.models import IntegrationOutboxMessage
@@ -24,10 +26,23 @@ from invoices.models import Invoice
 from domains.reporting.documents.filters import DocumentListFilters
 
 _CHAR = CharField()
+_MONEY = DecimalField(max_digits=15, decimal_places=2)
 
 TAX_ACTIVE_INVOICE = frozenset({'sent', 'paid', 'overdue'})
 TAX_ACTIVE_EXPENSE = frozenset({'approved', 'paid'})
 OPEN_SUBLEDGER = frozenset({'open', 'partial'})
+
+
+def _missing_partner_tax_identity_q(*, partner_prefix: str) -> Q:
+    """Attention filter aligned with ``partner_tax_identity_missing`` (ADR-0023)."""
+    null = Q(**{f'{partner_prefix}__isnull': True})
+    hr_no_tax = Q(**{f'{partner_prefix}__country_code': 'HR'}) & Q(
+        **{f'{partner_prefix}__tax_number': ''}
+    )
+    foreign_no_id = ~Q(**{f'{partner_prefix}__country_code': 'HR'}) & Q(
+        **{f'{partner_prefix}__tax_number': ''}
+    ) & Q(**{f'{partner_prefix}__vat_number': ''})
+    return null | hr_no_tax | foreign_no_id
 
 
 def _base_invoices(tenant):
@@ -36,6 +51,10 @@ def _base_invoices(tenant):
 
 def _base_expenses(tenant):
     return Expense.all_objects.filter(tenant=tenant).select_related('supplier')
+
+
+def _base_deposits(tenant):
+    return Deposit.all_objects.filter(tenant=tenant).select_related('partner')
 
 
 def _apply_common_invoice_filters(qs, filters: DocumentListFilters):
@@ -98,6 +117,44 @@ def _apply_common_expense_filters(qs, filters: DocumentListFilters):
         qs = qs.filter(due_date__gte=filters.due_from)
     if filters.due_to:
         qs = qs.filter(due_date__lte=filters.due_to)
+    if filters.amount_min is not None:
+        qs = qs.filter(amount__gte=filters.amount_min)
+    if filters.amount_max is not None:
+        qs = qs.filter(amount__lte=filters.amount_max)
+    if filters.currency:
+        qs = qs.filter(currency=filters.currency)
+    return qs
+
+
+def _apply_common_deposit_filters(qs, filters: DocumentListFilters):
+    if filters.status:
+        qs = qs.filter(status=filters.status)
+    if filters.search:
+        qs = qs.filter(
+            Q(number__icontains=filters.search)
+            | Q(reference__icontains=filters.search)
+            | Q(partner__name__icontains=filters.search)
+            | Q(partner__tax_number__icontains=filters.search)
+            | Q(partner__vat_number__icontains=filters.search)
+        )
+    if filters.year:
+        qs = qs.filter(deposit_date__year=filters.year)
+    if filters.month:
+        qs = qs.filter(deposit_date__month=filters.month)
+    if filters.partner_id:
+        qs = qs.filter(partner_id=filters.partner_id)
+    if filters.oib:
+        qs = qs.filter(
+            Q(partner__tax_number=filters.oib) | Q(partner__vat_number=filters.oib)
+        )
+    if filters.date_from:
+        qs = qs.filter(deposit_date__gte=filters.date_from)
+    if filters.date_to:
+        qs = qs.filter(deposit_date__lte=filters.date_to)
+    if filters.due_from:
+        qs = qs.filter(deposit_date__gte=filters.due_from)
+    if filters.due_to:
+        qs = qs.filter(deposit_date__lte=filters.due_to)
     if filters.amount_min is not None:
         qs = qs.filter(amount__gte=filters.amount_min)
     if filters.amount_max is not None:
@@ -203,7 +260,7 @@ def _apply_invoice_view(qs, tenant, filters: DocumentListFilters, today: date):
         )
         return qs.filter(Exists(unmatched_pay))
     if view == 'attention':
-        missing_oib = Q(company_to__tax_number='') | Q(company_to__isnull=True)
+        missing_oib = _missing_partner_tax_identity_q(partner_prefix='company_to')
         overdue = Q(due_date__lt=today) & Exists(_subledger_exists(tenant, Invoice, OPEN_SUBLEDGER))
         paid_open = Q(status='paid') & Exists(_subledger_exists(tenant, Invoice, OPEN_SUBLEDGER))
         unposted = Q(status__in=('sent', 'paid', 'overdue')) & ~Exists(
@@ -255,7 +312,7 @@ def _apply_expense_view(qs, tenant, filters: DocumentListFilters, today: date):
         ).exclude(pk=OuterRef('pk'))
         return qs.filter(Exists(dup))
     if view == 'attention':
-        missing_oib = Q(supplier__tax_number='') | Q(supplier__isnull=True)
+        missing_oib = _missing_partner_tax_identity_q(partner_prefix='supplier')
         overdue = Q(due_date__isnull=False, due_date__lt=today) & Exists(
             _subledger_exists(tenant, Expense, OPEN_SUBLEDGER)
         )
@@ -269,18 +326,45 @@ def _apply_expense_view(qs, tenant, filters: DocumentListFilters, today: date):
     return qs
 
 
+def _apply_deposit_view(qs, tenant, filters: DocumentListFilters, today: date):
+    view = filters.view
+    if not view:
+        return qs
+    if view == 'unpaid_outgoing':
+        return qs.filter(status='open').filter(Exists(_subledger_exists(tenant, Deposit, OPEN_SUBLEDGER)))
+    if view == 'overdue_outgoing':
+        return qs.filter(status='open').filter(
+            Exists(_subledger_exists(tenant, Deposit, OPEN_SUBLEDGER)),
+            deposit_date__lt=today,
+        )
+    if view == 'partially_paid':
+        return qs.filter(Exists(_subledger_exists(tenant, Deposit, ('partial',))))
+    if view == 'unposted':
+        return qs.filter(status='draft')
+    if view == 'attention':
+        return qs.filter(status='open').filter(Exists(_subledger_exists(tenant, Deposit, OPEN_SUBLEDGER)))
+    return qs.none()
+
+
 def filtered_invoices(tenant, filters: DocumentListFilters, today: date):
-    if filters.direction == 'incoming':
+    if filters.direction in ('incoming', 'deposit'):
         return _base_invoices(tenant).none()
     qs = _apply_common_invoice_filters(_base_invoices(tenant), filters)
     return _apply_invoice_view(qs, tenant, filters, today)
 
 
 def filtered_expenses(tenant, filters: DocumentListFilters, today: date):
-    if filters.direction == 'outgoing':
+    if filters.direction in ('outgoing', 'deposit'):
         return _base_expenses(tenant).none()
     qs = _apply_common_expense_filters(_base_expenses(tenant), filters)
     return _apply_expense_view(qs, tenant, filters, today)
+
+
+def filtered_deposits(tenant, filters: DocumentListFilters, today: date):
+    if filters.direction in ('incoming', 'outgoing'):
+        return _base_deposits(tenant).none()
+    qs = _apply_common_deposit_filters(_base_deposits(tenant), filters)
+    return _apply_deposit_view(qs, tenant, filters, today)
 
 
 def _invoice_values(qs):
@@ -343,6 +427,36 @@ def _expense_values(qs):
     )
 
 
+def _deposit_values(qs):
+    return qs.annotate(
+        _doc_id=F('id'),
+        _direction=Value('deposit', output_field=_CHAR),
+        _document_date=F('deposit_date'),
+        _due_date=F('deposit_date'),
+        _internal_number=F('number'),
+        _source_number=Coalesce(F('reference'), F('number')),
+        _document_status=F('status'),
+        _partner_id=F('partner_id'),
+        _gross=F('amount'),
+        _net=F('amount'),
+        _vat_amount=Value(Decimal('0.00'), output_field=_MONEY),
+        _currency=F('currency'),
+    ).values(
+        '_doc_id',
+        '_direction',
+        '_document_date',
+        '_due_date',
+        '_internal_number',
+        '_source_number',
+        '_document_status',
+        '_partner_id',
+        '_gross',
+        '_net',
+        '_vat_amount',
+        '_currency',
+    )
+
+
 # Canonical list/export order. Applied only on the outer combined queryset.
 UNION_ORDER = ('-_document_date', '_direction', '-_doc_id')
 
@@ -351,7 +465,8 @@ def union_rows(tenant, filters: DocumentListFilters, today: date):
     """Database-level UNION ALL. Branch querysets must have no ORDER BY."""
     inv = _invoice_values(filtered_invoices(tenant, filters, today)).order_by()
     exp = _expense_values(filtered_expenses(tenant, filters, today)).order_by()
-    combined = inv.union(exp, all=True)
+    dep = _deposit_values(filtered_deposits(tenant, filters, today)).order_by()
+    combined = inv.union(exp, dep, all=True)
     return combined.order_by(*UNION_ORDER)
 
 

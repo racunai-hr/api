@@ -12,6 +12,7 @@ from domains.reporting.documents.projection import (
     build_subledger_block,
     collect_controls,
     money,
+    operational_deposit,
     operational_incoming,
     operational_outgoing,
     payment_order_block,
@@ -186,6 +187,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
 
     payload = {
         'id': document.pk,
+        'kind': 'invoice' if direction == 'outgoing' else 'expense',
         'direction': direction,
         'internal_number': internal_number,
         'source_number': source_number,
@@ -314,9 +316,105 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
     return payload
 
 
+def assemble_deposit_row(document, rel, as_of_day: date, *, detail: bool) -> dict:
+    partner = rel['partners'].get(document.partner_id)
+    subledger = _primary_subledger(rel['sub_dep'].get(document.pk, []))
+    posting = _primary_posting(rel['je_dep'].get(document.pk, []))
+    allocations = rel['alloc_by_sub'].get(subledger.pk, []) if subledger else []
+    operational = operational_deposit(document=document, subledger=subledger)
+
+    payload = {
+        'id': document.pk,
+        'kind': 'deposit',
+        'direction': 'deposit',
+        'internal_number': document.number,
+        'source_number': document.reference or document.number,
+        'partner_name': partner.name if partner else None,
+        'partner_oib': partner.tax_number if partner else None,
+        'partner_vat_number': partner.vat_number if partner else None,
+        'document_date': document.deposit_date.isoformat() if document.deposit_date else None,
+        'due_date': document.deposit_date.isoformat() if document.deposit_date else None,
+        'document_status': provenanced(document.status, source='document_status'),
+        'operational_status': operational,
+        'posting': posting_block(posting),
+        'subledger': build_subledger_block(subledger, as_of_day),
+        'bank': bank_block(match_status=None, expected=False),
+        'payment_order': payment_order_block(None),
+        'vat': {
+            'lifecycle': provenanced('not_tax_active', source='deposit'),
+            'ledger_type': provenanced(None, reason='not_applicable'),
+            'period': provenanced(None, reason='not_applicable'),
+            'boxes': provenanced(None, reason='not_applicable'),
+            'document_in_submitted_return': provenanced(None, reason='not_applicable'),
+            'period_returns': [],
+            'disclaimer': None,
+        },
+        'eracun': {
+            'as4_status': provenanced(None, reason='not_applicable'),
+            'message_id': provenanced(None, reason='not_applicable'),
+            'source': provenanced(None, reason='not_applicable'),
+        },
+        'fiscal': {
+            'jir': provenanced(None, reason='not_applicable'),
+            'zki': provenanced(None, reason='not_applicable'),
+        },
+        'controls': [],
+        'notices': [],
+        'amounts': {
+            'currency': document.currency or 'EUR',
+            'net': money(document.amount),
+            'vat': money(0),
+            'gross': money(document.amount),
+            'fx_rate': provenanced(None, reason='not_applicable'),
+        },
+    }
+    if not detail:
+        return payload
+
+    payload['partner_id'] = partner.pk if partner else None
+    payload['description'] = document.reference or ''
+    payload['notes'] = document.notes or ''
+    payload['created_at'] = document.created_at.isoformat() if document.created_at else None
+    payload['updated_at'] = document.updated_at.isoformat() if document.updated_at else None
+    payload['created_by'] = document.created_by.username if document.created_by_id else None
+    payload['items'] = []
+    payload['service_date'] = None
+    payload['journal_lines'] = []
+    if posting is not None:
+        payload['journal_lines'] = [
+            {
+                'account_code': line.account.account_code if line.account_id else None,
+                'account_name': line.account.account_name if line.account_id else None,
+                'debit': money(line.debit_amount),
+                'credit': money(line.credit_amount),
+                'description': line.description,
+            }
+            for line in rel['lines_by_je'].get(posting.pk, [])
+        ]
+    payload['payments'] = []
+    payload['allocations'] = [
+        {
+            'id': alloc.pk,
+            'amount': money(alloc.amount),
+            'created_at': alloc.created_at.isoformat() if alloc.created_at else None,
+        }
+        for alloc in allocations
+    ]
+    payload['ledger_entries'] = []
+    payload['attachments'] = []
+    payload['ubl_available'] = False
+    return payload
+
+
 def documents_from_keys(tenant, keys, rel, as_of_day: date, *, detail: bool) -> list[dict]:
     rows = []
     for direction, pk in keys:
+        if direction == 'deposit':
+            document = rel['deposits'].get(pk)
+            if document is None:
+                continue
+            rows.append(assemble_deposit_row(document, rel, as_of_day, detail=detail))
+            continue
         document = (
             rel['invoices'].get(pk) if direction == 'outgoing' else rel['expenses'].get(pk)
         )
