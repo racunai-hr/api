@@ -1689,6 +1689,147 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/private-funds-claims/:
+    post:
+      operationId: finance_private_funds_claim_create
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrivateFundsClaimRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreatePrivateFundsClaimRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreatePrivateFundsClaimRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateFundsClaim'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
+  /api/finance/private-funds-claims/{id}/:
+    get:
+      operationId: finance_private_funds_claim_detail
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateFundsClaim'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/private-funds-claims/{id}/post/:
+    post:
+      operationId: finance_private_funds_claim_post
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateFundsClaim'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
   /api/partners/:
     get:
       operationId: partners_list
@@ -2863,6 +3004,14 @@ components:
       - statement_count
       - suggested_transaction_count
       - unmatched_transaction_count
+    ClaimTypeEnum:
+      enum:
+      - supplier_payment
+      - deposit_funding
+      type: string
+      description: |-
+        * `supplier_payment` - supplier_payment
+        * `deposit_funding` - deposit_funding
     CodeDetail:
       type: object
       properties:
@@ -3074,6 +3223,39 @@ components:
       - city
       - name
       - postal_code
+    CreatePrivateFundsClaimRequest:
+      type: object
+      properties:
+        partner_id:
+          type: integer
+        claim_type:
+          $ref: '#/components/schemas/ClaimTypeEnum'
+        amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+          minLength: 1
+          default: EUR
+        claim_date:
+          type: string
+          format: date
+        related_type:
+          $ref: '#/components/schemas/RelatedTypeEnum'
+        related_id:
+          type: integer
+        reference:
+          type: string
+        notes:
+          type: string
+      required:
+      - amount
+      - claim_date
+      - claim_type
+      - partner_id
+      - related_id
+      - related_type
     CurrencySummary:
       type: object
       properties:
@@ -4683,6 +4865,64 @@ components:
       - fiscal_locked
       - fiscal_period
       - state
+    PrivateFundsClaim:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: string
+        claim_type:
+          type: string
+        partner_id:
+          type: integer
+        partner_name:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        claim_date:
+          type: string
+          nullable: true
+        status:
+          type: string
+        operational_status:
+          type: string
+        open_amount:
+          type: string
+        reference:
+          type: string
+        notes:
+          type: string
+        related_type:
+          type: string
+        related_id:
+          type: integer
+        journal_entry_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - claim_date
+      - claim_type
+      - created_at
+      - currency
+      - id
+      - journal_entry_id
+      - notes
+      - number
+      - open_amount
+      - operational_status
+      - partner_id
+      - partner_name
+      - reference
+      - related_id
+      - related_type
+      - status
     Provenanced:
       type: object
       properties:
@@ -4727,6 +4967,14 @@ components:
           type: integer
       required:
       - subledger_item_id
+    RelatedTypeEnum:
+      enum:
+      - expense
+      - deposit
+      type: string
+      description: |-
+        * `expense` - expense
+        * `deposit` - deposit
     ReturnDepositRequest:
       type: object
       properties:
