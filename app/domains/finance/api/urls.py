@@ -10,6 +10,9 @@ from domains.finance.api.views import (
     ExpenseApproveView,
     PartnerFinancialSummaryView,
     PartnerSubledgerView,
+    PrivateFundsClaimCreateView,
+    PrivateFundsClaimDetailView,
+    PrivateFundsClaimPostView,
 )
 
 urlpatterns = [
@@ -27,6 +30,21 @@ urlpatterns = [
         'finance/expenses/<int:pk>/approve/',
         ExpenseApproveView.as_view(),
         name='finance-expense-approve',
+    ),
+    path(
+        'finance/private-funds-claims/',
+        PrivateFundsClaimCreateView.as_view(),
+        name='finance-private-funds-claim-create',
+    ),
+    path(
+        'finance/private-funds-claims/<int:pk>/',
+        PrivateFundsClaimDetailView.as_view(),
+        name='finance-private-funds-claim-detail',
+    ),
+    path(
+        'finance/private-funds-claims/<int:pk>/post/',
+        PrivateFundsClaimPostView.as_view(),
+        name='finance-private-funds-claim-post',
     ),
     path('finance/deposits/', DepositListCreateView.as_view(), name='finance-deposit-list'),
     path('finance/deposits/<int:pk>/', DepositDetailView.as_view(), name='finance-deposit-detail'),

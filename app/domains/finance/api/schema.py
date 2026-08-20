@@ -100,3 +100,35 @@ class ExpenseApproveResponseSerializer(serializers.Serializer):
     supplier_id = serializers.IntegerField(allow_null=True)
     settlement_method = serializers.CharField(allow_blank=True)
     approved_by_id = serializers.IntegerField(allow_null=True)
+
+
+class PrivateFundsClaimSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    number = serializers.CharField()
+    claim_type = serializers.CharField()
+    partner_id = serializers.IntegerField()
+    partner_name = serializers.CharField()
+    amount = serializers.CharField()
+    currency = serializers.CharField()
+    claim_date = serializers.CharField(allow_null=True)
+    status = serializers.CharField()
+    operational_status = serializers.CharField()
+    open_amount = serializers.CharField()
+    reference = serializers.CharField(allow_blank=True)
+    notes = serializers.CharField(allow_blank=True)
+    related_type = serializers.CharField()
+    related_id = serializers.IntegerField()
+    journal_entry_id = serializers.IntegerField(allow_null=True)
+    created_at = serializers.CharField(allow_null=True)
+
+
+class CreatePrivateFundsClaimSerializer(serializers.Serializer):
+    partner_id = serializers.IntegerField()
+    claim_type = serializers.ChoiceField(choices=['supplier_payment', 'deposit_funding'])
+    amount = money_field()
+    currency = serializers.CharField(required=False, default='EUR')
+    claim_date = serializers.DateField()
+    related_type = serializers.ChoiceField(choices=['expense', 'deposit'])
+    related_id = serializers.IntegerField()
+    reference = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)

@@ -1543,3 +1543,92 @@ class Deposit(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.number} — {self.amount} {self.currency}'
+
+
+class PrivateFundsClaim(TenantMixin, models.Model):
+    """Privatna sredstva / plaćeno u ime društva (ADR-0026) — obveza prema Partneru na 2309."""
+
+    CLAIM_SUPPLIER_PAYMENT = 'supplier_payment'
+    CLAIM_DEPOSIT_FUNDING = 'deposit_funding'
+    CLAIM_TYPE_CHOICES = [
+        (CLAIM_SUPPLIER_PAYMENT, 'Plaćanje dobavljaču privatnim sredstvima'),
+        (CLAIM_DEPOSIT_FUNDING, 'Financiranje kaucije privatnim sredstvima'),
+    ]
+
+    STATUS_DRAFT = 'draft'
+    STATUS_POSTED = 'posted'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Nacrt'),
+        (STATUS_POSTED, 'Proknjiženo'),
+        (STATUS_CANCELLED, 'Otkazano'),
+    ]
+
+    number = models.CharField(max_length=32, verbose_name='Broj')
+    claim_type = models.CharField(max_length=32, choices=CLAIM_TYPE_CHOICES, verbose_name='Tip')
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.PROTECT,
+        related_name='private_funds_claims',
+        verbose_name='Vjerovnik (Partner)',
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Iznos',
+    )
+    currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
+    claim_date = models.DateField(verbose_name='Datum događaja')
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        verbose_name='Status',
+    )
+    reference = models.CharField(max_length=100, blank=True, verbose_name='Referenca')
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+
+    # supplier_payment → Expense AP being closed; deposit_funding → Deposit funded
+    related_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.PROTECT,
+        related_name='private_funds_claim_related',
+        verbose_name='Tip povezanog dokumenta',
+    )
+    related_object_id = models.PositiveIntegerField(verbose_name='ID povezanog dokumenta')
+    related = GenericForeignKey('related_content_type', 'related_object_id')
+
+    journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='private_funds_claims',
+        verbose_name='JE',
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_private_funds_claims',
+        verbose_name='Kreirao',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Zahtjev privatnih sredstava'
+        verbose_name_plural = 'Zahtjevi privatnih sredstava'
+        ordering = ['-claim_date', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'number'],
+                name='unique_private_funds_claim_number_per_tenant',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.number} — {self.amount} {self.currency}'

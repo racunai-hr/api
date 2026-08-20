@@ -15,12 +15,14 @@ from domains.finance.api.authentication import FinanceJWTAuthentication
 from domains.finance.api.permissions import TenantFinanceReadPermission, TenantFinanceWritePermission
 from domains.finance.api.schema import (
     CreateDepositSerializer,
+    CreatePrivateFundsClaimSerializer,
     DepositConflictSerializer,
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
     PartnerFinancialSummarySerializer,
     PartnerSubledgerListSerializer,
+    PrivateFundsClaimSerializer,
     ReturnDepositSerializer,
 )
 from domains.finance.services.aging import partner_financial_summary, partner_subledger_items
@@ -39,6 +41,13 @@ from domains.finance.services.expenses import (
     ExpenseApproveBadRequest,
     ExpenseApproveConflict,
     approve_expense_for_posting,
+)
+from domains.finance.services.private_funds import (
+    PrivateFundsBadRequest,
+    PrivateFundsConflict,
+    create_claim,
+    get_claim,
+    post_claim,
 )
 from partners.models import Partner
 
@@ -328,3 +337,80 @@ class ExpenseApproveView(_FinanceWriteApiView):
                 {'code': exc.code, 'detail': exc.detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+def _pf_conflict(exc: PrivateFundsConflict):
+    return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_409_CONFLICT)
+
+
+def _pf_bad_request(exc: PrivateFundsBadRequest):
+    return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PrivateFundsClaimDetailView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_private_funds_claim_detail',
+        responses={200: PrivateFundsClaimSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        return Response(get_claim(tenant=_require_tenant(request), claim_id=pk))
+
+
+class PrivateFundsClaimCreateView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_private_funds_claim_create',
+        request=CreatePrivateFundsClaimSerializer,
+        responses={
+            201: PrivateFundsClaimSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: DepositConflictSerializer,
+        },
+    )
+    def post(self, request):
+        _require_idempotency_key(request)
+        ser = CreatePrivateFundsClaimSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            dto = create_claim(
+                tenant=_require_tenant(request),
+                data=ser.validated_data,
+                user=request.user,
+            )
+            return Response(dto, status=status.HTTP_201_CREATED)
+        except PrivateFundsConflict as exc:
+            return _pf_conflict(exc)
+        except PrivateFundsBadRequest as exc:
+            return _pf_bad_request(exc)
+
+
+class PrivateFundsClaimPostView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_private_funds_claim_post',
+        request=None,
+        responses={
+            200: PrivateFundsClaimSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: DepositConflictSerializer,
+        },
+    )
+    def post(self, request, pk: int):
+        _require_idempotency_key(request)
+        try:
+            return Response(
+                post_claim(
+                    tenant=_require_tenant(request),
+                    claim_id=pk,
+                    user=request.user,
+                )
+            )
+        except PrivateFundsConflict as exc:
+            return _pf_conflict(exc)
+        except PrivateFundsBadRequest as exc:
+            return _pf_bad_request(exc)

@@ -123,6 +123,14 @@ class ExpensePayer(TenantMixin, models.Model):
         verbose_name='Tip',
     )
     is_active = models.BooleanField(default=True, verbose_name='Aktivan')
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expense_payers',
+        verbose_name='Povezani Partner (MDM)',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Datum stvaranja')
 
     class Meta:
