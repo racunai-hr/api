@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from domains.reporting.documents.attachments import download_available_field
+from domains.reporting.documents.evidence import incoming_pdf_available, incoming_ubl_available
 from domains.reporting.documents.provenance import provenanced
 from domains.reporting.documents.projection import (
     bank_block,
@@ -310,9 +311,23 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         for att in attachments
     ]
     if direction == 'incoming':
-        payload['ubl_available'] = any(bool(link.ubl_xml) for link in as4_links + super_links)
+        payload['ubl_available'] = incoming_ubl_available(
+            tenant=document.tenant,
+            expense_id=document.pk,
+            super_links=super_links,
+            as4_links=as4_links,
+        )
+        payload['pdf_available'] = incoming_pdf_available(
+            tenant=document.tenant,
+            expense_id=document.pk,
+            super_links=super_links,
+        )
     else:
-        payload['ubl_available'] = any(bool(link.ubl_xml) for link in as4_links + super_links)
+        # Outgoing: on-demand generated PDF (existing DocumentPdfView contract).
+        payload['pdf_available'] = True
+        payload['ubl_available'] = any(
+            bool((link.ubl_xml or '').strip()) for link in as4_links + super_links
+        )
     return payload
 
 
@@ -403,6 +418,7 @@ def assemble_deposit_row(document, rel, as_of_day: date, *, detail: bool) -> dic
     payload['ledger_entries'] = []
     payload['attachments'] = []
     payload['ubl_available'] = False
+    payload['pdf_available'] = False
     return payload
 
 

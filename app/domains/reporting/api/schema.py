@@ -173,6 +173,7 @@ class DocumentDetailSerializer(DocumentSummarySerializer):
     ledger_entries = LedgerEntrySerializer(many=True)
     attachments = AttachmentSerializer(many=True)
     ubl_available = serializers.BooleanField()
+    pdf_available = serializers.BooleanField()
     as_of = serializers.CharField()
 
 
