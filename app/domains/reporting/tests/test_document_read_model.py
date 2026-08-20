@@ -945,3 +945,173 @@ class DocumentReadModelTests(TestCase):
         self.assertIn(('incoming', exp.pk), ids)
         self.assertIn('as_of', body)
         self.assertIn('EUR', body['summary']['by_currency'])
+
+
+    def _super_inbound_link(self, expense, *, pdf_path='', ubl_xml='', guid=None):
+        from super_integration.models import SuperDocumentLink
+
+        return SuperDocumentLink.all_objects.create(
+            tenant=expense.tenant,
+            direction=SuperDocumentLink.DIRECTION_INBOUND,
+            super_guid=guid or str(uuid4()).replace('-', ''),
+            ubl_xml=ubl_xml,
+            pdf_path=pdf_path,
+            content_type=ContentType.objects.get_for_model(Expense),
+            object_id=expense.pk,
+        )
+
+    def _as4_inbound_link(self, expense, *, ubl_xml=''):
+        from fiscal_gateway.models import As4DocumentLink
+
+        return As4DocumentLink.all_objects.create(
+            tenant=expense.tenant,
+            direction=As4DocumentLink.DIRECTION_INBOUND,
+            message_id=f'msg-{uuid4()}',
+            ubl_xml=ubl_xml,
+            content_type=ContentType.objects.get_for_model(Expense),
+            object_id=expense.pk,
+        )
+
+    def test_incoming_pdf_200_and_detail_pdf_available(self):
+        import tempfile
+        from pathlib import Path
+
+        expense = self._expense()
+        with tempfile.TemporaryDirectory() as tmp:
+            media = Path(tmp)
+            rel = f'expenses/super/{expense.tenant_id}/{expense.pk}.pdf'
+            abs_path = media / rel
+            abs_path.parent.mkdir(parents=True)
+            abs_path.write_bytes(b'%PDF-1.4 evidence')
+            self._super_inbound_link(expense, pdf_path=rel, ubl_xml='<Invoice/>')
+            with override_settings(MEDIA_ROOT=str(media)):
+                client = self._auth_client()
+                detail = client.get(f'/api/documents/incoming/{expense.pk}/').json()
+                self.assertTrue(detail['pdf_available'])
+                self.assertTrue(detail['ubl_available'])
+                response = client.get(f'/api/documents/incoming/{expense.pk}/pdf/')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['Content-Type'], 'application/pdf')
+            body = b''.join(response.streaming_content)
+            self.assertTrue(body.startswith(b'%PDF-'))
+            self.assertIn('attachment', response['Content-Disposition'].lower())
+            self.assertIn(f'{expense.pk}.pdf', response['Content-Disposition'])
+
+    def test_incoming_pdf_missing_link_is_404_flag_false(self):
+        expense = self._expense()
+        client = self._auth_client()
+        detail = client.get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertFalse(detail['pdf_available'])
+        self.assertEqual(client.get(f'/api/documents/incoming/{expense.pk}/pdf/').status_code, 404)
+
+    def test_incoming_pdf_link_without_file_is_410_flag_false(self):
+        import tempfile
+
+        expense = self._expense()
+        rel = f'expenses/super/{expense.tenant_id}/missing-{expense.pk}.pdf'
+        self._super_inbound_link(expense, pdf_path=rel)
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                client = self._auth_client()
+                detail = client.get(f'/api/documents/incoming/{expense.pk}/').json()
+                self.assertFalse(detail['pdf_available'])
+                response = client.get(f'/api/documents/incoming/{expense.pk}/pdf/')
+            self.assertEqual(response.status_code, 410)
+            self.assertEqual(response.json()['code'], 'document_pdf_content_unavailable')
+
+    def test_incoming_pdf_path_traversal_is_404(self):
+        import tempfile
+
+        expense = self._expense()
+        self._super_inbound_link(expense, pdf_path='../../etc/passwd')
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                self.assertEqual(
+                    self._auth_client().get(f'/api/documents/incoming/{expense.pk}/pdf/').status_code,
+                    404,
+                )
+
+    def test_incoming_ubl_prefers_super_over_as4(self):
+        expense = self._expense()
+        self._as4_inbound_link(expense, ubl_xml='<As4>second</As4>')
+        self._super_inbound_link(expense, ubl_xml='<Super>first</Super>')
+        response = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/ubl/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertIn(b'<Super>first</Super>', response.content)
+        self.assertNotIn(b'<As4>', response.content)
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertTrue(detail['ubl_available'])
+
+    def test_incoming_ubl_falls_back_to_as4(self):
+        expense = self._expense()
+        self._super_inbound_link(expense, ubl_xml='')
+        self._as4_inbound_link(expense, ubl_xml='<As4>only</As4>')
+        response = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/ubl/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<As4>only</As4>', response.content)
+
+    def test_incoming_ubl_absent_is_404(self):
+        expense = self._expense()
+        self.assertEqual(
+            self._auth_client().get(f'/api/documents/incoming/{expense.pk}/ubl/').status_code,
+            404,
+        )
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertFalse(detail['ubl_available'])
+
+    def test_outgoing_and_deposit_ubl_are_404(self):
+        invoice = self._invoice()
+        client = self._auth_client()
+        self.assertEqual(client.get(f'/api/documents/outgoing/{invoice.pk}/ubl/').status_code, 404)
+        self.assertEqual(client.get('/api/documents/deposit/1/ubl/').status_code, 404)
+
+    def test_incoming_evidence_cross_tenant_is_404(self):
+        import tempfile
+        from pathlib import Path
+
+        expense = self._expense()
+        with tempfile.TemporaryDirectory() as tmp:
+            media = Path(tmp)
+            rel = f'expenses/super/{expense.tenant_id}/{expense.pk}.pdf'
+            abs_path = media / rel
+            abs_path.parent.mkdir(parents=True)
+            abs_path.write_bytes(b'%PDF-1.4 secret')
+            self._super_inbound_link(expense, pdf_path=rel, ubl_xml='<Invoice/>')
+            other_category = ExpenseCategory.all_objects.create(tenant=self.other, name='Ostalo-X')
+            other_expense = Expense.all_objects.create(
+                tenant=self.other,
+                expense_number='OTHER-1',
+                status='draft',
+                category=other_category,
+                supplier=self.other_partner,
+                amount=Decimal('1.00'),
+                tax_amount=Decimal('0.00'),
+                currency='EUR',
+                expense_date=date(2026, 5, 1),
+                description='x',
+                created_by=self.user,
+            )
+            TenantMembership.objects.get_or_create(
+                user=self.outsider, tenant=self.other, defaults={'role': 'viewer'}
+            )
+            outsider = self._auth_client(self.outsider, host=OTHER_HOST)
+            with override_settings(MEDIA_ROOT=str(media)):
+                self.assertEqual(
+                    outsider.get(f'/api/documents/incoming/{expense.pk}/pdf/').status_code,
+                    404,
+                )
+                self.assertEqual(
+                    outsider.get(f'/api/documents/incoming/{expense.pk}/ubl/').status_code,
+                    404,
+                )
+                self.assertEqual(
+                    outsider.get(f'/api/documents/incoming/{expense.pk}/').status_code,
+                    404,
+                )
+                self.assertEqual(
+                    self._auth_client().get(
+                        f'/api/documents/incoming/{other_expense.pk}/pdf/'
+                    ).status_code,
+                    404,
+                )

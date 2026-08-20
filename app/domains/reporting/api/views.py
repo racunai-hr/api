@@ -29,6 +29,13 @@ from domains.reporting.documents.attachments import (
     is_missing_storage_error,
     safe_download_filename,
 )
+from domains.reporting.documents.evidence import (
+    DOCUMENT_PDF_CONTENT_UNAVAILABLE,
+    EvidenceAbsent,
+    EvidenceGone,
+    get_incoming_pdf_evidence,
+    get_incoming_ubl_evidence,
+)
 from domains.reporting.documents.filters import parse_filters
 from domains.reporting.documents.service import (
     ExportLimitExceeded,
@@ -154,18 +161,40 @@ class DocumentPdfView(_DocumentApiView):
             200: OpenApiResponse(
                 response=OpenApiTypes.BINARY,
                 description=(
-                    'Outgoing invoice PDF. Content-Type: application/pdf. '
-                    'Header Content-Disposition: inline; filename="R-....pdf". '
-                    'Incoming direction returns 404.'
+                    'PDF bytes. Outgoing: generated invoice PDF (inline). '
+                    'Incoming: SUPER visualization PDF from controlled media storage (attachment). '
+                    'Deposit direction returns 404. '
+                    'Content-Type: application/pdf.'
                 ),
             ),
             401: ERROR_401,
             404: ERROR_404,
+            410: ERROR_410,
             503: ERROR_503,
         },
     )
     def get(self, request, direction, pk):
         tenant = _require_tenant(request)
+        if direction == 'deposit':
+            raise Http404()
+        if direction == 'incoming':
+            try:
+                evidence = get_incoming_pdf_evidence(tenant=tenant, expense_id=pk)
+            except EvidenceAbsent as exc:
+                raise Http404() from exc
+            except EvidenceGone:
+                return Response(DOCUMENT_PDF_CONTENT_UNAVAILABLE, status=410)
+            filename = safe_download_filename(evidence.filename)
+            try:
+                handle = open(evidence.abs_path, 'rb')
+            except OSError as exc:
+                if is_missing_storage_error(exc):
+                    return Response(DOCUMENT_PDF_CONTENT_UNAVAILABLE, status=410)
+                raise
+            response = FileResponse(handle, as_attachment=True, filename=filename)
+            response['Content-Type'] = 'application/pdf'
+            return response
+
         if direction != 'outgoing':
             raise Http404()
         invoice = (
@@ -183,6 +212,37 @@ class DocumentPdfView(_DocumentApiView):
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         filename = outgoing_pdf_filename(invoice)
         response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
+
+
+class DocumentUblView(_DocumentApiView):
+    @extend_schema(
+        tags=['documents'],
+        operation_id='documents_ubl',
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.BINARY,
+                description=(
+                    'Incoming UBL XML. Priority: SUPER non-empty ubl_xml, else AS4. '
+                    'Content-Type: application/xml. '
+                    'Outgoing/deposit return 404.'
+                ),
+            ),
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, direction, pk):
+        tenant = _require_tenant(request)
+        if direction != 'incoming':
+            raise Http404()
+        try:
+            evidence = get_incoming_ubl_evidence(tenant=tenant, expense_id=pk)
+        except EvidenceAbsent as exc:
+            raise Http404() from exc
+        filename = safe_download_filename(evidence.filename)
+        response = HttpResponse(evidence.xml, content_type='application/xml')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 

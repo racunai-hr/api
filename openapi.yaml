@@ -1013,9 +1013,9 @@ paths:
               schema:
                 type: string
                 format: binary
-          description: 'Outgoing invoice PDF. Content-Type: application/pdf. Header
-            Content-Disposition: inline; filename="R-....pdf". Incoming direction
-            returns 404.'
+          description: 'PDF bytes. Outgoing: generated invoice PDF (inline). Incoming:
+            SUPER visualization PDF from controlled media storage (attachment). Deposit
+            direction returns 404. Content-Type: application/pdf.'
         '401':
           content:
             application/json:
@@ -1033,12 +1033,62 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeDetail'
+          description: Attachment content unavailable
         '503':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CodeDetail'
           description: Invoice PDF unavailable
+  /api/documents/{direction}/{id}/ubl/:
+    get:
+      operationId: documents_ubl
+      parameters:
+      - in: path
+        name: direction
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: 'Incoming UBL XML. Priority: SUPER non-empty ubl_xml, else
+            AS4. Content-Type: application/xml. Outgoing/deposit return 404.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/documents/export/:
     get:
       operationId: documents_export
@@ -3487,6 +3537,8 @@ components:
             $ref: '#/components/schemas/Attachment'
         ubl_available:
           type: boolean
+        pdf_available:
+          type: boolean
         as_of:
           type: string
       required:
@@ -3520,6 +3572,7 @@ components:
       - partner_vat_number
       - payment_order
       - payments
+      - pdf_available
       - posting
       - service_date
       - source_number
