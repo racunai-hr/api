@@ -13,6 +13,10 @@ NS = {
 }
 
 
+class UblMonetaryError(ValueError):
+    """UBL LegalMonetaryTotal cannot yield a document gross amount."""
+
+
 @dataclass
 class ParsedInvoice:
     invoice_number: str
@@ -25,6 +29,8 @@ class ParsedInvoice:
     subtotal: Decimal
     tax_amount: Decimal
     total_amount: Decimal
+    payable_amount: Decimal = Decimal('0')
+    prepaid_amount: Decimal = Decimal('0')
     line_descriptions: list[str] = field(default_factory=list)
 
 
@@ -45,6 +51,40 @@ def _decimal(value: str, default: str = '0') -> Decimal:
         return Decimal(str(value).replace(',', '.') or default)
     except (InvalidOperation, ValueError):
         return Decimal(default)
+
+
+def _optional_decimal(raw: str | None) -> Decimal | None:
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return Decimal(text.replace(',', '.'))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _resolve_total_amount(
+    *,
+    inclusive: Decimal | None,
+    exclusive: Decimal | None,
+    tax_amount: Decimal | None,
+) -> tuple[Decimal, Decimal, Decimal]:
+    """Return (total_amount, subtotal, tax_amount). Fail if gross cannot be proven."""
+    tax = tax_amount if tax_amount is not None else Decimal('0')
+
+    if inclusive is not None:
+        subtotal = exclusive if exclusive is not None else inclusive - tax
+        return inclusive, subtotal, tax
+
+    if exclusive is not None and tax_amount is not None:
+        return exclusive + tax_amount, exclusive, tax_amount
+
+    raise UblMonetaryError(
+        'UBL LegalMonetaryTotal missing TaxInclusiveAmount and cannot fall back '
+        'to TaxExclusiveAmount + TaxAmount.'
+    )
 
 
 def parse_invoice_ubl(ubl_payload: str) -> ParsedInvoice:
@@ -83,14 +123,23 @@ def parse_invoice_ubl(ubl_payload: str) -> ParsedInvoice:
     currency = (currencies[0].text or '').strip() if currencies else 'EUR'
 
     tax_el = root.xpath('//cac:TaxTotal/cbc:TaxAmount', namespaces=NS)
-    tax_amount = _decimal((tax_el[0].text or '') if tax_el else '0')
-    payable_el = root.xpath('//cac:LegalMonetaryTotal/cbc:PayableAmount', namespaces=NS)
-    total_amount = _decimal((payable_el[0].text or '') if payable_el else '0')
+    inclusive_el = root.xpath('//cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount', namespaces=NS)
     exclusive_el = root.xpath('//cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount', namespaces=NS)
-    subtotal = _decimal(
-        (exclusive_el[0].text or '') if exclusive_el else '',
-        str(total_amount - tax_amount),
+    payable_el = root.xpath('//cac:LegalMonetaryTotal/cbc:PayableAmount', namespaces=NS)
+    prepaid_el = root.xpath('//cac:LegalMonetaryTotal/cbc:PrepaidAmount', namespaces=NS)
+
+    tax_raw = (tax_el[0].text if tax_el else None)
+    inclusive = _optional_decimal(inclusive_el[0].text if inclusive_el else None)
+    exclusive = _optional_decimal(exclusive_el[0].text if exclusive_el else None)
+    tax_parsed = _optional_decimal(tax_raw)
+
+    total_amount, subtotal, tax_amount = _resolve_total_amount(
+        inclusive=inclusive,
+        exclusive=exclusive,
+        tax_amount=tax_parsed,
     )
+    payable_amount = _optional_decimal(payable_el[0].text if payable_el else None) or Decimal('0')
+    prepaid_amount = _optional_decimal(prepaid_el[0].text if prepaid_el else None) or Decimal('0')
 
     lines = []
     for line in root.xpath('//cac:InvoiceLine', namespaces=NS):
@@ -111,5 +160,7 @@ def parse_invoice_ubl(ubl_payload: str) -> ParsedInvoice:
         subtotal=subtotal,
         tax_amount=tax_amount,
         total_amount=total_amount,
+        payable_amount=payable_amount,
+        prepaid_amount=prepaid_amount,
         line_descriptions=lines,
     )

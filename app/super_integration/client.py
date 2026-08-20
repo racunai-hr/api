@@ -100,6 +100,7 @@ class SuperClient:
         date_to: str | None = None,
         received_date_from: str | None = None,
         received_date_to: str | None = None,
+        unique_from: int | None = 1,
     ) -> list[dict]:
         data = {'CompanyGuid': self.config.company_guid}
         if date_from:
@@ -110,12 +111,14 @@ class SuperClient:
             data['ReceivedDateFrom'] = received_date_from
         if received_date_to:
             data['ReceivedDateTo'] = received_date_to
+        if unique_from is not None:
+            data['UniqueIdFrom'] = str(unique_from)
         payload = self._post('/api/Invoice/GetInvoiceList', data)
-        return payload.get('Invoices') or []
+        return payload.get('Invoices') or payload.get('invoices') or []
 
     def get_invoice_ubl(self, guid: str) -> tuple[str, dict]:
         payload = self._post('/api/Invoice/GetInvoice', {'Guid': guid})
-        return payload.get('InvoiceUBL') or '', payload
+        return payload.get('InvoiceUBL') or payload.get('invoiceUBL') or '', payload
 
     def set_invoice_status(self, guid: str, status: int) -> dict:
         return self._post('/api/Invoice/SetInvoiceStatus', {
@@ -159,7 +162,12 @@ class SuperClient:
         if guids:
             data['SendingInvoiceGuidList'] = ','.join(guids)
         payload = self._post('/api/SendingInvoice/GetSendingInvoiceStatuses', data)
-        return payload.get('SendingInvoiceStatuses') or payload.get('InvoiceStatuses') or []
+        return (
+            payload.get('SendingInvoiceStatuses')
+            or payload.get('sendingInvoiceStatuses')
+            or payload.get('InvoiceStatuses')
+            or []
+        )
 
     def add_payment_for_sending_invoice(
         self,

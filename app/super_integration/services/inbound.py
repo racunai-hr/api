@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import os
-from datetime import timedelta
+from datetime import date, datetime
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -17,12 +17,26 @@ from expenses.services.import_service import import_expense_rows
 from super_integration.client import SuperAPIError, SuperClient
 from super_integration.config_utils import SuperConfigError, get_active_super_config
 from super_integration.models import SuperDocumentLink, SuperTenantConfig
-from super_integration.ubl.parser import parse_invoice_ubl
+from super_integration.ubl.parser import UblMonetaryError, parse_invoice_ubl
 
 
 def _system_user():
     User = get_user_model()
     return User.objects.filter(is_superuser=True).first() or User.objects.first()
+
+
+def _as_date(value) -> date | None:
+    if value in (None, ''):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()[:10]
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 @transaction.atomic
@@ -46,7 +60,10 @@ def import_inbound_invoice(
         return None
 
     ubl_b64, _meta = client.get_invoice_ubl(guid)
-    parsed = parse_invoice_ubl(ubl_b64)
+    try:
+        parsed = parse_invoice_ubl(ubl_b64)
+    except UblMonetaryError as exc:
+        raise SuperAPIError(str(exc)) from exc
     user = _system_user()
     if not user:
         raise SuperAPIError('Nema korisnika za kreiranje troška')
@@ -58,17 +75,23 @@ def import_inbound_invoice(
         supplier_oib=parsed.supplier_oib or f'unknown-{guid[:8]}',
         supplier_name=parsed.supplier_name,
         receipt_number=parsed.invoice_number,
-        expense_date=parsed.issue_date or timezone.now().date(),
-        due_date=parsed.due_date,
+        expense_date=_as_date(parsed.issue_date) or timezone.now().date(),
+        due_date=_as_date(parsed.due_date),
         amount=parsed.total_amount,
         tax_amount=parsed.tax_amount,
         currency=parsed.currency or 'EUR',
         payment_method='',
         description='; '.join(parsed.line_descriptions) or f'Ulazni eRačun {parsed.invoice_number}',
         raw_payload={
-            'super_unique_id': str(summary.get('UniqueId') or ''),
-            'super_status': summary.get('InvoiceStatus'),
+            'super_unique_id': str(summary.get('UniqueId') or summary.get('uniqueId') or ''),
+            'super_status': summary.get('InvoiceStatus') or summary.get('invoiceStatus'),
             'supplier_address': parsed.supplier_address,
+            # UBL SSOT for Expense.amount; list fields below are audit only.
+            'payable_amount': str(parsed.payable_amount),
+            'prepaid_amount': str(parsed.prepaid_amount),
+            'super_list_total_amount': summary.get('totalAmount') or summary.get('TotalAmount'),
+            'super_list_payable_amount': summary.get('payableAmount') or summary.get('PayableAmount'),
+            'super_list_prepaid_amount': summary.get('prepaidAmount') or summary.get('PrepaidAmount'),
         },
         super_guid=guid,
         status='draft',
@@ -118,8 +141,8 @@ def import_inbound_invoice(
         tenant=config.tenant,
         direction=SuperDocumentLink.DIRECTION_INBOUND,
         super_guid=guid,
-        super_unique_id=str(summary.get('UniqueId') or ''),
-        super_status=summary.get('InvoiceStatus'),
+        super_unique_id=str(summary.get('UniqueId') or summary.get('uniqueId') or ''),
+        super_status=summary.get('InvoiceStatus') or summary.get('invoiceStatus'),
         ubl_xml=ubl_xml,
         pdf_path=pdf_path,
         content_type=ContentType.objects.get_for_model(Expense),
@@ -130,11 +153,20 @@ def import_inbound_invoice(
 
 def sync_inbound_invoices(config: SuperTenantConfig) -> int:
     client = SuperClient(config)
-    received_from = None
-    if config.last_inbound_sync_at:
-        received_from = (config.last_inbound_sync_at - timedelta(days=1)).date().isoformat()
+    unique_from = 1
+    last_link = (
+        SuperDocumentLink.all_objects.filter(
+            tenant=config.tenant,
+            direction=SuperDocumentLink.DIRECTION_INBOUND,
+        )
+        .exclude(super_unique_id='')
+        .order_by('-id')
+        .first()
+    )
+    if last_link and str(last_link.super_unique_id).isdigit():
+        unique_from = max(1, int(last_link.super_unique_id) - 50)
 
-    summaries = client.get_invoice_list(received_date_from=received_from)
+    summaries = client.get_invoice_list(unique_from=unique_from)
     user = _system_user()
     batch = ImportBatch.all_objects.create(
         tenant=config.tenant,
@@ -144,8 +176,14 @@ def sync_inbound_invoices(config: SuperTenantConfig) -> int:
         dry_run=False,
     )
     created = 0
+    errors = 0
     for summary in summaries:
-        expense = import_inbound_invoice(config, summary, client=client, batch=batch)
+        guid = summary.get('Guid') or summary.get('guid')
+        try:
+            expense = import_inbound_invoice(config, summary, client=client, batch=batch)
+        except Exception:
+            errors += 1
+            continue
         if expense:
             created += 1
     client.touch_inbound_sync()
