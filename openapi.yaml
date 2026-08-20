@@ -2,8 +2,9 @@ openapi: 3.0.3
 info:
   title: računAI API
   version: 1.0.0
-  description: Tenant JWT REST ugovor za auth, documents, banking i partners. Fiscal/intermediary
-    i AS4 nisu dio ove sheme. openapi.yaml je generirani artefakt — ne uređivati ručno.
+  description: Tenant JWT REST ugovor za auth, documents, banking, partners, finance
+    i purchasing. Fiscal/intermediary i AS4 nisu dio ove sheme. openapi.yaml je generirani
+    artefakt — ne uređivati ručno.
 paths:
   /api/auth/me/:
     get:
@@ -1806,6 +1807,359 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/invoices/import/:
+    post:
+      operationId: purchasing_invoice_imports_create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/purchasing/invoices/import/{id}/:
+    get:
+      operationId: purchasing_invoice_imports_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/invoices/import/{id}/apply-partner-updates/:
+    post:
+      operationId: purchasing_invoice_imports_apply_partner_updates
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+  /api/purchasing/invoices/import/{id}/confirm/:
+    post:
+      operationId: purchasing_invoice_imports_confirm
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmInvoiceImportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConfirmInvoiceImportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConfirmInvoiceImportRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/purchasing/invoices/import/{id}/create-partner/:
+    post:
+      operationId: purchasing_invoice_imports_create_partner
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePartnerFromImportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreatePartnerFromImportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreatePartnerFromImportRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+  /api/purchasing/invoices/import/{id}/discard/:
+    post:
+      operationId: purchasing_invoice_imports_discard
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+  /api/purchasing/invoices/import/{id}/retry/:
+    post:
+      operationId: purchasing_invoice_imports_retry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
 components:
   schemas:
     Allocation:
@@ -2023,6 +2377,39 @@ components:
       required:
       - code
       - detail
+    ConfirmInvoiceImportRequest:
+      type: object
+      properties:
+        invoice_number:
+          type: string
+          minLength: 1
+        issue_date:
+          type: string
+          minLength: 1
+        due_date:
+          type: string
+          nullable: true
+        net_amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        tax_amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        total_amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        iban:
+          type: string
+        duplicate_override:
+          type: boolean
     ConnectionSummary:
       type: object
       properties:
@@ -2134,6 +2521,41 @@ components:
           type: boolean
         is_active:
           type: boolean
+    CreatePartnerFromImportRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        tax_number:
+          type: string
+          minLength: 1
+        address:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        postal_code:
+          type: string
+          minLength: 1
+        country:
+          type: string
+        country_code:
+          type: string
+        partner_type:
+          type: string
+          minLength: 1
+        iban:
+          type: string
+        vat_number:
+          type: string
+      required:
+      - address
+      - city
+      - name
+      - postal_code
+      - tax_number
     CurrencySummary:
       type: object
       properties:
@@ -2444,6 +2866,24 @@ components:
       - source_number
       - subledger
       - vat
+    Duplicate:
+      type: object
+      properties:
+        kind:
+          type: string
+        expense_id:
+          type: integer
+          nullable: true
+        label:
+          type: string
+        detail:
+          type: object
+          additionalProperties: {}
+      required:
+      - detail
+      - expense_id
+      - kind
+      - label
     EracunBlock:
       type: object
       properties:
@@ -2478,6 +2918,47 @@ components:
       - count
       - detail
       - limit
+    ExtractedInvoice:
+      type: object
+      properties:
+        supplier:
+          $ref: '#/components/schemas/SupplierExtracted'
+        invoice_number:
+          type: string
+        issue_date:
+          type: string
+        due_date:
+          type: string
+          nullable: true
+        currency:
+          type: string
+        net_amount:
+          type: string
+        tax_amount:
+          type: string
+        total_amount:
+          type: string
+        iban:
+          type: string
+        vat_breakdown:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        line_items:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - currency
+      - iban
+      - invoice_number
+      - issue_date
+      - net_amount
+      - supplier
+      - tax_amount
+      - total_amount
     FiscalBlock:
       type: object
       properties:
@@ -2623,6 +3104,76 @@ components:
       - transactions_created
       - transactions_processed
       - transactions_skipped
+      - warnings
+    IncomingInvoiceImport:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        original_filename:
+          type: string
+        content_type:
+          type: string
+        file_sha256:
+          type: string
+        file_size:
+          type: integer
+        ocr_provider:
+          type: string
+        ocr_model:
+          type: string
+        ocr_schema_version:
+          type: string
+        ocr_extracted_at:
+          type: string
+          nullable: true
+        extracted:
+          $ref: '#/components/schemas/ExtractedInvoice'
+        warnings:
+          type: array
+          items:
+            type: string
+        partner:
+          $ref: '#/components/schemas/PartnerMatch'
+        duplicate:
+          $ref: '#/components/schemas/Duplicate'
+        confirmed_expense_id:
+          type: integer
+          nullable: true
+        last_error:
+          type: string
+        created_at:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        created:
+          type: boolean
+      required:
+      - confirmed_expense_id
+      - content_type
+      - created_at
+      - duplicate
+      - extracted
+      - file_sha256
+      - file_size
+      - finished_at
+      - id
+      - last_error
+      - ocr_extracted_at
+      - ocr_model
+      - ocr_provider
+      - ocr_schema_version
+      - original_filename
+      - partner
+      - started_at
+      - status
       - warnings
     JournalLine:
       type: object
@@ -2985,6 +3536,19 @@ components:
       required:
       - code
       - field
+    PartnerDiff:
+      type: object
+      properties:
+        field:
+          type: string
+        existing:
+          type: string
+        extracted:
+          type: string
+      required:
+      - existing
+      - extracted
+      - field
     PartnerFinancialSummary:
       type: object
       properties:
@@ -3060,6 +3624,32 @@ components:
       - phone
       - short_name
       - status
+      - tax_number
+    PartnerMatch:
+      type: object
+      properties:
+        match:
+          type: string
+        partner_id:
+          type: integer
+          nullable: true
+        candidate_id:
+          type: integer
+          nullable: true
+        name:
+          type: string
+        tax_number:
+          type: string
+        diff:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerDiff'
+      required:
+      - candidate_id
+      - diff
+      - match
+      - name
+      - partner_id
       - tax_number
     PartnerSubledgerItem:
       type: object
@@ -3397,6 +3987,16 @@ components:
       - reason
       - source
       - value
+    PurchasingConflict:
+      type: object
+      properties:
+        code:
+          type: string
+        detail:
+          type: string
+      required:
+      - code
+      - detail
     ReasonEnum:
       enum:
       - not_recorded
@@ -3520,6 +4120,37 @@ components:
       - open_amount
       - original_amount
       - state
+    SupplierExtracted:
+      type: object
+      properties:
+        name:
+          type: string
+        oib:
+          type: string
+        vat_number:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        country_code:
+          type: string
+        iban:
+          type: string
+      required:
+      - address
+      - city
+      - country
+      - country_code
+      - iban
+      - name
+      - oib
+      - postal_code
+      - vat_number
     SyncEnqueueResponse:
       type: object
       properties:
@@ -3781,3 +4412,5 @@ tags:
   description: Partner MDM API (ADR-0022)
 - name: finance
   description: Finance partner projections (ADR-0022)
+- name: purchasing
+  description: Purchasing OCR ulaznih računa

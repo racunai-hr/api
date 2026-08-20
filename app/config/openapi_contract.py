@@ -43,6 +43,13 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('delete', '/api/partners/{id}/bank-accounts/{account_id}/'),
         ('get', '/api/finance/partners/{id}/financial-summary/'),
         ('get', '/api/finance/partners/{id}/subledger/'),
+        ('post', '/api/purchasing/invoices/import/'),
+        ('get', '/api/purchasing/invoices/import/{id}/'),
+        ('post', '/api/purchasing/invoices/import/{id}/retry/'),
+        ('post', '/api/purchasing/invoices/import/{id}/create-partner/'),
+        ('post', '/api/purchasing/invoices/import/{id}/apply-partner-updates/'),
+        ('post', '/api/purchasing/invoices/import/{id}/confirm/'),
+        ('post', '/api/purchasing/invoices/import/{id}/discard/'),
     }
 )
 
@@ -77,6 +84,19 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     'partner-bank-account-detail': ('patch', '/api/partners/{id}/bank-accounts/{account_id}/'),
     'finance-partner-financial-summary': ('get', '/api/finance/partners/{id}/financial-summary/'),
     'finance-partner-subledger': ('get', '/api/finance/partners/{id}/subledger/'),
+    'purchasing-invoice-import-create': ('post', '/api/purchasing/invoices/import/'),
+    'purchasing-invoice-import-detail': ('get', '/api/purchasing/invoices/import/{id}/'),
+    'purchasing-invoice-import-retry': ('post', '/api/purchasing/invoices/import/{id}/retry/'),
+    'purchasing-invoice-import-create-partner': (
+        'post',
+        '/api/purchasing/invoices/import/{id}/create-partner/',
+    ),
+    'purchasing-invoice-import-apply-partner-updates': (
+        'post',
+        '/api/purchasing/invoices/import/{id}/apply-partner-updates/',
+    ),
+    'purchasing-invoice-import-confirm': ('post', '/api/purchasing/invoices/import/{id}/confirm/'),
+    'purchasing-invoice-import-discard': ('post', '/api/purchasing/invoices/import/{id}/discard/'),
 }
 
 EXCLUDED_URL_NAMES = frozenset(

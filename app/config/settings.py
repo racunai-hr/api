@@ -184,6 +184,13 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Banking statement import (ADR-0021)
 BANKING_IMPORT_MAX_BYTES = env.int('BANKING_IMPORT_MAX_BYTES', default=20 * 1024 * 1024)
 
+# Purchasing OCR (Purchasing AI)
+OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
+OPENAI_OCR_MODEL = env('OPENAI_OCR_MODEL', default='gpt-4.1-mini')
+OPENAI_OCR_TIMEOUT_SECONDS = env.int('OPENAI_OCR_TIMEOUT_SECONDS', default=60)
+PURCHASING_OCR_PROVIDER = env('PURCHASING_OCR_PROVIDER', default='openai')
+PURCHASING_OCR_FAKE_BEHAVIOR = env('PURCHASING_OCR_FAKE_BEHAVIOR', default='ok')
+PURCHASING_OCR_FAKE_PAYLOAD = {}
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -205,7 +212,7 @@ if _HAS_DRF_SPECTACULAR:
 SPECTACULAR_SETTINGS = {
     'TITLE': 'računAI API',
     'DESCRIPTION': (
-        'Tenant JWT REST ugovor za auth, documents, banking i partners. '
+        'Tenant JWT REST ugovor za auth, documents, banking, partners, finance i purchasing. '
         'Fiscal/intermediary i AS4 nisu dio ove sheme. '
         'openapi.yaml je generirani artefakt — ne uređivati ručno.'
     ),
@@ -219,6 +226,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'banking', 'description': 'Banking operational API (ADR-0021)'},
         {'name': 'partners', 'description': 'Partner MDM API (ADR-0022)'},
         {'name': 'finance', 'description': 'Finance partner projections (ADR-0022)'},
+        {'name': 'purchasing', 'description': 'Purchasing OCR ulaznih računa'},
     ],
     'POSTPROCESSING_HOOKS': [
         'drf_spectacular.hooks.postprocess_schema_enums',
