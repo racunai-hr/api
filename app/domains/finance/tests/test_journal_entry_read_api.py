@@ -309,3 +309,61 @@ class JournalEntryReadApiTests(TestCase):
         self.assertEqual(by_ref.status_code, 200)
         self.assertEqual(by_ref.data['count'], 1)
         self.assertEqual(by_ref.data['results'][0]['entry_number'], '202608-MAN')
+
+    def test_detail_unauthenticated_is_401(self):
+        client = APIClient()
+        client.defaults['HTTP_HOST'] = HOST
+        response = client.get(f'/api/finance/journal-entries/{self.multi.pk}/')
+        self.assertEqual(response.status_code, 401)
+
+    def test_detail_cross_tenant_is_404(self):
+        outsider = self._client(self.outsider, host=OTHER_HOST)
+        response = outsider.get(f'/api/finance/journal-entries/{self.multi.pk}/')
+        self.assertEqual(response.status_code, 404)
+
+        missing = self._client(self.viewer).get('/api/finance/journal-entries/999999/')
+        self.assertEqual(missing.status_code, 404)
+
+    def test_detail_returns_lines_reference_and_source(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.manual.pk}/')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        self.assertEqual(data['entry_number'], '202608-MAN')
+        self.assertEqual(data['reference'], 'WAUZZZF86RN003268')
+        self.assertEqual(data['source_type'], 'manual')
+        self.assertIsNone(data['source_id'])
+        self.assertEqual(data['total_debit'], '10347.20')
+        self.assertEqual(data['total_credit'], '10347.20')
+        self.assertEqual(len(data['lines']), 2)
+        self.assertEqual(data['lines'][0]['account_code'], '1000')
+        self.assertEqual(data['lines'][0]['account_name'], 'Banka')
+        self.assertNotIn('has_bank_match', data)
+        self.assertIn('as_of', data)
+
+        invoice = client.get(f'/api/finance/journal-entries/{self.invoice_je.pk}/')
+        self.assertEqual(invoice.status_code, 200)
+        self.assertEqual(invoice.data['source_type'], 'invoice')
+        self.assertEqual(invoice.data['source_id'], 1)
+
+    def test_detail_bank_match_does_not_change_source_type(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.manual.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['source_type'], 'manual')
+        self.assertNotIn('has_bank_match', response.data)
+
+    def test_detail_line_amounts_sum_to_totals(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.multi.pk}/')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        debit_sum = sum(Decimal(line['debit']) for line in data['lines'])
+        credit_sum = sum(Decimal(line['credit']) for line in data['lines'])
+        self.assertEqual(debit_sum, Decimal(data['total_debit']))
+        self.assertEqual(credit_sum, Decimal(data['total_credit']))
+        self.assertEqual(data['total_debit'], '125.50')
+        self.assertEqual(data['total_credit'], '125.50')
+        self.assertEqual(len(data['lines']), 3)
+        ids = [line['id'] for line in data['lines']]
+        self.assertEqual(ids, sorted(ids))

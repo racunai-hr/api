@@ -1756,6 +1756,43 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/journal-entries/{id}/:
+    get:
+      operationId: finance_journal_entries_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntryDetail'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/partners/{id}/financial-summary/:
     get:
       operationId: finance_partner_financial_summary
@@ -4472,6 +4509,80 @@ components:
       - received_at
       - source
       - status
+    JournalEntryDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        entry_number:
+          type: string
+        entry_date:
+          type: string
+          format: date
+          nullable: true
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        is_auto:
+          type: boolean
+        source_type:
+          $ref: '#/components/schemas/SourceTypeEnum'
+        total_debit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_credit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        as_of:
+          type: string
+        reference:
+          type: string
+        source_id:
+          type: integer
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalEntryLine'
+      required:
+      - as_of
+      - description
+      - entry_date
+      - entry_number
+      - id
+      - is_auto
+      - lines
+      - reference
+      - source_id
+      - source_type
+      - status
+      - total_credit
+      - total_debit
+    JournalEntryLine:
+      type: object
+      properties:
+        id:
+          type: integer
+        account_code:
+          type: string
+        account_name:
+          type: string
+        description:
+          type: string
+        debit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        credit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - account_code
+      - account_name
+      - credit
+      - debit
+      - description
+      - id
     JournalEntryListItem:
       type: object
       properties:

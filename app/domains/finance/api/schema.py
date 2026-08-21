@@ -157,6 +157,22 @@ class PaginatedJournalEntriesSerializer(serializers.Serializer):
     results = JournalEntryListItemSerializer(many=True)
 
 
+class JournalEntryLineSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    account_code = serializers.CharField(allow_blank=True)
+    account_name = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+    debit = money_field()
+    credit = money_field()
+
+
+class JournalEntryDetailSerializer(JournalEntryListItemSerializer):
+    as_of = serializers.CharField()
+    reference = serializers.CharField(allow_blank=True)
+    source_id = serializers.IntegerField(allow_null=True)
+    lines = JournalEntryLineSerializer(many=True)
+
+
 JOURNAL_ENTRY_LIST_PARAMS = [
     OpenApiParameter(
         'status',

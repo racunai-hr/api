@@ -8,6 +8,7 @@ from domains.finance.api.views import (
     DepositReturnView,
     DepositReverseView,
     ExpenseApproveView,
+    JournalEntryDetailView,
     JournalEntryListView,
     PartnerFinancialSummaryView,
     PartnerSubledgerView,
@@ -21,6 +22,11 @@ urlpatterns = [
         'finance/journal-entries/',
         JournalEntryListView.as_view(),
         name='finance-journal-entry-list',
+    ),
+    path(
+        'finance/journal-entries/<int:pk>/',
+        JournalEntryDetailView.as_view(),
+        name='finance-journal-entry-detail',
     ),
     path(
         'finance/partners/<int:pk>/financial-summary/',

@@ -21,6 +21,7 @@ from domains.finance.api.schema import (
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
+    JournalEntryDetailSerializer,
     PaginatedJournalEntriesSerializer,
     PartnerFinancialSummarySerializer,
     PartnerSubledgerListSerializer,
@@ -28,7 +29,7 @@ from domains.finance.api.schema import (
     ReturnDepositSerializer,
 )
 from domains.finance.read.filters import parse_journal_entry_filters
-from domains.finance.read.service import list_journal_entries
+from domains.finance.read.service import get_journal_entry, list_journal_entries
 from domains.finance.services.aging import partner_financial_summary, partner_subledger_items
 from domains.finance.services.deposits import (
     DepositBadRequest,
@@ -123,6 +124,20 @@ class JournalEntryListView(_FinanceReadApiView):
         except (ValueError, TypeError) as exc:
             raise ValidationError({'detail': str(exc)}) from exc
         return Response(list_journal_entries(tenant, filters))
+
+
+class JournalEntryDetailView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_journal_entries_retrieve',
+        responses={
+            200: JournalEntryDetailSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, pk: int):
+        return Response(get_journal_entry(_require_tenant(request), pk))
 
 
 class PartnerFinancialSummaryView(_FinanceReadApiView):

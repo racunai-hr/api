@@ -53,3 +53,30 @@ def journal_entry_list_dto(entry) -> dict:
         'total_debit': money(getattr(entry, 'total_debit_sum', None)),
         'total_credit': money(getattr(entry, 'total_credit_sum', None)),
     }
+
+
+def journal_entry_line_dto(line) -> dict:
+    account = line.account
+    return {
+        'id': line.pk,
+        'account_code': account.account_code if account is not None else '',
+        'account_name': account.account_name if account is not None else '',
+        'description': line.description or '',
+        'debit': money(line.debit_amount),
+        'credit': money(line.credit_amount),
+    }
+
+
+def journal_entry_detail_dto(entry, *, as_of: str) -> dict:
+    """Detail reuses list fields + source_type helper — do not re-derive elsewhere."""
+    payload = journal_entry_list_dto(entry)
+    lines = sorted(entry.lines.all(), key=lambda row: row.pk)
+    payload.update(
+        {
+            'as_of': as_of,
+            'reference': entry.reference or '',
+            'source_id': entry.source_object_id,
+            'lines': [journal_entry_line_dto(line) for line in lines],
+        }
+    )
+    return payload
