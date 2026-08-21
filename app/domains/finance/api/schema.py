@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 from rest_framework import serializers
 
 from config.schema_common import money_field
+from domains.finance.read.dto import SOURCE_TYPES
 
 
 class PartnerFinancialSummarySerializer(serializers.Serializer):
@@ -132,3 +135,53 @@ class CreatePrivateFundsClaimSerializer(serializers.Serializer):
     related_id = serializers.IntegerField()
     reference = serializers.CharField(required=False, allow_blank=True)
     notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class JournalEntryListItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    entry_number = serializers.CharField()
+    entry_date = serializers.DateField(allow_null=True)
+    description = serializers.CharField(allow_blank=True)
+    status = serializers.ChoiceField(choices=['draft', 'posted', 'reversed'])
+    is_auto = serializers.BooleanField()
+    source_type = serializers.ChoiceField(choices=list(SOURCE_TYPES))
+    total_debit = money_field()
+    total_credit = money_field()
+
+
+class PaginatedJournalEntriesSerializer(serializers.Serializer):
+    as_of = serializers.CharField()
+    count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    results = JournalEntryListItemSerializer(many=True)
+
+
+JOURNAL_ENTRY_LIST_PARAMS = [
+    OpenApiParameter(
+        'status',
+        OpenApiTypes.STR,
+        OpenApiParameter.QUERY,
+        enum=['draft', 'posted', 'reversed'],
+    ),
+    OpenApiParameter('date_from', OpenApiTypes.DATE, OpenApiParameter.QUERY),
+    OpenApiParameter('date_to', OpenApiTypes.DATE, OpenApiParameter.QUERY),
+    OpenApiParameter(
+        'search',
+        OpenApiTypes.STR,
+        OpenApiParameter.QUERY,
+        description='Filter by entry_number, description, or reference',
+    ),
+    OpenApiParameter(
+        name='page',
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        description='Page number (min 1, default 1)',
+    ),
+    OpenApiParameter(
+        name='page_size',
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        description='Page size (default 20, max 100)',
+    ),
+]

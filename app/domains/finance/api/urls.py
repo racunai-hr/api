@@ -8,6 +8,7 @@ from domains.finance.api.views import (
     DepositReturnView,
     DepositReverseView,
     ExpenseApproveView,
+    JournalEntryListView,
     PartnerFinancialSummaryView,
     PartnerSubledgerView,
     PrivateFundsClaimCreateView,
@@ -16,6 +17,11 @@ from domains.finance.api.views import (
 )
 
 urlpatterns = [
+    path(
+        'finance/journal-entries/',
+        JournalEntryListView.as_view(),
+        name='finance-journal-entry-list',
+    ),
     path(
         'finance/partners/<int:pk>/financial-summary/',
         PartnerFinancialSummaryView.as_view(),

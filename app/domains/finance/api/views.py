@@ -14,17 +14,21 @@ from config.schema_common import ERROR_400, ERROR_401, ERROR_404, ERROR_409
 from domains.finance.api.authentication import FinanceJWTAuthentication
 from domains.finance.api.permissions import TenantFinanceReadPermission, TenantFinanceWritePermission
 from domains.finance.api.schema import (
+    JOURNAL_ENTRY_LIST_PARAMS,
     CreateDepositSerializer,
     CreatePrivateFundsClaimSerializer,
     DepositConflictSerializer,
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
+    PaginatedJournalEntriesSerializer,
     PartnerFinancialSummarySerializer,
     PartnerSubledgerListSerializer,
     PrivateFundsClaimSerializer,
     ReturnDepositSerializer,
 )
+from domains.finance.read.filters import parse_journal_entry_filters
+from domains.finance.read.service import list_journal_entries
 from domains.finance.services.aging import partner_financial_summary, partner_subledger_items
 from domains.finance.services.deposits import (
     DepositBadRequest,
@@ -98,6 +102,27 @@ class _FinanceWriteApiView(APIView):
         if getattr(request, 'user', None) and request.user.is_authenticated:
             raise Http404()
         super().permission_denied(request, message=message, code=code)
+
+
+class JournalEntryListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_journal_entries_list',
+        parameters=JOURNAL_ENTRY_LIST_PARAMS,
+        responses={
+            200: PaginatedJournalEntriesSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request):
+        tenant = _require_tenant(request)
+        try:
+            filters = parse_journal_entry_filters(request.query_params)
+        except (ValueError, TypeError) as exc:
+            raise ValidationError({'detail': str(exc)}) from exc
+        return Response(list_journal_entries(tenant, filters))
 
 
 class PartnerFinancialSummaryView(_FinanceReadApiView):
