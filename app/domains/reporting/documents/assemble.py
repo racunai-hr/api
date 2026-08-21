@@ -6,6 +6,7 @@ from datetime import date
 
 from domains.reporting.documents.attachments import download_available_field
 from domains.reporting.documents.evidence import incoming_pdf_available, incoming_ubl_available
+from domains.reporting.documents.incoming_detail import enrich_incoming_detail_payload
 from domains.reporting.documents.provenance import provenanced
 from domains.reporting.documents.projection import (
     bank_block,
@@ -307,6 +308,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             'created_at': att.created_at.isoformat() if att.created_at else None,
             'uploaded_by': att.uploaded_by.username if att.uploaded_by_id else None,
             'download_available': download_available_field(att),
+            'kind': 'upload',
         }
         for att in attachments
     ]
@@ -321,6 +323,24 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             tenant=document.tenant,
             expense_id=document.pk,
             super_links=super_links,
+        )
+        enrich_incoming_detail_payload(
+            payload,
+            document=document,
+            partner=partner,
+            rel=rel,
+            super_links=super_links,
+            as4_links=as4_links,
+            posting=posting,
+            subledger=subledger,
+            ledger_rows=ledger_rows,
+            journal_lines=(
+                rel['lines_by_je'].get(posting.pk, []) if posting is not None else []
+            ),
+            allocations=allocations,
+            bank_txs=bank_txs,
+            match_status=match_status,
+            period_label=period_label,
         )
     else:
         # Outgoing: on-demand generated PDF (existing DocumentPdfView contract).

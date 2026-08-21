@@ -991,6 +991,11 @@ paths:
   /api/documents/{direction}/{id}/pdf/:
     get:
       operationId: documents_pdf
+      description: |-
+        File downloads return HttpResponse/FileResponse, not DRF renderer output.
+
+        Clients send Accept: application/xml|pdf (etc.); default JSON renderers would
+        otherwise 406 before the view runs. Same bypass as export (`?format=`).
       parameters:
       - in: path
         name: direction
@@ -1048,6 +1053,11 @@ paths:
   /api/documents/{direction}/{id}/ubl/:
     get:
       operationId: documents_ubl
+      description: |-
+        File downloads return HttpResponse/FileResponse, not DRF renderer output.
+
+        Clients send Accept: application/xml|pdf (etc.); default JSON renderers would
+        otherwise 406 before the view runs. Same bypass as export (`?format=`).
       parameters:
       - in: path
         name: direction
@@ -1092,6 +1102,11 @@ paths:
   /api/documents/export/:
     get:
       operationId: documents_export
+      description: |-
+        File downloads return HttpResponse/FileResponse, not DRF renderer output.
+
+        Clients send Accept: application/xml|pdf (etc.); default JSON renderers would
+        otherwise 406 before the view runs. Same bypass as export (`?format=`).
       parameters:
       - in: query
         name: amount_max
@@ -1231,6 +1246,11 @@ paths:
   /api/documents/incoming/{id}/attachments/{attachment_id}/:
     get:
       operationId: documents_attachment_download
+      description: |-
+        File downloads return HttpResponse/FileResponse, not DRF renderer output.
+
+        Clients send Accept: application/xml|pdf (etc.); default JSON renderers would
+        otherwise 406 before the view runs. Same bypass as export (`?format=`).
       parameters:
       - in: path
         name: attachment_id
@@ -2849,6 +2869,66 @@ paths:
           description: ''
 components:
   schemas:
+    AccountingBlock:
+      type: object
+      properties:
+        journal_entry_id:
+          type: integer
+          nullable: true
+        entry_number:
+          type: string
+          nullable: true
+        entry_date:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        debit_total:
+          type: string
+          nullable: true
+        credit_total:
+          type: string
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountingLine'
+      required:
+      - credit_total
+      - debit_total
+      - entry_date
+      - entry_number
+      - journal_entry_id
+      - lines
+      - status
+    AccountingLine:
+      type: object
+      properties:
+        account_code:
+          type: string
+          nullable: true
+        account_name:
+          type: string
+          nullable: true
+        partner_name:
+          type: string
+          nullable: true
+        debit:
+          type: string
+          nullable: true
+        credit:
+          type: string
+          nullable: true
+        description:
+          type: string
+      required:
+      - account_code
+      - account_name
+      - credit
+      - debit
+      - description
+      - partner_name
     Allocation:
       type: object
       properties:
@@ -2901,6 +2981,9 @@ components:
           nullable: true
         download_available:
           $ref: '#/components/schemas/Provenanced'
+        kind:
+          type: string
+          nullable: true
       required:
       - created_at
       - download_available
@@ -3541,6 +3624,45 @@ components:
           type: boolean
         as_of:
           type: string
+        number:
+          type: string
+          nullable: true
+        supplier:
+          $ref: '#/components/schemas/Supplier'
+        document:
+          $ref: '#/components/schemas/IncomingDocumentMeta'
+        status:
+          $ref: '#/components/schemas/IncomingLifecycleStatus'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomingLine'
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomingCharge'
+        tax_summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxSummaryRow'
+        totals:
+          $ref: '#/components/schemas/IncomingTotals'
+        references:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentReference'
+        integration:
+          $ref: '#/components/schemas/IntegrationBlock'
+        technical:
+          $ref: '#/components/schemas/TechnicalBlock'
+        accounting:
+          $ref: '#/components/schemas/AccountingBlock'
+        vat_context:
+          $ref: '#/components/schemas/VatContext'
+        subledger_context:
+          $ref: '#/components/schemas/SubledgerContext'
+        payment:
+          $ref: '#/components/schemas/PaymentBlock'
       required:
       - allocations
       - amounts
@@ -3636,6 +3758,16 @@ components:
       - payment_method
       - payment_number
       - status
+    DocumentReference:
+      type: object
+      properties:
+        type:
+          type: string
+        value:
+          type: string
+      required:
+      - type
+      - value
     DocumentSummary:
       type: object
       properties:
@@ -3994,6 +4126,70 @@ components:
       - transactions_processed
       - transactions_skipped
       - warnings
+    IncomingCharge:
+      type: object
+      properties:
+        code:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        amount:
+          type: string
+          nullable: true
+        vat_rate:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - code
+      - description
+      - type
+      - vat_rate
+    IncomingDocumentMeta:
+      type: object
+      properties:
+        issue_date:
+          type: string
+          nullable: true
+        delivery_date:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          nullable: true
+        received_at:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        business_process:
+          type: string
+          nullable: true
+        source_label:
+          type: string
+          nullable: true
+        format:
+          type: string
+          nullable: true
+        primary_reference:
+          type: string
+          nullable: true
+      required:
+      - business_process
+      - currency
+      - delivery_date
+      - due_date
+      - format
+      - issue_date
+      - primary_reference
+      - received_at
+      - source_label
     IncomingInvoiceImport:
       type: object
       properties:
@@ -4064,6 +4260,147 @@ components:
       - started_at
       - status
       - warnings
+    IncomingLifecycleStatus:
+      type: object
+      properties:
+        document:
+          type: string
+          nullable: true
+        workflow:
+          type: string
+          nullable: true
+        integration:
+          type: string
+          nullable: true
+        posting:
+          type: string
+          nullable: true
+        vat:
+          type: string
+          nullable: true
+        subledger:
+          type: string
+          nullable: true
+        payment:
+          type: string
+          nullable: true
+      required:
+      - document
+      - integration
+      - payment
+      - posting
+      - subledger
+      - vat
+      - workflow
+    IncomingLine:
+      type: object
+      properties:
+        position:
+          type: integer
+        classification:
+          allOf:
+          - $ref: '#/components/schemas/LineClassification'
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        quantity:
+          type: string
+          nullable: true
+        unit_price:
+          type: string
+          nullable: true
+        vat_rate:
+          type: string
+          nullable: true
+        net_amount:
+          type: string
+          nullable: true
+        vat_amount:
+          type: string
+          nullable: true
+        gross_amount:
+          type: string
+          nullable: true
+      required:
+      - classification
+      - description
+      - gross_amount
+      - name
+      - net_amount
+      - position
+      - quantity
+      - unit
+      - unit_price
+      - vat_amount
+      - vat_rate
+    IncomingTotals:
+      type: object
+      properties:
+        line_net:
+          type: string
+          nullable: true
+        charges_total:
+          type: string
+          nullable: true
+        allowances_total:
+          type: string
+          nullable: true
+        vat_total:
+          type: string
+          nullable: true
+        grand_total:
+          type: string
+          nullable: true
+        prepaid:
+          type: string
+          nullable: true
+        payable:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+      required:
+      - allowances_total
+      - charges_total
+      - currency
+      - grand_total
+      - line_net
+      - payable
+      - prepaid
+      - vat_total
+    IntegrationBlock:
+      type: object
+      properties:
+        source:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        received_at:
+          type: string
+          nullable: true
+        external_id:
+          type: string
+          nullable: true
+        external_view_url:
+          type: string
+          format: uri
+          nullable: true
+      required:
+      - external_id
+      - external_view_url
+      - received_at
+      - source
+      - status
     JournalLine:
       type: object
       properties:
@@ -4128,6 +4465,18 @@ components:
       - vat_amount
       - vat_box
       - vat_rate
+    LineClassification:
+      type: object
+      properties:
+        scheme:
+          type: string
+          nullable: true
+        code:
+          type: string
+          nullable: true
+      required:
+      - code
+      - scheme
     MatchRequestRequest:
       type: object
       properties:
@@ -4824,6 +5173,37 @@ components:
           type: string
         internal_notes:
           type: string
+    PaymentBlock:
+      type: object
+      properties:
+        matched:
+          type: boolean
+        date:
+          type: string
+          nullable: true
+        amount:
+          type: string
+          nullable: true
+        account_mask:
+          type: string
+          nullable: true
+        reference:
+          type: string
+          nullable: true
+        reconcile_status:
+          type: string
+          nullable: true
+        bank_transaction_id:
+          type: integer
+          nullable: true
+      required:
+      - account_mask
+      - amount
+      - bank_transaction_id
+      - date
+      - matched
+      - reconcile_status
+      - reference
     PaymentOrder:
       type: object
       description: Allowlist only — no SCA, tokens, provider secrets, or internal
@@ -5136,6 +5516,29 @@ components:
       - statement_number
       - status
       - transaction_count
+    SubledgerAllocationContext:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+        journal_entry_id:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - created_at
+      - id
+      - journal_entry_id
+      - status
     SubledgerBlock:
       type: object
       properties:
@@ -5155,6 +5558,90 @@ components:
       - open_amount
       - original_amount
       - state
+    SubledgerContext:
+      type: object
+      properties:
+        item_id:
+          type: integer
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        original_amount:
+          type: string
+          nullable: true
+        allocated_amount:
+          type: string
+          nullable: true
+        open_amount:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          nullable: true
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubledgerAllocationContext'
+      required:
+      - allocated_amount
+      - allocations
+      - due_date
+      - item_id
+      - open_amount
+      - original_amount
+      - state
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: integer
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        country_code:
+          type: string
+          nullable: true
+        address:
+          $ref: '#/components/schemas/SupplierAddress'
+        oib:
+          type: string
+          nullable: true
+        vat_id:
+          type: string
+          nullable: true
+        tax_id:
+          type: string
+          nullable: true
+        primary_iban:
+          type: string
+          nullable: true
+      required:
+      - address
+      - country_code
+      - id
+      - name
+      - oib
+      - primary_iban
+      - tax_id
+      - vat_id
+    SupplierAddress:
+      type: object
+      properties:
+        street:
+          type: string
+          nullable: true
+        postal_code:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+      required:
+      - city
+      - postal_code
+      - street
     SupplierExtracted:
       type: object
       properties:
@@ -5305,6 +5792,42 @@ components:
       description: |-
         * `payment` - payment
         * `journal_entry` - journal_entry
+    TaxSummaryRow:
+      type: object
+      properties:
+        rate:
+          type: string
+          nullable: true
+        base:
+          type: string
+          nullable: true
+        vat:
+          type: string
+          nullable: true
+      required:
+      - base
+      - rate
+      - vat
+    TechnicalBlock:
+      type: object
+      properties:
+        message_id:
+          type: string
+          nullable: true
+        parser_version:
+          type: string
+          nullable: true
+        imported_at:
+          type: string
+          nullable: true
+        source_hash:
+          type: string
+          nullable: true
+      required:
+      - imported_at
+      - message_id
+      - parser_version
+      - source_hash
     TokenObtainRequestRequest:
       type: object
       properties:
@@ -5427,6 +5950,50 @@ components:
       - lifecycle
       - period
       - period_returns
+    VatContext:
+      type: object
+      properties:
+        period:
+          type: string
+          nullable: true
+        recorded:
+          type: boolean
+        deductible:
+          type: boolean
+          nullable: true
+        total_base:
+          type: string
+          nullable: true
+        total_vat:
+          type: string
+          nullable: true
+        rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/VatContextRate'
+      required:
+      - deductible
+      - period
+      - rates
+      - recorded
+      - total_base
+      - total_vat
+    VatContextRate:
+      type: object
+      properties:
+        rate:
+          type: string
+          nullable: true
+        base:
+          type: string
+          nullable: true
+        vat:
+          type: string
+          nullable: true
+      required:
+      - base
+      - rate
+      - vat
   securitySchemes:
     bearerAuth:
       type: http
