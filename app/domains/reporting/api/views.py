@@ -63,6 +63,18 @@ class _DocumentApiView(APIView):
         super().permission_denied(request, message=message, code=code)
 
 
+class _DocumentBinaryApiView(_DocumentApiView):
+    """File downloads return HttpResponse/FileResponse, not DRF renderer output.
+
+    Clients send Accept: application/xml|pdf (etc.); default JSON renderers would
+    otherwise 406 before the view runs. Same bypass as export (`?format=`).
+    """
+
+    def perform_content_negotiation(self, request, force=False):
+        renderer = self.renderer_classes[0]()
+        return renderer, renderer.media_type
+
+
 def _require_tenant(request):
     tenant = getattr(request, 'tenant', None)
     if tenant is None:
@@ -108,12 +120,7 @@ class DocumentDetailView(_DocumentApiView):
         return Response(get_document_detail(tenant, direction, pk))
 
 
-class DocumentExportView(_DocumentApiView):
-    def perform_content_negotiation(self, request, force=False):
-        """`?format=` is the CSV/XLSX file type, not a DRF renderer suffix."""
-        renderer = self.renderer_classes[0]()
-        return renderer, renderer.media_type
-
+class DocumentExportView(_DocumentBinaryApiView):
     @extend_schema(
         tags=['documents'],
         operation_id='documents_export',
@@ -153,7 +160,7 @@ class DocumentExportView(_DocumentApiView):
         return response
 
 
-class DocumentPdfView(_DocumentApiView):
+class DocumentPdfView(_DocumentBinaryApiView):
     @extend_schema(
         tags=['documents'],
         operation_id='documents_pdf',
@@ -215,7 +222,7 @@ class DocumentPdfView(_DocumentApiView):
         return response
 
 
-class DocumentUblView(_DocumentApiView):
+class DocumentUblView(_DocumentBinaryApiView):
     @extend_schema(
         tags=['documents'],
         operation_id='documents_ubl',
@@ -246,7 +253,7 @@ class DocumentUblView(_DocumentApiView):
         return response
 
 
-class DocumentAttachmentDownloadView(_DocumentApiView):
+class DocumentAttachmentDownloadView(_DocumentBinaryApiView):
     @extend_schema(
         tags=['documents'],
         operation_id='documents_attachment_download',

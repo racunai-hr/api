@@ -76,8 +76,14 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         for p in Partner.all_objects.filter(tenant=tenant, pk__in=partner_ids)
     }
     ibans_by_partner = defaultdict(set)
+    primary_iban_by_partner = {}
     for ba in PartnerBankAccount.objects.filter(partner_id__in=partner_ids, is_active=True):
-        ibans_by_partner[ba.partner_id].add((ba.iban or '').replace(' ', '').upper())
+        iban = (ba.iban or '').replace(' ', '').upper()
+        if not iban:
+            continue
+        ibans_by_partner[ba.partner_id].add(iban)
+        if ba.is_primary and ba.partner_id not in primary_iban_by_partner:
+            primary_iban_by_partner[ba.partner_id] = iban
 
     def _gfk_map(qs, ct, ids):
         result = defaultdict(list)
@@ -126,10 +132,14 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     payment_ids = [p.pk for rows in payments_by_invoice.values() for p in rows]
 
     bank_by_payment = defaultdict(list)
-    for tx in BankTransaction.all_objects.filter(tenant=tenant, matched_payment_id__in=payment_ids):
+    for tx in BankTransaction.all_objects.filter(tenant=tenant, matched_payment_id__in=payment_ids).select_related(
+        'bank_statement__bank_account'
+    ):
         bank_by_payment[tx.matched_payment_id].append(tx)
     bank_by_je = defaultdict(list)
-    for tx in BankTransaction.all_objects.filter(tenant=tenant, matched_journal_entry_id__in=je_ids):
+    for tx in BankTransaction.all_objects.filter(tenant=tenant, matched_journal_entry_id__in=je_ids).select_related(
+        'bank_statement__bank_account'
+    ):
         bank_by_je[tx.matched_journal_entry_id].append(tx)
 
     orders_by_payment = {}
@@ -188,6 +198,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'attachments_by_expense': attachments_by_expense,
         'partners': partners,
         'ibans_by_partner': ibans_by_partner,
+        'primary_iban_by_partner': primary_iban_by_partner,
         'je_out': je_out,
         'je_in': je_in,
         'je_dep': je_dep,

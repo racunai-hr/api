@@ -23,8 +23,10 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounting.models import (
+    ChartOfAccounts,
     FiscalPeriod,
     JournalEntry,
+    JournalEntryLine,
     SubledgerAllocation,
     SubledgerItem,
     SubmissionDestination,
@@ -51,11 +53,75 @@ from domains.reporting.documents.projection import (
 from expenses.models import Expense, ExpenseAttachment, ExpenseCategory
 from invoices.models import Invoice, InvoiceItem
 from partners.models import Partner, PartnerBankAccount
+from payments.models import BankAccount
+from banking.models import BankStatement, BankTransaction
 from tenants.models import Tenant, TenantMembership
 
 
 HOST = 'docread.racunai.hr'
 OTHER_HOST = 'docother.racunai.hr'
+
+# Minimal CVH-shaped UBL for PR A incoming detail contract (generic UBL semantics).
+_PR_A_UBL = """<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ProfileID>P5</cbc:ProfileID>
+  <cbc:ID>26210-H120-5154</cbc:ID>
+  <cbc:IssueDate>2026-08-06</cbc:IssueDate>
+  <cbc:DueDate>2026-08-06</cbc:DueDate>
+  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+  <cac:OriginatorDocumentReference><cbc:ID>HR03 1201-0262102</cbc:ID></cac:OriginatorDocumentReference>
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cac:PartyName><cbc:Name>CVH STP</cbc:Name></cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>Street 1</cbc:StreetName>
+        <cbc:CityName>Vodice</cbc:CityName>
+        <cbc:PostalZone>22211</cbc:PostalZone>
+        <cac:Country><cbc:IdentificationCode>HR</cbc:IdentificationCode></cac:Country>
+      </cac:PostalAddress>
+      <cac:PartyTaxScheme><cbc:CompanyID>HR73294314024</cbc:CompanyID></cac:PartyTaxScheme>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:Delivery><cbc:ActualDeliveryDate>2026-08-06</cbc:ActualDeliveryDate></cac:Delivery>
+  <cac:AllowanceCharge>
+    <cbc:ChargeIndicator>true</cbc:ChargeIndicator>
+    <cbc:AllowanceChargeReason>05100 Posebna naknada za okoliš</cbc:AllowanceChargeReason>
+    <cbc:Amount currencyID="EUR">2.20</cbc:Amount>
+  </cac:AllowanceCharge>
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="EUR">7.49</cbc:TaxAmount>
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="EUR">29.96</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="EUR">7.49</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>25.00</cbc:Percent></cac:TaxCategory>
+    </cac:TaxSubtotal>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="EUR">29.96</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="EUR">364.71</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="EUR">372.20</cbc:TaxInclusiveAmount>
+    <cbc:ChargeTotalAmount currencyID="EUR">334.75</cbc:ChargeTotalAmount>
+    <cbc:PrepaidAmount currencyID="EUR">372.20</cbc:PrepaidAmount>
+    <cbc:PayableAmount currencyID="EUR">0</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine>
+    <cbc:ID>1</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="H87">1</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="EUR">7.06</cbc:LineExtensionAmount>
+    <cac:Item>
+      <cbc:Name>Poslovi registracije</cbc:Name>
+      <cac:CommodityClassification>
+        <cbc:ItemClassificationCode listID="CG">71.20.04</cbc:ItemClassificationCode>
+      </cac:CommodityClassification>
+      <cac:ClassifiedTaxCategory><cbc:Percent>25.00</cbc:Percent></cac:ClassifiedTaxCategory>
+    </cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="EUR">7.06</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+</Invoice>
+"""
+
 
 
 def _minimal_pdf(name='test.pdf'):
@@ -185,8 +251,8 @@ class DocumentReadModelTests(TestCase):
             fiscal_period=period,
         )
 
-    def _subledger(self, source, *, status='open', open_amount=None, direction='receivable'):
-        je = self._journal(source, number=f'JE-SL-{source.pk}')
+    def _subledger(self, source, *, status='open', open_amount=None, direction='receivable', journal_entry=None):
+        je = journal_entry or self._journal(source, number=f'JE-SL-{source.pk}')
         amount = getattr(source, 'total_amount', None) or source.amount
         if open_amount is None:
             open_amount = amount if status != 'closed' else Decimal('0')
@@ -1043,6 +1109,26 @@ class DocumentReadModelTests(TestCase):
         detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
         self.assertTrue(detail['ubl_available'])
 
+    def test_incoming_ubl_accept_application_xml_is_not_406(self):
+        """UI sends Accept: application/xml; DRF must not content-negotiate to 406."""
+        expense = self._expense()
+        self._super_inbound_link(expense, ubl_xml='<Invoice>ok</Invoice>')
+        response = self._auth_client().get(
+            f'/api/documents/incoming/{expense.pk}/ubl/',
+            HTTP_ACCEPT='application/xml',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertIn(b'<Invoice>ok</Invoice>', response.content)
+
+    def test_outgoing_pdf_accept_application_pdf_is_not_406(self):
+        invoice = self._invoice()
+        response = self._auth_client().get(
+            f'/api/documents/outgoing/{invoice.pk}/pdf/',
+            HTTP_ACCEPT='application/pdf',
+        )
+        self._assert_safe_pdf(response)
+
     def test_incoming_ubl_falls_back_to_as4(self):
         expense = self._expense()
         self._super_inbound_link(expense, ubl_xml='')
@@ -1115,3 +1201,188 @@ class DocumentReadModelTests(TestCase):
                     ).status_code,
                     404,
                 )
+
+    def test_incoming_detail_cvh_shaped_ubl_contract(self):
+        expense = self._expense(
+            receipt_number='26210-H120-5154',
+            amount=Decimal('372.20'),
+            tax_amount=Decimal('7.49'),
+            status='draft',
+        )
+        Expense.all_objects.filter(pk=expense.pk).update(source='super')
+        expense.refresh_from_db()
+        guid = '7a8e295b-5859-4a39-a289-3b92b1ae7469'
+        self._super_inbound_link(expense, ubl_xml=_PR_A_UBL, guid=guid)
+        with override_settings(SUPER_PORTAL_BASE_URL='https://moj.super.hr'):
+            detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+
+        self.assertEqual(detail['number'], '26210-H120-5154')
+        self.assertTrue(detail['ubl_available'])
+        self.assertFalse(detail['pdf_available'])
+        self.assertEqual(detail['document']['business_process'], 'P5')
+        self.assertEqual(detail['document']['delivery_date'], '2026-08-06')
+        self.assertEqual(detail['status']['document'], 'received')
+        self.assertEqual(detail['status']['workflow'], 'pending')
+        self.assertEqual(detail['status']['integration'], 'received')
+        self.assertEqual(detail['status']['posting'], 'unposted')
+        self.assertEqual(detail['status']['vat'], 'absent')
+        self.assertIsNone(detail['status']['subledger'])
+        self.assertIsNone(detail['status']['payment'])
+        self.assertEqual(len(detail['lines']), 1)
+        self.assertEqual(detail['lines'][0]['classification']['scheme'], 'CG')
+        self.assertEqual(detail['lines'][0]['classification']['code'], '71.20.04')
+        self.assertIsNone(detail['lines'][0]['vat_amount'])
+        self.assertEqual(len(detail['charges']), 1)
+        self.assertEqual(detail['charges'][0]['code'], '05100')
+        self.assertEqual(detail['totals']['grand_total'], '372.20')
+        self.assertEqual(detail['totals']['prepaid'], '372.20')
+        self.assertEqual(detail['totals']['payable'], '0.00')
+        self.assertEqual(detail['totals']['charges_total'], '334.75')
+        self.assertEqual(detail['totals']['line_net'], '29.96')
+        self.assertTrue(any(r['type'] == 'originator' for r in detail['references']))
+        self.assertEqual(detail['integration']['source'], 'super')
+        self.assertEqual(detail['integration']['external_id'], guid)
+        self.assertEqual(
+            detail['integration']['external_view_url'],
+            f'https://moj.super.hr/hr/Client/Invoice/ViewDetails/{guid}',
+        )
+        self.assertEqual(detail['accounting']['status'], 'unposted')
+        self.assertFalse(detail['vat_context']['recorded'])
+        self.assertIsNone(detail['subledger_context']['item_id'])
+        self.assertFalse(detail['payment']['matched'])
+
+    def test_incoming_detail_prc_accounting_context_present_and_absent(self):
+        unposted = self._expense(status='draft')
+        absent = self._auth_client().get(f'/api/documents/incoming/{unposted.pk}/').json()
+        self.assertEqual(absent['status']['posting'], 'unposted')
+        self.assertEqual(absent['status']['vat'], 'absent')
+        self.assertIsNone(absent['status']['subledger'])
+        self.assertIsNone(absent['status']['payment'])
+        self.assertEqual(absent['accounting']['journal_entry_id'], None)
+        self.assertEqual(absent['accounting']['lines'], [])
+        self.assertFalse(absent['vat_context']['recorded'])
+        self.assertEqual(absent['vat_context']['rates'], [])
+        self.assertIsNone(absent['subledger_context']['state'])
+        self.assertFalse(absent['payment']['matched'])
+        self.assertIsNone(absent['payment']['reconcile_status'])
+
+        expense = self._expense(status='approved', amount=Decimal('50.00'), tax_amount=Decimal('10.00'))
+        je = self._journal(expense, status='posted', number='JE-PRC-1')
+        account = ChartOfAccounts.all_objects.filter(tenant=self.tenant).first()
+        self.assertIsNotNone(account)
+        JournalEntryLine.objects.create(
+            journal_entry=je,
+            account=account,
+            description='trošak',
+            debit_amount=Decimal('50.00'),
+            credit_amount=Decimal('0.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=je,
+            account=account,
+            description='obveza',
+            debit_amount=Decimal('0.00'),
+            credit_amount=Decimal('50.00'),
+        )
+        sub = self._subledger(
+            expense,
+            status='closed',
+            direction='payable',
+            open_amount=Decimal('0.00'),
+            journal_entry=je,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=je,
+            amount=Decimal('50.00'),
+        )
+        self._ledger(expense)
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='Glavni',
+            bank_name='PBZ',
+            account_number='110',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-PRC-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 20),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('50.00'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 20),
+            amount=Decimal('50.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='plaćanje',
+            reference='HR03-PRC',
+            match_status='matched',
+            matched_journal_entry=je,
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(detail['status']['posting'], 'posted')
+        self.assertEqual(detail['status']['vat'], 'recorded')
+        self.assertEqual(detail['status']['subledger'], 'closed')
+        self.assertEqual(detail['status']['payment'], 'matched')
+        self.assertEqual(detail['accounting']['journal_entry_id'], je.pk)
+        self.assertEqual(detail['accounting']['entry_number'], 'JE-PRC-1')
+        self.assertEqual(detail['accounting']['status'], 'posted')
+        self.assertEqual(detail['accounting']['debit_total'], '50.00')
+        self.assertEqual(detail['accounting']['credit_total'], '50.00')
+        self.assertEqual(len(detail['accounting']['lines']), 2)
+        self.assertTrue(detail['vat_context']['recorded'])
+        self.assertEqual(detail['vat_context']['period'], '2026-05')
+        self.assertEqual(detail['vat_context']['total_vat'], '10.00')
+        self.assertEqual(detail['subledger_context']['item_id'], sub.pk)
+        self.assertEqual(detail['subledger_context']['state'], 'closed')
+        self.assertEqual(detail['subledger_context']['open_amount'], '0.00')
+        self.assertEqual(detail['subledger_context']['allocated_amount'], '50.00')
+        self.assertEqual(len(detail['subledger_context']['allocations']), 1)
+        self.assertEqual(detail['subledger_context']['allocations'][0]['journal_entry_id'], je.pk)
+        self.assertTrue(detail['payment']['matched'])
+        self.assertEqual(detail['payment']['reconcile_status'], 'matched')
+        self.assertEqual(detail['payment']['amount'], '50.00')
+        self.assertEqual(detail['payment']['account_mask'], '…4771')
+        self.assertEqual(detail['payment']['reference'], 'HR03-PRC')
+
+    def test_incoming_detail_without_super_portal_url_null(self):
+        expense = self._expense()
+        Expense.all_objects.filter(pk=expense.pk).update(source='super')
+        expense.refresh_from_db()
+        self._super_inbound_link(expense, ubl_xml=_PR_A_UBL, guid='abc-guid')
+        with override_settings(SUPER_PORTAL_BASE_URL=''):
+            detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertIsNone(detail['integration']['external_view_url'])
+        self.assertEqual(detail['integration']['external_id'], 'abc-guid')
+
+    def test_incoming_detail_non_super_empty_structured_blocks(self):
+        expense = self._expense()
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(detail['lines'], [])
+        self.assertEqual(detail['charges'], [])
+        self.assertEqual(detail['references'], [])
+        self.assertIsNone(detail['integration']['external_view_url'])
+        self.assertFalse(detail['ubl_available'])
+        self.assertFalse(detail['pdf_available'])
+        self.assertIsNone(detail['totals']['prepaid'])
+        self.assertEqual(detail['supplier']['id'], expense.supplier_id)
+
+    def test_incoming_detail_cross_tenant_is_404(self):
+        expense = self._expense()
+        self._super_inbound_link(expense, ubl_xml=_PR_A_UBL)
+        TenantMembership.objects.get_or_create(
+            user=self.outsider, tenant=self.other, defaults={'role': 'viewer'}
+        )
+        outsider = self._auth_client(self.outsider, host=OTHER_HOST)
+        self.assertEqual(
+            outsider.get(f'/api/documents/incoming/{expense.pk}/').status_code,
+            404,
+        )
