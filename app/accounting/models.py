@@ -214,6 +214,15 @@ class JournalEntry(TenantMixin, models.Model):
         related_name='reversals',
         verbose_name="Storno temeljnice",
     )
+    replaces_entry = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='replaced_by',
+        verbose_name='Zamjenjuje temeljnicu',
+        help_text='Eksplicitni replacement JE (tehničko preknjiženje); ne koristiti timestamp heuristiku.',
+    )
     fiscal_period = models.ForeignKey(
         FiscalPeriod,
         on_delete=models.SET_NULL,
@@ -263,54 +272,72 @@ class JournalEntry(TenantMixin, models.Model):
             raise ValidationError('Temeljnica mora biti uravnotežena (duguje = potražuje).')
 
     def post(self, user):
-        if self.status != 'draft':
-            raise ValidationError('Samo nacrt se može knjižiti.')
-        if self.balance_difference != Decimal('0.00'):
-            raise ValidationError('Temeljnica nije uravnotežena.')
-        self.status = 'posted'
-        self.posted_by = user
-        self.posted_at = timezone.now()
-        self.save(update_fields=['status', 'posted_by', 'posted_at'])
+        from django.db import transaction
+
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+        with transaction.atomic():
+            lock_open_vat_period_for_source_mutation(self.tenant, self.entry_date)
+            if self.status != 'draft':
+                raise ValidationError('Samo nacrt se može knjižiti.')
+            if self.balance_difference != Decimal('0.00'):
+                raise ValidationError('Temeljnica nije uravnotežena.')
+            self.status = 'posted'
+            self.posted_by = user
+            self.posted_at = timezone.now()
+            self.save(update_fields=['status', 'posted_by', 'posted_at'])
 
     def reverse(self, user):
-        if self.status != 'posted':
-            raise ValidationError('Samo knjižena temeljnica se može stornirati.')
-        if self.matched_bank_transactions.exists():
-            raise ValidationError(
-                'Temeljnica je usklađena s bankovnom transakcijom. '
-                'Prvo poništite usklađenje u bankovnoj transakciji.'
-            )
-        reversal = JournalEntry.objects.create(
-            tenant=self.tenant,
-            entry_number=f"{self.entry_number}-ST",
-            entry_date=timezone.now().date(),
-            status='posted',
-            description=f"Storno: {self.description}",
-            reference=self.reference,
-            is_auto=self.is_auto,
-            source_content_type=self.source_content_type,
-            source_object_id=self.source_object_id,
-            reversed_entry=self,
-            fiscal_period=self.fiscal_period,
-            created_by=user,
-            posted_by=user,
-            posted_at=timezone.now(),
-        )
-        for line in self.lines.all():
-            JournalEntryLine.objects.create(
-                journal_entry=reversal,
-                account=line.account,
-                analytic_account=line.analytic_account,
-                description=f"Storno: {line.description}",
-                debit_amount=line.credit_amount,
-                credit_amount=line.debit_amount,
-            )
-        self.status = 'reversed'
-        self.save(update_fields=['status'])
-        from domains.finance.services.subledger import handle_journal_entry_reversal
+        from django.db import transaction
 
-        handle_journal_entry_reversal(self)
-        return reversal
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+        with transaction.atomic():
+            lock_open_vat_period_for_source_mutation(self.tenant, self.entry_date)
+            reversal_date = timezone.now().date()
+            if (reversal_date.year, reversal_date.month) != (
+                self.entry_date.year,
+                self.entry_date.month,
+            ):
+                lock_open_vat_period_for_source_mutation(self.tenant, reversal_date)
+            if self.status != 'posted':
+                raise ValidationError('Samo knjižena temeljnica se može stornirati.')
+            if self.matched_bank_transactions.exists():
+                raise ValidationError(
+                    'Temeljnica je usklađena s bankovnom transakcijom. '
+                    'Prvo poništite usklađenje u bankovnoj transakciji.'
+                )
+            reversal = JournalEntry.objects.create(
+                tenant=self.tenant,
+                entry_number=f"{self.entry_number}-ST",
+                entry_date=reversal_date,
+                status='posted',
+                description=f"Storno: {self.description}",
+                reference=self.reference,
+                is_auto=self.is_auto,
+                source_content_type=self.source_content_type,
+                source_object_id=self.source_object_id,
+                reversed_entry=self,
+                fiscal_period=self.fiscal_period,
+                created_by=user,
+                posted_by=user,
+                posted_at=timezone.now(),
+            )
+            for line in self.lines.all():
+                JournalEntryLine.objects.create(
+                    journal_entry=reversal,
+                    account=line.account,
+                    analytic_account=line.analytic_account,
+                    description=f"Storno: {line.description}",
+                    debit_amount=line.credit_amount,
+                    credit_amount=line.debit_amount,
+                )
+            self.status = 'reversed'
+            self.save(update_fields=['status'])
+            from domains.finance.services.subledger import handle_journal_entry_reversal
+
+            handle_journal_entry_reversal(self)
+            return reversal
 
 
 class JournalEntryLine(models.Model):
@@ -924,6 +951,62 @@ class VATEntryCategory(models.TextChoices):
     ADJUSTMENT = 'adjustment', 'Korekcija'
 
 
+class VATLedgerOrigin(models.TextChoices):
+    LEGACY = 'legacy', 'Legacy generator'
+    ENGINE = 'engine', 'Tax classification engine'
+    MANUAL = 'manual', 'Manual correction'
+
+
+class VATProjectionRunStatus(models.TextChoices):
+    PREPARED = 'PREPARED', 'Prepared'
+    APPLIED = 'APPLIED', 'Applied'
+    REJECTED = 'REJECTED', 'Rejected'
+    STALE = 'STALE', 'Stale'
+    FAILED = 'FAILED', 'Failed'
+
+
+class VATProjectionRun(TenantMixin, models.Model):
+    """Audit record for a projection prepare/apply. Gate B does not insert rows."""
+
+    vat_period = models.ForeignKey(
+        VATPeriod,
+        on_delete=models.CASCADE,
+        related_name='projection_runs',
+        verbose_name='PDV razdoblje',
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=VATProjectionRunStatus.choices,
+        verbose_name='Status',
+    )
+    engine_version = models.PositiveSmallIntegerField(verbose_name='Verzija enginea')
+    mapping_version = models.PositiveSmallIntegerField(verbose_name='Verzija mapiranja')
+    input_fingerprint = models.CharField(max_length=64, verbose_name='Ulazni fingerprint')
+    output_fingerprint = models.CharField(max_length=64, blank=True, verbose_name='Izlazni fingerprint')
+    classified_count = models.PositiveIntegerField(default=0)
+    not_relevant_count = models.PositiveIntegerField(default=0)
+    review_count = models.PositiveIntegerField(default=0)
+    invalid_count = models.PositiveIntegerField(default=0)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vat_projection_runs',
+    )
+    rejection_code = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'PDV projection run'
+        verbose_name_plural = 'PDV projection runovi'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.vat_period} {self.status}'
+
+
 class VATLedgerEntry(TenantMixin, models.Model):
     LEDGER_I_RA = 'I-RA'
     LEDGER_U_RA = 'U-RA'
@@ -972,11 +1055,40 @@ class VATLedgerEntry(TenantMixin, models.Model):
         verbose_name='Kategorija stavke',
     )
     is_manual = models.BooleanField(default=False, verbose_name='Ručna korekcija')
+    origin = models.CharField(
+        max_length=16,
+        choices=VATLedgerOrigin.choices,
+        default=VATLedgerOrigin.LEGACY,
+        verbose_name='Podrijetlo retka',
+    )
+    projection_run = models.ForeignKey(
+        'VATProjectionRun',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ledger_entries',
+        verbose_name='Projection run',
+    )
+    mapping_version = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Verzija mapiranja',
+    )
+    source_line_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='ID izvorne stavke',
+    )
 
     class Meta:
         verbose_name = "Stavka PDV knjige"
         verbose_name_plural = "Stavke PDV knjiga"
         ordering = ['entry_date', 'document_number']
+
+    def save(self, *args, **kwargs):
+        if self.is_manual and self.origin != VATLedgerOrigin.ENGINE:
+            self.origin = VATLedgerOrigin.MANUAL
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.ledger_type} {self.document_number}"
@@ -1322,3 +1434,201 @@ class SubledgerAllocation(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.amount} → {self.subledger_item_id}'
+
+
+class Deposit(TenantMixin, models.Model):
+    """Dana kaucija/depozit (ADR-0024) — potraživanje prema partneru, bez P&L/PDV."""
+
+    STATUS_DRAFT = 'draft'
+    STATUS_OPEN = 'open'
+    STATUS_RETURNED = 'returned'
+    STATUS_REVERSED = 'reversed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Nacrt'),
+        (STATUS_OPEN, 'Otvoreno'),
+        (STATUS_RETURNED, 'Vraćeno'),
+        (STATUS_REVERSED, 'Stornirano'),
+        (STATUS_CANCELLED, 'Otkazano'),
+    ]
+
+    DIRECTION_GIVEN = 'given'
+    DIRECTION_CHOICES = [
+        (DIRECTION_GIVEN, 'Dana kaucija'),
+    ]
+
+    number = models.CharField(max_length=32, verbose_name='Broj')
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.PROTECT,
+        related_name='deposits',
+        verbose_name='Partner',
+    )
+    direction = models.CharField(
+        max_length=10,
+        choices=DIRECTION_CHOICES,
+        default=DIRECTION_GIVEN,
+        verbose_name='Smjer',
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Iznos',
+    )
+    currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
+    deposit_date = models.DateField(verbose_name='Datum davanja')
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        verbose_name='Workflow status',
+    )
+    reference = models.CharField(max_length=100, blank=True, verbose_name='Referenca')
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+
+    return_date = models.DateField(null=True, blank=True, verbose_name='Datum povrata')
+    return_bank_account = models.ForeignKey(
+        'payments.BankAccount',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='deposit_returns',
+        verbose_name='Račun povrata',
+    )
+
+    given_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deposit_given_for',
+        verbose_name='JE davanja',
+    )
+    return_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deposit_return_for',
+        verbose_name='JE povrata',
+    )
+    reverse_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deposit_reverse_for',
+        verbose_name='JE storna',
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_deposits',
+        verbose_name='Kreirao',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Kaucija / depozit'
+        verbose_name_plural = 'Kaucije / depoziti'
+        ordering = ['-deposit_date', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'number'], name='unique_deposit_number_per_tenant'),
+        ]
+
+    def __str__(self):
+        return f'{self.number} — {self.amount} {self.currency}'
+
+
+class PrivateFundsClaim(TenantMixin, models.Model):
+    """Privatna sredstva / plaćeno u ime društva (ADR-0026) — obveza prema Partneru na 2309."""
+
+    CLAIM_SUPPLIER_PAYMENT = 'supplier_payment'
+    CLAIM_DEPOSIT_FUNDING = 'deposit_funding'
+    CLAIM_TYPE_CHOICES = [
+        (CLAIM_SUPPLIER_PAYMENT, 'Plaćanje dobavljaču privatnim sredstvima'),
+        (CLAIM_DEPOSIT_FUNDING, 'Financiranje kaucije privatnim sredstvima'),
+    ]
+
+    STATUS_DRAFT = 'draft'
+    STATUS_POSTED = 'posted'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Nacrt'),
+        (STATUS_POSTED, 'Proknjiženo'),
+        (STATUS_CANCELLED, 'Otkazano'),
+    ]
+
+    number = models.CharField(max_length=32, verbose_name='Broj')
+    claim_type = models.CharField(max_length=32, choices=CLAIM_TYPE_CHOICES, verbose_name='Tip')
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.PROTECT,
+        related_name='private_funds_claims',
+        verbose_name='Vjerovnik (Partner)',
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Iznos',
+    )
+    currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
+    claim_date = models.DateField(verbose_name='Datum događaja')
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        verbose_name='Status',
+    )
+    reference = models.CharField(max_length=100, blank=True, verbose_name='Referenca')
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+
+    # supplier_payment → Expense AP being closed; deposit_funding → Deposit funded
+    related_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.PROTECT,
+        related_name='private_funds_claim_related',
+        verbose_name='Tip povezanog dokumenta',
+    )
+    related_object_id = models.PositiveIntegerField(verbose_name='ID povezanog dokumenta')
+    related = GenericForeignKey('related_content_type', 'related_object_id')
+
+    journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='private_funds_claims',
+        verbose_name='JE',
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_private_funds_claims',
+        verbose_name='Kreirao',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Zahtjev privatnih sredstava'
+        verbose_name_plural = 'Zahtjevi privatnih sredstava'
+        ordering = ['-claim_date', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'number'],
+                name='unique_private_funds_claim_number_per_tenant',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.number} — {self.amount} {self.currency}'

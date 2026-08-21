@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from accounting.services.rrif_import import import_rrif_chart
 from accounting.services.chart import provision_tenant_chart
 from accounting.services.posting import ensure_default_posting_rules
-from accounting.services.vat import generate_vat_ledger, get_or_create_vat_period
+from accounting.services.vat import get_or_create_vat_period
 from tenants.models import Tenant
 
 

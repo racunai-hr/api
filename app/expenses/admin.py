@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
@@ -20,6 +21,7 @@ from .models import (
     ExpensePayer,
     ExpenseSource,
     ImportBatch,
+    IncomingInvoiceImport,
     ReimbursementStatus,
     SettlementMethod,
 )
@@ -128,6 +130,14 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
     change_list_template = 'admin/expenses/expense/change_list.html'
     inlines = [ExpenseAttachmentInline, ExpenseImportMetadataInline, SubledgerSourceInline]
     actions = ['approve_inbound_action', 'reject_inbound_action']
+
+    def save_model(self, request, obj, form, change):
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+        with transaction.atomic():
+            if obj.status in {'approved', 'paid'} and obj.expense_date:
+                lock_open_vat_period_for_source_mutation(obj.tenant, obj.expense_date)
+            super().save_model(request, obj, form, change)
 
     fieldsets = (
         ('Osnovni podaci', {
@@ -323,3 +333,59 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
                 self.message_user(request, f'{expense}: {exc}', level=messages.ERROR)
         if rejected:
             self.message_user(request, f'Odbijeno {rejected} troškova.', level=messages.SUCCESS)
+
+
+@admin.register(IncomingInvoiceImport)
+class IncomingInvoiceImportAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = (
+        'id',
+        'status',
+        'original_filename',
+        'partner_match',
+        'duplicate_kind',
+        'confirmed_expense',
+        'created_at',
+    )
+    list_filter = ('status', 'partner_match', 'duplicate_kind')
+    search_fields = ('original_filename', 'file_sha256', 'idempotency_key')
+    readonly_fields = (
+        'import_uuid',
+        'uploaded_by',
+        'original_file',
+        'original_filename',
+        'content_type',
+        'file_sha256',
+        'file_size',
+        'status',
+        'idempotency_key',
+        'celery_task_id',
+        'last_error',
+        'ocr_provider',
+        'ocr_model',
+        'ocr_schema_version',
+        'ocr_extracted_at',
+        'extracted_payload',
+        'warnings',
+        'matched_partner',
+        'partner_match',
+        'partner_diff',
+        'partner_candidate_id',
+        'duplicate_kind',
+        'duplicate_expense',
+        'duplicate_detail',
+        'duplicate_override',
+        'confirmed_expense',
+        'confirmed_by',
+        'confirmed_at',
+        'created_at',
+        'updated_at',
+        'started_at',
+        'finished_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+

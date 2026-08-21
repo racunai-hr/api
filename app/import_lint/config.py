@@ -41,6 +41,7 @@ NEUTRAL_PACKAGES = frozenset({
     'config',
     'django',
     'rest_framework',
+    'drf_spectacular',
 })
 
 # Forbidden (source_domain, target_domain) pairs from DOMAIN_DEPENDENCY_MAP.md.

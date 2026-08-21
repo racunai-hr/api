@@ -7,6 +7,7 @@ Registry SSOT: docs/tax/FORM_REGISTRY.md
 from accounting.services.submission.service import SubmissionService
 from accounting.services.tax_forms.pdv.aggregate import aggregate_vat_boxes, compute_vat_due
 from accounting.services.tax_forms.pdv.build import build_pdv_payload
+from domains.tax.classification import classify, finalize_period
 from domains.tax.forms.protocol import TaxFormEngine
 
 MATURITY = 'L3'
@@ -24,6 +25,8 @@ LAYER_MATURITY = {
 REGISTRY_DOC = 'docs/tax/FORM_REGISTRY.md'
 
 __all__ = [
+    'classify',
+    'finalize_period',
     'LAYER_MATURITY',
     'MATURITY',
     'REGISTRY_DOC',

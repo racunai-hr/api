@@ -100,8 +100,17 @@ def import_expense_rows(
     paid_by: ExpensePayer | None = None,
     reimbursement_status: str = '',
 ) -> ImportResult:
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
     row_list = list(rows)
     category = _default_category(tenant)
+
+    locked_periods: set[tuple[int, int]] = set()
+    for row in row_list:
+        key = (row.expense_date.year, row.expense_date.month)
+        if key not in locked_periods:
+            lock_open_vat_period_for_source_mutation(tenant, row.expense_date)
+            locked_periods.add(key)
 
     if batch is None:
         batch = ImportBatch.all_objects.create(

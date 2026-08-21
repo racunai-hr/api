@@ -1,0 +1,6 @@
+{
+  "period": {"year": 2026, "month": 4},
+  "expected": {
+    "EXPENSE_GENERIC_303_REMOVED": 2
+  }
+}

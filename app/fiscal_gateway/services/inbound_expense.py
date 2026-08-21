@@ -73,6 +73,8 @@ def import_inbound_as4_expense(
     from_party_id: str = '',
     conversation_id: str = '',
 ) -> Expense | None:
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
     if As4DocumentLink.all_objects.filter(
         tenant=tenant,
         direction=As4DocumentLink.DIRECTION_INBOUND,
@@ -81,6 +83,8 @@ def import_inbound_as4_expense(
         return None
 
     parsed = parse_invoice_ubl(ubl_xml)
+    expense_date = parsed.issue_date or timezone.now().date()
+    lock_open_vat_period_for_source_mutation(tenant, expense_date)
     user = _system_user()
     if not user:
         raise ValueError('Nema korisnika za kreiranje troška')
@@ -105,7 +109,7 @@ def import_inbound_as4_expense(
         amount=parsed.total_amount,
         tax_amount=parsed.tax_amount,
         currency=parsed.currency or 'EUR',
-        expense_date=parsed.issue_date or timezone.now().date(),
+        expense_date=expense_date,
         due_date=parsed.due_date,
         receipt_number=parsed.invoice_number,
         description='; '.join(parsed.line_descriptions) or f'Ulazni eRačun {parsed.invoice_number}',

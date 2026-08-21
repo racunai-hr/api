@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.db import transaction
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -12,6 +13,8 @@ from accounting.admin_subledger import SubledgerSourceInline
 from tenants.mixins import TenantAdminMixin
 
 from .models import Invoice, InvoiceItem
+
+_TAX_ACTIVE_INVOICE = frozenset({'sent', 'paid', 'overdue'})
 
 
 class InvoiceItemInline(admin.TabularInline):
@@ -83,9 +86,14 @@ class InvoiceAdmin(TenantAdminMixin, admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
+        from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
         if not change:
             obj.created_by = request.user
-        super().save_model(request, obj, form, change)
+        with transaction.atomic():
+            if obj.status in _TAX_ACTIVE_INVOICE and obj.issue_date:
+                lock_open_vat_period_for_source_mutation(obj.tenant, obj.issue_date)
+            super().save_model(request, obj, form, change)
 
     @admin.action(description='Pošalji eRačun')
     def send_eracun_action(self, request, queryset):

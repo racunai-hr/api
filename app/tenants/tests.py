@@ -75,6 +75,13 @@ class TenantResolutionTests(TestCase):
         self.assertTrue(is_platform_admin_host('admin.racunai.hr'))
         self.assertFalse(is_platform_admin_host('demo.racunai.hr'))
 
+    def test_resolve_stage_infix(self):
+        with override_settings(TENANT_STAGE_INFIX='-stage'):
+            tenant = resolve_tenant_from_host('demo-stage.racunai.hr')
+            self.assertEqual(tenant, self.tenant)
+            self.assertIsNone(resolve_tenant_from_host('demo.racunai.hr'))
+            self.assertIsNone(resolve_tenant_from_host('admin-stage.racunai.hr'))
+
 
 @override_settings(
     TENANT_PLATFORM_DOMAIN='racunai.hr',

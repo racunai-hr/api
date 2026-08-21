@@ -1,5 +1,6 @@
 import os
 import re
+import uuid
 
 from decimal import Decimal
 
@@ -12,14 +13,16 @@ from tenants.mixins import TenantMixin
 
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
 
-from .validators import pdf_extension_validator, validate_pdf_content, validate_pdf_file_size
+from .validators import (
+    invoice_file_extension_validator,
+    validate_invoice_file_content,
+    validate_invoice_file_size,
+)
 
 
 def expense_attachment_upload_to(instance, filename):
     base = os.path.basename(filename)
-    safe = re.sub(r'[^\w.\-]', '_', base)
-    if not safe.lower().endswith('.pdf'):
-        safe = f'{safe}.pdf'
+    safe = re.sub(r'[^\w.\-]', '_', base) or 'attachment.bin'
     tenant_id = instance.tenant_id or getattr(instance.expense, 'tenant_id', 'unknown')
     expense_id = instance.expense_id or 'new'
     return f'expenses/attachments/{tenant_id}/{expense_id}/{safe}'
@@ -120,6 +123,14 @@ class ExpensePayer(TenantMixin, models.Model):
         verbose_name='Tip',
     )
     is_active = models.BooleanField(default=True, verbose_name='Aktivan')
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expense_payers',
+        verbose_name='Povezani Partner (MDM)',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Datum stvaranja')
 
     class Meta:
@@ -253,8 +264,12 @@ class ExpenseAttachment(TenantMixin, models.Model):
     )
     file = models.FileField(
         upload_to=expense_attachment_upload_to,
-        validators=[pdf_extension_validator, validate_pdf_file_size, validate_pdf_content],
-        verbose_name='PDF prilog',
+        validators=[
+            invoice_file_extension_validator,
+            validate_invoice_file_size,
+            validate_invoice_file_content,
+        ],
+        verbose_name='Prilog računa',
     )
     original_filename = models.CharField(max_length=255, verbose_name='Originalni naziv datoteke')
     uploaded_by = models.ForeignKey(
@@ -345,3 +360,162 @@ class ExpenseImportMetadata(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.source}:{self.external_id}'
+
+
+def incoming_invoice_upload_to(instance, filename):
+    base = os.path.basename(filename)
+    safe = re.sub(r'[^\w.\-]', '_', base) or 'invoice.bin'
+    tenant_id = instance.tenant_id or 'unknown'
+    token = getattr(instance, 'import_uuid', None) or uuid.uuid4()
+    return f'purchasing/invoice-imports/{tenant_id}/{token}/{safe}'
+
+
+class IncomingInvoiceImport(TenantMixin, models.Model):
+    STATUS_QUEUED = 'queued'
+    STATUS_PROCESSING = 'processing'
+    STATUS_EXTRACTED = 'extracted'
+    STATUS_FAILED = 'failed'
+    STATUS_CONFIRMED = 'confirmed'
+    STATUS_DISCARDED = 'discarded'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'U redu'),
+        (STATUS_PROCESSING, 'Obrada'),
+        (STATUS_EXTRACTED, 'Ekstrahirano'),
+        (STATUS_FAILED, 'Neuspjelo'),
+        (STATUS_CONFIRMED, 'Potvrđeno'),
+        (STATUS_DISCARDED, 'Odbačeno'),
+    ]
+    TERMINAL_STATUSES = frozenset({STATUS_CONFIRMED, STATUS_DISCARDED})
+
+    MATCH_EXACT_OIB = 'exact_oib'
+    MATCH_VAT = 'vat'
+    MATCH_IBAN_CANDIDATE = 'iban_candidate'
+    MATCH_MISSING = 'missing'
+    MATCH_CHOICES = [
+        (MATCH_EXACT_OIB, 'Točan OIB'),
+        (MATCH_VAT, 'PDV broj'),
+        (MATCH_IBAN_CANDIDATE, 'IBAN kandidat'),
+        (MATCH_MISSING, 'Nije pronađen'),
+    ]
+
+    DUPLICATE_NONE = 'none'
+    DUPLICATE_HARD = 'hard'
+    DUPLICATE_BUSINESS = 'business'
+    DUPLICATE_CHOICES = [
+        (DUPLICATE_NONE, 'Nema'),
+        (DUPLICATE_HARD, 'Hard'),
+        (DUPLICATE_BUSINESS, 'Poslovni kandidat'),
+    ]
+
+    import_uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incoming_invoice_imports',
+        verbose_name='Učitao',
+    )
+    original_file = models.FileField(
+        upload_to=incoming_invoice_upload_to,
+        validators=[
+            invoice_file_extension_validator,
+            validate_invoice_file_size,
+            validate_invoice_file_content,
+        ],
+        verbose_name='Originalni račun',
+    )
+    original_filename = models.CharField(max_length=255, verbose_name='Originalni naziv datoteke')
+    content_type = models.CharField(max_length=100, blank=True)
+    file_sha256 = models.CharField(max_length=64, db_index=True)
+    file_size = models.PositiveIntegerField(default=0)
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_QUEUED,
+        db_index=True,
+    )
+    idempotency_key = models.CharField(max_length=128)
+    celery_task_id = models.CharField(max_length=255, blank=True, default='')
+    last_error = models.CharField(max_length=500, blank=True, default='')
+
+    ocr_provider = models.CharField(max_length=40, blank=True, default='')
+    ocr_model = models.CharField(max_length=80, blank=True, default='')
+    ocr_schema_version = models.CharField(max_length=80, blank=True, default='')
+    ocr_extracted_at = models.DateTimeField(null=True, blank=True)
+    extracted_payload = models.JSONField(default=dict, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+
+    matched_partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incoming_invoice_imports',
+        verbose_name='Spojeni partner',
+    )
+    partner_match = models.CharField(
+        max_length=20,
+        choices=MATCH_CHOICES,
+        default=MATCH_MISSING,
+    )
+    partner_diff = models.JSONField(default=list, blank=True)
+    partner_candidate_id = models.IntegerField(null=True, blank=True)
+
+    duplicate_kind = models.CharField(
+        max_length=20,
+        choices=DUPLICATE_CHOICES,
+        default=DUPLICATE_NONE,
+    )
+    duplicate_expense = models.ForeignKey(
+        Expense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ocr_duplicate_imports',
+        verbose_name='Duplikat troška',
+    )
+    duplicate_detail = models.JSONField(default=dict, blank=True)
+    duplicate_override = models.BooleanField(default=False)
+
+    confirmed_expense = models.ForeignKey(
+        Expense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ocr_imports',
+        verbose_name='Potvrđeni trošak',
+    )
+    confirmed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='confirmed_incoming_invoice_imports',
+        verbose_name='Potvrdio',
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'OCR uvoz ulaznog računa'
+        verbose_name_plural = 'OCR uvozi ulaznih računa'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status', '-created_at'], name='ocrimport_tenant_status'),
+            models.Index(fields=['tenant', 'file_sha256'], name='ocrimport_tenant_sha'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'idempotency_key'],
+                name='unique_incoming_invoice_import_idempotency',
+            ),
+        ]
+
+    def __str__(self):
+        return f'IncomingInvoiceImport #{self.pk} ({self.status})'

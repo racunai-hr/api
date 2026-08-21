@@ -42,15 +42,71 @@ SAMPLE_UBL = """<?xml version="1.0" encoding="UTF-8"?>
 </Invoice>
 """
 
+PREPAID_UBL = """<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>26210-H120-5154</cbc:ID>
+  <cbc:IssueDate>2026-08-06</cbc:IssueDate>
+  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cac:PartyName><cbc:Name>Centar za vozila Hrvatske d.d.</cbc:Name></cac:PartyName>
+      <cac:PartyTaxScheme><cbc:CompanyID>73294314024</cbc:CompanyID></cac:PartyTaxScheme>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="EUR">7.49</cbc:TaxAmount></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:TaxExclusiveAmount currencyID="EUR">364.71</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="EUR">372.20</cbc:TaxInclusiveAmount>
+    <cbc:PrepaidAmount currencyID="EUR">372.20</cbc:PrepaidAmount>
+    <cbc:PayableAmount currencyID="EUR">0</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+</Invoice>
+"""
+
+MALFORMED_UBL = """<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>BAD-1</cbc:ID>
+  <cbc:IssueDate>2026-08-06</cbc:IssueDate>
+  <cac:AccountingSupplierParty>
+    <cac:Party><cac:PartyName><cbc:Name>X</cbc:Name></cac:PartyName></cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:LegalMonetaryTotal>
+    <cbc:PayableAmount currencyID="EUR">0</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+</Invoice>
+"""
+
 
 class UBLParserTests(TestCase):
-    def test_parse_invoice_ubl(self):
+    def test_parse_invoice_ubl_fallback_exclusive_plus_tax(self):
         parsed = parse_invoice_ubl(SAMPLE_UBL)
         self.assertEqual(parsed.invoice_number, 'HR-2026-001')
         self.assertEqual(parsed.supplier_name, 'Hardsoft j.d.o.o.')
         self.assertEqual(parsed.supplier_oib, '12345678901')
-        self.assertEqual(parsed.total_amount, Decimal('125.00'))
+        self.assertEqual(parsed.subtotal, Decimal('100.00'))
         self.assertEqual(parsed.tax_amount, Decimal('25.00'))
+        self.assertEqual(parsed.total_amount, Decimal('125.00'))
+        self.assertEqual(parsed.payable_amount, Decimal('125.00'))
+        self.assertEqual(parsed.prepaid_amount, Decimal('0'))
+
+    def test_parse_prepaid_invoice_uses_tax_inclusive_gross(self):
+        parsed = parse_invoice_ubl(PREPAID_UBL)
+        self.assertEqual(parsed.invoice_number, '26210-H120-5154')
+        self.assertEqual(parsed.subtotal, Decimal('364.71'))
+        self.assertEqual(parsed.tax_amount, Decimal('7.49'))
+        self.assertEqual(parsed.total_amount, Decimal('372.20'))
+        self.assertEqual(parsed.prepaid_amount, Decimal('372.20'))
+        self.assertEqual(parsed.payable_amount, Decimal('0'))
+
+    def test_parse_malformed_monetary_totals_raises(self):
+        from ubl.parser.invoice import UblMonetaryError
+
+        with self.assertRaises(UblMonetaryError):
+            parse_invoice_ubl(MALFORMED_UBL)
 
 
 @override_settings(TENANT_PLATFORM_DOMAIN='racunai.hr')

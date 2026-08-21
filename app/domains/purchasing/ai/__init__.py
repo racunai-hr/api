@@ -1,5 +1,5 @@
-"""Purchasing AI capability — OCR ulaznih računa (stub Faza 4)."""
+"""Purchasing AI capability — OCR ulaznih računa."""
 
-MATURITY = 'L0'
+MATURITY = 'L1'
 
 __all__ = ['MATURITY']

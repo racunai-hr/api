@@ -24,6 +24,7 @@ def _defaults(tax_number: str) -> dict:
         'city': data.get('city', ''),
         'postal_code': data.get('postal_code', ''),
         'country': data.get('country', 'Croatia'),
+        'country_code': data.get('country_code', 'HR'),
         'email': data.get('email', ''),
         'phone': data.get('phone', ''),
         'partner_type': 'supplier',

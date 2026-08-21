@@ -16,6 +16,11 @@ from payments.models import Payment
 MATCH_DATE_TOLERANCE_DAYS = 0
 
 
+class MatchConflict(ValidationError):
+    """Target already taken or transaction already matched — API maps to HTTP 409."""
+
+
+
 def _ledger_line_matches_transaction(
     line: JournalEntryLine,
     ledger_account_id: int,
@@ -30,15 +35,60 @@ def _ledger_line_matches_transaction(
     return False
 
 
+def _matching_ledger_lines(
+    journal_entry: JournalEntry,
+    ledger_account_id: int,
+    bank_tx: BankTransaction,
+) -> list[JournalEntryLine]:
+    return [
+        line
+        for line in journal_entry.lines.select_related('account').all()
+        if _ledger_line_matches_transaction(line, ledger_account_id, bank_tx)
+    ]
+
+
 def _find_matching_ledger_line(
     journal_entry: JournalEntry,
     ledger_account_id: int,
     bank_tx: BankTransaction,
 ) -> JournalEntryLine | None:
-    for line in journal_entry.lines.select_related('account').all():
-        if _ledger_line_matches_transaction(line, ledger_account_id, bank_tx):
-            return line
+    matches = _matching_ledger_lines(journal_entry, ledger_account_id, bank_tx)
+    if len(matches) == 1:
+        return matches[0]
     return None
+
+
+def _lock_bank_transaction(bank_tx_id: int) -> BankTransaction:
+    return (
+        BankTransaction.all_objects.select_for_update()
+        .select_related('bank_statement', 'bank_statement__bank_account', 'tenant')
+        .get(pk=bank_tx_id)
+    )
+
+
+def _expected_payment_type(bank_tx: BankTransaction) -> str:
+    return 'incoming' if bank_tx.transaction_type == 'credit' else 'outgoing'
+
+
+def _validate_payment_match(bank_tx: BankTransaction, payment: Payment) -> None:
+    if bank_tx.tenant_id != payment.tenant_id:
+        raise ValidationError('Plaćanje i bankovna transakcija moraju biti istog tenant-a.')
+    if payment.currency != bank_tx.currency:
+        raise ValidationError(
+            f'Valuta plaćanja ({payment.currency}) mora odgovarati '
+            f'valuti transakcije ({bank_tx.currency}).'
+        )
+    if payment.amount != bank_tx.amount:
+        raise ValidationError(
+            f'Iznos plaćanja ({payment.amount}) mora biti jednak '
+            f'iznosu transakcije ({bank_tx.amount}).'
+        )
+    expected = _expected_payment_type(bank_tx)
+    if payment.payment_type != expected:
+        raise ValidationError(
+            f'Smjer plaćanja ({payment.payment_type}) ne odgovara '
+            f'tipu transakcije ({bank_tx.transaction_type}); očekivano {expected}.'
+        )
 
 
 def _validate_journal_match(bank_tx: BankTransaction, journal_entry: JournalEntry) -> None:
@@ -47,35 +97,69 @@ def _validate_journal_match(bank_tx: BankTransaction, journal_entry: JournalEntr
     if journal_entry.status != 'posted':
         raise ValidationError('Samo knjižena temeljnica se može uskladiti s bankovnom transakcijom.')
     if bank_tx.matched_payment_id:
-        raise ValidationError('Transakcija je već usklađena s plaćanjem.')
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem.')
     if abs((journal_entry.entry_date - bank_tx.transaction_date).days) > MATCH_DATE_TOLERANCE_DAYS:
         raise ValidationError(
             f'Datum temeljnice ({journal_entry.entry_date}) mora odgovarati '
             f'datumu transakcije ({bank_tx.transaction_date}).'
         )
     ledger_account = resolve_bank_ledger_account(bank_tx.bank_statement.bank_account)
-    if not _find_matching_ledger_line(journal_entry, ledger_account.id, bank_tx):
+    matches = _matching_ledger_lines(journal_entry, ledger_account.id, bank_tx)
+    if not matches:
         raise ValidationError(
             f'Temeljnica nema odgovarajuću stavku na kontu {ledger_account.account_code} '
             f'za iznos {bank_tx.amount}.'
         )
+    if len(matches) > 1:
+        raise ValidationError(
+            f'Temeljnica ima {len(matches)} odgovarajuće stavke na kontu '
+            f'{ledger_account.account_code}; usklađivanje zahtijeva točno jednu.'
+        )
+
+
+def _assert_payment_not_linked_elsewhere(bank_tx: BankTransaction, payment: Payment) -> None:
+    conflict = (
+        BankTransaction.all_objects.filter(matched_payment=payment)
+        .exclude(pk=bank_tx.pk)
+        .exists()
+    )
+    if conflict:
+        raise MatchConflict('Plaćanje je već povezano s drugom bankovnom transakcijom.')
+
+
+def _assert_journal_not_linked_elsewhere(
+    bank_tx: BankTransaction,
+    journal_entry: JournalEntry,
+) -> None:
+    conflict = (
+        BankTransaction.all_objects.filter(matched_journal_entry=journal_entry)
+        .exclude(pk=bank_tx.pk)
+        .exists()
+    )
+    if conflict:
+        raise MatchConflict('Temeljnica je već povezana s drugom bankovnom transakcijom.')
 
 
 def suggest_matches(tenant, *, days_tolerance: int = 3) -> int:
     updated = 0
+    linked_payment_ids = BankTransaction.all_objects.filter(
+        matched_payment_id__isnull=False,
+    ).values_list('matched_payment_id', flat=True)
+
     for bank_tx in BankTransaction.all_objects.filter(tenant=tenant, match_status='unmatched'):
         date_from = bank_tx.transaction_date - timedelta(days=days_tolerance)
         date_to = bank_tx.transaction_date + timedelta(days=days_tolerance)
-        expected_type = 'incoming' if bank_tx.transaction_type == 'credit' else 'outgoing'
+        expected_type = _expected_payment_type(bank_tx)
 
         payments = Payment.all_objects.filter(
             tenant=tenant,
             status='completed',
             payment_type=expected_type,
             amount=bank_tx.amount,
+            currency=bank_tx.currency,
             payment_date__gte=date_from,
             payment_date__lte=date_to,
-        )
+        ).exclude(pk__in=linked_payment_ids)
         if bank_tx.reference:
             payments = payments.filter(reference_number__icontains=bank_tx.reference[:20])
         if bank_tx.counterparty_iban:
@@ -122,14 +206,34 @@ def suggest_journal_matches(tenant, *, days_tolerance: int = 0) -> int:
 
 @transaction.atomic
 def match_transaction(bank_tx: BankTransaction, payment: Payment) -> BankTransaction:
-    if bank_tx.matched_journal_entry_id:
-        raise ValidationError('Transakcija je već usklađena s temeljnicom.')
-    bank_tx.matched_payment = payment
-    bank_tx.match_status = 'matched'
-    bank_tx.save(update_fields=['matched_payment', 'match_status'])
-    bank_tx.bank_statement.update_reconciliation_status()
-    _post_reconciliation_if_needed(bank_tx, payment)
-    return bank_tx
+    locked_tx = _lock_bank_transaction(bank_tx.pk)
+
+    if locked_tx.matched_journal_entry_id:
+        raise MatchConflict('Transakcija je već usklađena s temeljnicom. Prvo poništi usklađenje.')
+    if (
+        locked_tx.match_status == 'matched'
+        and locked_tx.matched_payment_id
+        and locked_tx.matched_payment_id != payment.pk
+    ):
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem. Prvo poništi usklađenje.')
+
+    locked_payment = Payment.all_objects.select_for_update().get(pk=payment.pk)
+    _validate_payment_match(locked_tx, locked_payment)
+    _assert_payment_not_linked_elsewhere(locked_tx, locked_payment)
+
+    if (
+        locked_tx.match_status == 'matched'
+        and locked_tx.matched_payment_id == locked_payment.pk
+    ):
+        return locked_tx
+
+    locked_tx.matched_payment = locked_payment
+    locked_tx.matched_journal_entry = None
+    locked_tx.match_status = 'matched'
+    locked_tx.save(update_fields=['matched_payment', 'matched_journal_entry', 'match_status'])
+    locked_tx.bank_statement.update_reconciliation_status()
+    _post_reconciliation_if_needed(locked_tx, locked_payment)
+    return locked_tx
 
 
 @transaction.atomic
@@ -138,33 +242,55 @@ def match_transaction_to_journal_entry(
     journal_entry: JournalEntry,
     user,
 ) -> BankTransaction:
+    locked_tx = _lock_bank_transaction(bank_tx.pk)
+
     if (
-        bank_tx.matched_journal_entry_id == journal_entry.id
-        and bank_tx.match_status == 'matched'
+        locked_tx.matched_journal_entry_id == journal_entry.id
+        and locked_tx.match_status == 'matched'
     ):
-        return bank_tx
-    if bank_tx.matched_journal_entry_id and bank_tx.matched_journal_entry_id != journal_entry.id:
-        raise ValidationError('Transakcija je već usklađena s drugom temeljnicom.')
-    if bank_tx.matched_payment_id:
-        raise ValidationError('Transakcija je već usklađena s plaćanjem.')
-    _validate_journal_match(bank_tx, journal_entry)
-    bank_tx.matched_journal_entry = journal_entry
-    bank_tx.match_status = 'matched'
-    bank_tx.save(update_fields=['matched_journal_entry', 'match_status'])
-    bank_tx.bank_statement.update_reconciliation_status()
-    return bank_tx
+        return locked_tx
+    if locked_tx.matched_journal_entry_id and locked_tx.matched_journal_entry_id != journal_entry.id:
+        raise MatchConflict(
+            'Transakcija je već usklađena s drugom temeljnicom. Prvo poništi usklađenje.'
+        )
+    if locked_tx.matched_payment_id:
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem. Prvo poništi usklađenje.')
+
+    locked_entry = JournalEntry.all_objects.select_for_update().get(pk=journal_entry.pk)
+    _validate_journal_match(locked_tx, locked_entry)
+    _assert_journal_not_linked_elsewhere(locked_tx, locked_entry)
+
+    locked_tx.matched_journal_entry = locked_entry
+    locked_tx.match_status = 'matched'
+    locked_tx.save(update_fields=['matched_journal_entry', 'match_status'])
+    locked_tx.bank_statement.update_reconciliation_status()
+    return locked_tx
 
 
 @transaction.atomic
 def unmatch_transaction(bank_tx: BankTransaction, user) -> BankTransaction:
-    if bank_tx.match_status == 'unmatched' and not bank_tx.matched_journal_entry_id:
-        return bank_tx
-    bank_tx.matched_journal_entry = None
-    bank_tx.matched_payment = None
-    bank_tx.match_status = 'unmatched'
-    bank_tx.save(update_fields=['matched_journal_entry', 'matched_payment', 'match_status'])
-    bank_tx.bank_statement.update_reconciliation_status()
-    return bank_tx
+    locked_tx = _lock_bank_transaction(bank_tx.pk)
+
+    if (
+        locked_tx.match_status == 'unmatched'
+        and not locked_tx.matched_journal_entry_id
+        and not locked_tx.matched_payment_id
+    ):
+        return locked_tx
+
+    if locked_tx.matched_payment_id:
+        Payment.all_objects.select_for_update().filter(pk=locked_tx.matched_payment_id).first()
+    if locked_tx.matched_journal_entry_id:
+        JournalEntry.all_objects.select_for_update().filter(
+            pk=locked_tx.matched_journal_entry_id,
+        ).first()
+
+    locked_tx.matched_journal_entry = None
+    locked_tx.matched_payment = None
+    locked_tx.match_status = 'unmatched'
+    locked_tx.save(update_fields=['matched_journal_entry', 'matched_payment', 'match_status'])
+    locked_tx.bank_statement.update_reconciliation_status()
+    return locked_tx
 
 
 def _post_reconciliation_if_needed(bank_tx: BankTransaction, payment: Payment) -> None:
@@ -186,25 +312,29 @@ def _post_reconciliation_if_needed(bank_tx: BankTransaction, payment: Payment) -
 
 @transaction.atomic
 def create_payment_from_transaction(bank_tx: BankTransaction, user) -> Payment:
-    if bank_tx.matched_journal_entry_id:
-        raise ValidationError('Transakcija je već usklađena s temeljnicom.')
-    payment_type = 'incoming' if bank_tx.transaction_type == 'credit' else 'outgoing'
+    locked_tx = _lock_bank_transaction(bank_tx.pk)
+    if locked_tx.matched_journal_entry_id:
+        raise MatchConflict('Transakcija je već usklađena s temeljnicom.')
+    if locked_tx.match_status == 'matched' and locked_tx.matched_payment_id:
+        raise MatchConflict('Transakcija je već usklađena s plaćanjem.')
+
+    payment_type = _expected_payment_type(locked_tx)
     payment = Payment.all_objects.create(
-        tenant=bank_tx.tenant,
-        payment_number=f"BTX-{bank_tx.pk:06d}",
+        tenant=locked_tx.tenant,
+        payment_number=f"BTX-{locked_tx.pk:06d}",
         payment_type=payment_type,
         payment_method='bank_transfer',
         status='completed',
-        amount=bank_tx.amount,
-        currency=bank_tx.currency,
-        bank_account=bank_tx.bank_statement.bank_account,
-        payment_date=bank_tx.transaction_date,
-        value_date=bank_tx.value_date,
-        description=bank_tx.description,
-        reference_number=bank_tx.reference,
-        counterparty_name=bank_tx.counterparty_name,
-        counterparty_account=bank_tx.counterparty_iban,
+        amount=locked_tx.amount,
+        currency=locked_tx.currency,
+        bank_account=locked_tx.bank_statement.bank_account,
+        payment_date=locked_tx.transaction_date,
+        value_date=locked_tx.value_date,
+        description=locked_tx.description,
+        reference_number=locked_tx.reference,
+        counterparty_name=locked_tx.counterparty_name,
+        counterparty_account=locked_tx.counterparty_iban,
         created_by=user,
     )
-    match_transaction(bank_tx, payment)
+    match_transaction(locked_tx, payment)
     return payment

@@ -210,3 +210,36 @@ class SubledgerPostingTests(TestCase):
             ).exclude(status='cancelled').count(),
             1,
         )
+
+    def test_repost_heals_missing_subledger_and_allocation(self):
+        """Existing posting JEs still create/allocate saldakonto if it was skipped."""
+        invoice = self._create_invoice()
+        issued = post_document(self.tenant, invoice, 'invoice_issued', self.user)
+        payment = self._create_payment(invoice, '125.00', payment_number='PAY-SL-HEAL')
+        paid = post_invoice_payment(self.tenant, invoice, payment, self.user)
+        self.assertIsNotNone(issued)
+        self.assertIsNotNone(paid)
+
+        item = SubledgerItem.all_objects.get(tenant=self.tenant, source_object_id=invoice.pk)
+        SubledgerAllocation.all_objects.filter(subledger_item=item).delete()
+        item.delete()
+
+        self.assertFalse(
+            SubledgerItem.all_objects.filter(
+                tenant=self.tenant,
+                source_object_id=invoice.pk,
+            ).exclude(status='cancelled').exists()
+        )
+
+        healed_issued = post_document(self.tenant, invoice, 'invoice_issued', self.user)
+        healed_paid = post_invoice_payment(self.tenant, invoice, payment, self.user)
+        self.assertEqual(healed_issued.pk, issued.pk)
+        self.assertEqual(healed_paid.pk, paid.pk)
+
+        item = SubledgerItem.all_objects.get(tenant=self.tenant, source_object_id=invoice.pk)
+        self.assertEqual(item.status, 'closed')
+        self.assertEqual(item.open_amount, Decimal('0'))
+        self.assertEqual(
+            SubledgerAllocation.all_objects.filter(subledger_item=item).count(),
+            1,
+        )

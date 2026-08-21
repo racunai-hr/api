@@ -7,6 +7,11 @@ from accounting.services.reports import (
     income_statement,
     trial_balance,
 )
+from domains.reporting.documents.service import (
+    export_documents,
+    get_document_detail,
+    list_documents,
+)
 
 MATURITY = 'L2'
 
@@ -17,4 +22,7 @@ __all__ = [
     'export_rdg_xlsx',
     'income_statement',
     'trial_balance',
+    'list_documents',
+    'get_document_detail',
+    'export_documents',
 ]

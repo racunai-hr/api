@@ -73,6 +73,9 @@ def create_manual_journal_entry(
     reference: str = '',
     post: bool = False,
 ) -> JournalEntry:
+    from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
+
+    lock_open_vat_period_for_source_mutation(tenant, entry_date)
     _validate_lines(lines)
     _ensure_period_open(tenant, entry_date)
 

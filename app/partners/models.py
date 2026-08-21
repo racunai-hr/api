@@ -3,10 +3,12 @@
 # ================================
 
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 
+from shared.countries import country_display_name, derive_jurisdiction
 from tenants.mixins import TenantMixin
 
 
@@ -58,13 +60,14 @@ class Partner(TenantMixin, models.Model):
     partner_type = models.CharField(max_length=20, choices=PARTNER_TYPES, verbose_name="Tip partnera")
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active', verbose_name="Status")
     
-    tax_number = models.CharField(max_length=20, verbose_name="OIB")
+    tax_number = models.CharField(max_length=20, blank=True, verbose_name="Porezni broj")
     vat_number = models.CharField(max_length=30, blank=True, verbose_name="PDV broj")
     registration_number = models.CharField(max_length=30, blank=True, verbose_name="Matični broj")
     
     address = models.TextField(verbose_name="Adresa")
     city = models.CharField(max_length=100, verbose_name="Grad")
     postal_code = models.CharField(max_length=20, verbose_name="Poštanski broj")
+    country_code = models.CharField(max_length=2, default='HR', verbose_name="Kod države")
     country = models.CharField(max_length=100, default="Hrvatska", verbose_name="Država")
     
     email = models.EmailField(blank=True, verbose_name="E-mail")
@@ -97,11 +100,24 @@ class Partner(TenantMixin, models.Model):
         ordering = ['name']
         constraints = [
             models.UniqueConstraint(fields=['tenant', 'partner_code'], name='unique_partner_code_per_tenant'),
-            models.UniqueConstraint(fields=['tenant', 'tax_number'], name='unique_partner_tax_per_tenant'),
+            models.UniqueConstraint(
+                fields=['tenant', 'tax_number'],
+                condition=Q(tax_number__gt=''),
+                name='unique_partner_tax_per_tenant',
+            ),
+            models.UniqueConstraint(
+                fields=['tenant', 'vat_number'],
+                condition=Q(vat_number__gt=''),
+                name='unique_partner_vat_per_tenant',
+            ),
         ]
 
     def __str__(self):
         return f"{self.partner_code} - {self.name}"
+
+    @property
+    def jurisdiction(self) -> str:
+        return derive_jurisdiction(self.country_code)
 
     @property
     def is_customer(self):
@@ -112,6 +128,9 @@ class Partner(TenantMixin, models.Model):
         return self.partner_type in ['supplier', 'both']
 
     def save(self, *args, **kwargs):
+        if self.country_code:
+            self.country_code = self.country_code.upper()
+            self.country = country_display_name(self.country_code)
         if not self.partner_code:
             last_partner = Partner.all_objects.filter(tenant=self.tenant).order_by('-id').first()
             if last_partner and last_partner.partner_code.isdigit():
@@ -174,8 +193,8 @@ class PartnerBankAccount(models.Model):
         Partner, on_delete=models.CASCADE, 
         related_name='bank_accounts', verbose_name="Partner"
     )
-    bank_name = models.CharField(max_length=100, verbose_name="Naziv banke")
-    bic = models.CharField(max_length=50, verbose_name="BIC/SWIFT kod")
+    bank_name = models.CharField(max_length=100, blank=True, verbose_name="Naziv banke")
+    bic = models.CharField(max_length=50, blank=True, verbose_name="BIC/SWIFT kod")
     iban = models.CharField(max_length=34, verbose_name="IBAN")
     currency = models.CharField(max_length=3, default='EUR', verbose_name="Valuta")
     is_primary = models.BooleanField(default=False, verbose_name="Primarni račun")
@@ -186,6 +205,12 @@ class PartnerBankAccount(models.Model):
         verbose_name = "Bankovni račun partnera"
         verbose_name_plural = "Bankovni računi partnera"
         ordering = ['-is_primary', 'bank_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['partner', 'iban'],
+                name='unique_partner_iban',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.bank_name} - {self.iban}"

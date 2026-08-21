@@ -2,11 +2,13 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
 from django.views.static import serve
 
 from tenants.views import switch_tenant
 
 urlpatterns = [
+    path('', RedirectView.as_view(url='/admin/', permanent=False), name='root'),
     path('admin/switch-tenant/', switch_tenant, name='admin_switch_tenant'),
     path('admin/', admin.site.urls),
     path('api/', include('config.api_urls')),

@@ -14,8 +14,10 @@ htmlcov/
 .venv/
 venv/
 
-# Runtime uploads (HEL1: /opt/stacks/racunai.hr/api/media)
+# Runtime uploads / collectstatic (HEL1)
 /media/
+/static/
+/openapi.generated.yaml
 
 *.log
 .cursor/

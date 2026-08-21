@@ -14,7 +14,7 @@ from accounting.services.tax_forms.pdv.diff import compare_pdv_payload_fields
 from accounting.services.tax_forms.pdv.parse import parse_pdv_obrazac_xml
 from accounting.services.tax_forms.pdv.payload import PdvFieldPair, PdvFormHeader
 from accounting.services.tax_forms.pdv.render import render_pdv_obrazac_xml
-from accounting.services.vat import generate_vat_ledger
+from accounting.services.tax_projection.rebuild import rebuild_vat_ledger
 from settings.models import CompanySettings
 from tenants.models import Tenant
 
@@ -58,11 +58,12 @@ class Command(BaseCommand):
 
         if options['regenerate_ledger']:
             t0 = time.perf_counter()
-            created, total = generate_vat_ledger(
-                tenant, year, month, replace=True,
-            )
-            timings['generate_vat_ledger'] = time.perf_counter() - t0
-            self.stdout.write(f'Knjige: {created} novih stavki (ukupno {total}).')
+            result = rebuild_vat_ledger(tenant, year, month, actor=None, replace=True)
+            timings['rebuild_vat_ledger'] = time.perf_counter() - t0
+            if not result.ok:
+                raise CommandError(result.message, returncode=result.exit_code())
+            self.stdout.write(result.message)
+            period = VATPeriod.all_objects.get(pk=result.period_id)
 
         if options['benchmark']:
             t0 = time.perf_counter()

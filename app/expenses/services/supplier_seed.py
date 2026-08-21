@@ -29,6 +29,7 @@ def _map_defaults(oib: str) -> dict:
         'email': data.get('email', ''),
         'phone': data.get('phone', ''),
         'country': data.get('country', 'Croatia'),
+        'country_code': data.get('country_code', 'HR'),
         'partner_type': 'supplier',
         'status': 'active',
     }

@@ -9,7 +9,10 @@ from domains.reporting.facade import (
     balance_sheet,
     export_bilanca_xlsx,
     export_rdg_xlsx,
+    export_documents,
+    get_document_detail,
     income_statement,
+    list_documents,
     trial_balance,
 )
 
@@ -18,6 +21,9 @@ __all__ = [
     'balance_sheet',
     'export_bilanca_xlsx',
     'export_rdg_xlsx',
+    'export_documents',
+    'get_document_detail',
     'income_statement',
+    'list_documents',
     'trial_balance',
 ]

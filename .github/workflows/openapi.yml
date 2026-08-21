@@ -1,0 +1,52 @@
+name: OpenAPI contract
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-secret-key-not-for-production
+      DEBUG: '1'
+      DATABASE_NAME: ci
+      DATABASE_USER: ci
+      DATABASE_PASSWORD: ci
+      DATABASE_HOST: localhost
+      DATABASE_PORT: '5432'
+      ALLOWED_HOSTS: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t racunai-api .
+      - name: Validate and regenerate schema
+        run: |
+          docker run --rm \
+            -e SECRET_KEY -e DEBUG \
+            -e DATABASE_NAME -e DATABASE_USER -e DATABASE_PASSWORD \
+            -e DATABASE_HOST -e DATABASE_PORT -e ALLOWED_HOSTS \
+            -v "$PWD:/work" \
+            racunai-api \
+            python manage.py spectacular \
+              --file /work/openapi.generated.yaml \
+              --validate \
+              --fail-on-warn
+      - name: Fail on stale committed artifact
+        run: diff -u openapi.yaml openapi.generated.yaml
+      - name: Upload schema (PR review artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema
+          path: |
+            openapi.yaml
+            openapi.generated.yaml
+      - name: Contract inventory tests
+        run: |
+          docker run --rm \
+            -e SECRET_KEY -e DEBUG \
+            -e DATABASE_NAME -e DATABASE_USER -e DATABASE_PASSWORD \
+            -e DATABASE_HOST -e DATABASE_PORT -e ALLOWED_HOSTS \
+            racunai-api \
+            python manage.py test config.tests.test_openapi_contract -v1

@@ -25,8 +25,12 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Multi-tenancy
 TENANT_PLATFORM_DOMAIN = env('TENANT_PLATFORM_DOMAIN', default='racunai.hr')
-TENANT_PLATFORM_ADMIN_HOSTS = ['admin.racunai.hr']
-TENANT_RESERVED_SLUGS = ['app', 'admin', 'www', 'api', 'mail', 'static', 'otp', 'otp-sbx']
+TENANT_STAGE_INFIX = env('TENANT_STAGE_INFIX', default='')
+TENANT_PLATFORM_ADMIN_HOSTS = env.list(
+    'TENANT_PLATFORM_ADMIN_HOSTS',
+    default=['admin.racunai.hr'],
+)
+TENANT_RESERVED_SLUGS = ['app', 'admin', 'www', 'api', 'mail', 'static', 'otp', 'otp-sbx', 'mps']
 TENANT_LEGACY_HOST_MAP = {
     'erp.finestar.hr': 'finestar',
 }
@@ -59,6 +63,15 @@ THIRD_PARTY_APPS = [
     'django_extensions',
     'django_filters',
 ]
+
+# Web image includes drf-spectacular; older celery images may not.
+try:
+    import drf_spectacular  # noqa: F401
+except ImportError:  # pragma: no cover
+    _HAS_DRF_SPECTACULAR = False
+else:
+    _HAS_DRF_SPECTACULAR = True
+    THIRD_PARTY_APPS.insert(1, 'drf_spectacular')
 
 LOCAL_APPS = [
 
@@ -168,6 +181,16 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = env('MEDIA_URL', default='/media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Banking statement import (ADR-0021)
+BANKING_IMPORT_MAX_BYTES = env.int('BANKING_IMPORT_MAX_BYTES', default=20 * 1024 * 1024)
+
+# Purchasing OCR (Purchasing AI)
+OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
+OPENAI_OCR_MODEL = env('OPENAI_OCR_MODEL', default='gpt-4.1-mini')
+OPENAI_OCR_TIMEOUT_SECONDS = env.int('OPENAI_OCR_TIMEOUT_SECONDS', default=60)
+PURCHASING_OCR_PROVIDER = env('PURCHASING_OCR_PROVIDER', default='openai')
+PURCHASING_OCR_FAKE_BEHAVIOR = env('PURCHASING_OCR_FAKE_BEHAVIOR', default='ok')
+PURCHASING_OCR_FAKE_PAYLOAD = {}
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -183,6 +206,40 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
+if _HAS_DRF_SPECTACULAR:
+    REST_FRAMEWORK['DEFAULT_SCHEMA_CLASS'] = 'drf_spectacular.openapi.AutoSchema'
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'računAI API',
+    'DESCRIPTION': (
+        'Tenant JWT REST ugovor za auth, documents, banking, partners, finance i purchasing. '
+        'Fiscal/intermediary i AS4 nisu dio ove sheme. '
+        'openapi.yaml je generirani artefakt — ne uređivati ručno.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api',
+    'TAGS': [
+        {'name': 'auth', 'description': 'JWT token i trenutni korisnik'},
+        {'name': 'documents', 'description': 'Document read model (ADR-0020)'},
+        {'name': 'banking', 'description': 'Banking operational API (ADR-0021)'},
+        {'name': 'partners', 'description': 'Partner MDM API (ADR-0022)'},
+        {'name': 'finance', 'description': 'Finance partner projections (ADR-0022)'},
+        {'name': 'purchasing', 'description': 'Purchasing OCR ulaznih računa'},
+    ],
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'config.openapi_hooks.postprocess_security',
+    ],
+    'PREPROCESSING_HOOKS': [
+        'config.openapi_hooks.preprocess_exclude_non_contract',
+    ],
+}
+
+# Register OpenApiAuthenticationExtension subclasses (requires drf-spectacular).
+if _HAS_DRF_SPECTACULAR:
+    import config.openapi_auth  # noqa: E402,F401
 
 from datetime import timedelta
 
@@ -193,6 +250,8 @@ SIMPLE_JWT = {
 }
 
 # CORS settings
+from corsheaders.defaults import default_headers
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -200,10 +259,18 @@ CORS_ALLOWED_ORIGINS = [
     "http://erp.finestar.hr",
     "https://admin.racunai.hr",
     "https://app.racunai.hr",
+    "https://app-stage.racunai.hr",
 ]
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://[\w-]+\.racunai\.hr$",
 ]
+# Browser preflight for JWT banking writes sends Idempotency-Key.
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    "idempotency-key",
+)
+# Keep short so allow-headers fixes are not stuck in browser preflight cache for a day.
+CORS_PREFLIGHT_MAX_AGE = 600
 
 # Cloudflare Turnstile (login CAPTCHA)
 TURNSTILE_VERIFY_ENABLED = env.bool('TURNSTILE_VERIFY_ENABLED', default=False)
@@ -213,6 +280,9 @@ TURNSTILE_ADMIN_HOSTS = env.list(
     'TURNSTILE_ADMIN_HOSTS',
     default=['admin.racunai.hr'],
 )
+# Document read-model export (ADR-0020)
+DOCUMENT_EXPORT_SYNC_MAX = env.int('DOCUMENT_EXPORT_SYNC_MAX', default=10000)
+
 
 # Celery Configuration
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='')
@@ -224,6 +294,8 @@ CELERY_TASK_SOFT_TIME_LIMIT = 60
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 SUPER_DEFAULT_API_BASE_URL = env('SUPER_DEFAULT_API_BASE_URL', default='https://apitest.super.hr')
+# Human portal base for integration.external_view_url (fail closed if empty / unconfirmed).
+SUPER_PORTAL_BASE_URL = env('SUPER_PORTAL_BASE_URL', default='')
 # Rollback flag: allow SUPER eRačun when DIRECT config is missing (M1.7 deprecation).
 USE_SUPER_ERACUN_FALLBACK = env.bool('USE_SUPER_ERACUN_FALLBACK', default=True)
 
@@ -284,7 +356,7 @@ PLATFORM_ADMIN_LOGIN_URL = env(
     'PLATFORM_ADMIN_LOGIN_URL',
     default='https://admin.racunai.hr/admin/login/',
 )
-SESSION_COOKIE_DOMAIN = env('SESSION_COOKIE_DOMAIN', default='.racunai.hr')
+SESSION_COOKIE_DOMAIN = env('SESSION_COOKIE_DOMAIN', default='.racunai.hr') or None
 FISCAL_AS4_SERVICE_HOSTS = env.list('FISCAL_AS4_SERVICE_HOSTS', default=[])
 
 if not DEBUG:
