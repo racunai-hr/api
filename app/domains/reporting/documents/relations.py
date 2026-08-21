@@ -129,6 +129,20 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     ).select_related('journal_entry'):
         alloc_by_sub[alloc.subledger_item_id].append(alloc)
 
+    # Allocation settlement JEs may omit expense/invoice GFK (e.g. private_funds
+    # postings). Include them so bank/PFC reverse lookups still classify closings.
+    settlement_je_ids = list(
+        {
+            *je_ids,
+            *(
+                alloc.journal_entry_id
+                for rows in alloc_by_sub.values()
+                for alloc in rows
+                if alloc.journal_entry_id
+            ),
+        }
+    )
+
     payments_by_invoice = defaultdict(list)
     for pay in Payment.all_objects.filter(tenant=tenant, related_invoice_id__in=outgoing_ids):
         payments_by_invoice[pay.related_invoice_id].append(pay)
@@ -140,15 +154,16 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     ):
         bank_by_payment[tx.matched_payment_id].append(tx)
     bank_by_je = defaultdict(list)
-    for tx in BankTransaction.all_objects.filter(tenant=tenant, matched_journal_entry_id__in=je_ids).select_related(
-        'bank_statement__bank_account'
-    ):
-        bank_by_je[tx.matched_journal_entry_id].append(tx)
+    if settlement_je_ids:
+        for tx in BankTransaction.all_objects.filter(
+            tenant=tenant, matched_journal_entry_id__in=settlement_je_ids,
+        ).select_related('bank_statement__bank_account'):
+            bank_by_je[tx.matched_journal_entry_id].append(tx)
 
     pfc_by_je = defaultdict(list)
-    if je_ids:
+    if settlement_je_ids:
         for claim in PrivateFundsClaim.all_objects.filter(
-            tenant=tenant, journal_entry_id__in=je_ids,
+            tenant=tenant, journal_entry_id__in=settlement_je_ids,
         ).select_related('partner'):
             pfc_by_je[claim.journal_entry_id].append(claim)
 

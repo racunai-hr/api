@@ -1405,6 +1405,11 @@ class DocumentReadModelTests(TestCase):
             number='JE-PFC',
             description='[private_funds:1] supplier_payment',
         )
+        # Real private-funds JEs may omit expense GFK; allocation alone must classify.
+        JournalEntry.all_objects.filter(pk=pfc_je.pk).update(
+            source_content_type=None,
+            source_object_id=None,
+        )
         paid_je = self._journal(
             expense,
             number='JE-PAID',
