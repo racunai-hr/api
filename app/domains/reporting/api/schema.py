@@ -268,7 +268,7 @@ class SettlementTrailObligationSerializer(serializers.Serializer):
 
 
 class SettlementTrailClosingSerializer(serializers.Serializer):
-    kind = serializers.ChoiceField(choices=['bank', 'private_funds', 'other'])
+    kind = serializers.CharField()
     amount = serializers.CharField(allow_null=True)
     journal_entry_id = serializers.IntegerField(allow_null=True)
     entry_number = serializers.CharField(allow_null=True)
