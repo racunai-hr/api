@@ -3771,6 +3771,8 @@ components:
           $ref: '#/components/schemas/SubledgerContext'
         payment:
           $ref: '#/components/schemas/PaymentBlock'
+        settlement_trail:
+          $ref: '#/components/schemas/SettlementTrail'
       required:
       - allocations
       - amounts
@@ -5853,6 +5855,157 @@ components:
       - open_amount
       - original_amount
       - state
+    SettlementTrailObligation:
+      type: object
+      properties:
+        amount:
+          type: string
+          nullable: true
+        journal_entry_id:
+          type: integer
+          nullable: true
+        entry_number:
+          type: string
+          nullable: true
+        entry_date:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - entry_date
+      - entry_number
+      - journal_entry_id
+    SettlementTrailClosing:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - bank
+          - private_funds
+          - other
+        amount:
+          type: string
+          nullable: true
+        journal_entry_id:
+          type: integer
+          nullable: true
+        entry_number:
+          type: string
+          nullable: true
+        allocation_id:
+          type: integer
+        bank_transaction_id:
+          type: integer
+          nullable: true
+        bank_statement_id:
+          type: integer
+          nullable: true
+        counterparty_name:
+          type: string
+          nullable: true
+        private_funds_claim_id:
+          type: integer
+          nullable: true
+        claim_number:
+          type: string
+          nullable: true
+        partner_id:
+          type: integer
+          nullable: true
+        partner_name:
+          type: string
+          nullable: true
+        label:
+          type: string
+      required:
+      - allocation_id
+      - amount
+      - bank_statement_id
+      - bank_transaction_id
+      - claim_number
+      - counterparty_name
+      - entry_number
+      - journal_entry_id
+      - kind
+      - label
+      - partner_id
+      - partner_name
+      - private_funds_claim_id
+    SettlementTrailSystemEntry:
+      type: object
+      properties:
+        kind:
+          type: string
+        amount:
+          type: string
+          nullable: true
+        journal_entry_id:
+          type: integer
+        entry_number:
+          type: string
+          nullable: true
+        note:
+          type: string
+      required:
+      - amount
+      - entry_number
+      - journal_entry_id
+      - kind
+      - note
+    SettlementTrailWarning:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+      - code
+      - message
+    SettlementTrailTotals:
+      type: object
+      properties:
+        obligation:
+          type: string
+          nullable: true
+        allocated:
+          type: string
+          nullable: true
+        open:
+          type: string
+          nullable: true
+      required:
+      - allocated
+      - obligation
+      - open
+    SettlementTrail:
+      type: object
+      properties:
+        obligation:
+          allOf:
+          - $ref: '#/components/schemas/SettlementTrailObligation'
+          nullable: true
+        closings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementTrailClosing'
+        system_entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementTrailSystemEntry'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementTrailWarning'
+        totals:
+          $ref: '#/components/schemas/SettlementTrailTotals'
+      required:
+      - closings
+      - obligation
+      - system_entries
+      - totals
+      - warnings
     Supplier:
       type: object
       properties:

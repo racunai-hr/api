@@ -341,6 +341,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             bank_txs=bank_txs,
             match_status=match_status,
             period_label=period_label,
+            sibling_jes=rel['je_in'].get(document.pk, []),
         )
     else:
         # Outgoing: on-demand generated PDF (existing DocumentPdfView contract).

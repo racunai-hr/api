@@ -260,6 +260,56 @@ class PaymentBlockSerializer(serializers.Serializer):
     bank_transaction_id = serializers.IntegerField(allow_null=True)
 
 
+class SettlementTrailObligationSerializer(serializers.Serializer):
+    amount = serializers.CharField(allow_null=True)
+    journal_entry_id = serializers.IntegerField(allow_null=True)
+    entry_number = serializers.CharField(allow_null=True)
+    entry_date = serializers.CharField(allow_null=True)
+
+
+class SettlementTrailClosingSerializer(serializers.Serializer):
+    kind = serializers.ChoiceField(choices=['bank', 'private_funds', 'other'])
+    amount = serializers.CharField(allow_null=True)
+    journal_entry_id = serializers.IntegerField(allow_null=True)
+    entry_number = serializers.CharField(allow_null=True)
+    allocation_id = serializers.IntegerField()
+    bank_transaction_id = serializers.IntegerField(allow_null=True)
+    bank_statement_id = serializers.IntegerField(allow_null=True)
+    counterparty_name = serializers.CharField(allow_null=True)
+    private_funds_claim_id = serializers.IntegerField(allow_null=True)
+    claim_number = serializers.CharField(allow_null=True)
+    partner_id = serializers.IntegerField(allow_null=True)
+    partner_name = serializers.CharField(allow_null=True)
+    label = serializers.CharField()
+
+
+class SettlementTrailSystemEntrySerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    amount = serializers.CharField(allow_null=True)
+    journal_entry_id = serializers.IntegerField()
+    entry_number = serializers.CharField(allow_null=True)
+    note = serializers.CharField()
+
+
+class SettlementTrailWarningSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    message = serializers.CharField()
+
+
+class SettlementTrailTotalsSerializer(serializers.Serializer):
+    obligation = serializers.CharField(allow_null=True)
+    allocated = serializers.CharField(allow_null=True)
+    open = serializers.CharField(allow_null=True)
+
+
+class SettlementTrailSerializer(serializers.Serializer):
+    obligation = SettlementTrailObligationSerializer(allow_null=True)
+    closings = SettlementTrailClosingSerializer(many=True)
+    system_entries = SettlementTrailSystemEntrySerializer(many=True)
+    warnings = SettlementTrailWarningSerializer(many=True)
+    totals = SettlementTrailTotalsSerializer()
+
+
 class LineClassificationSerializer(serializers.Serializer):
     scheme = serializers.CharField(allow_null=True)
     code = serializers.CharField(allow_null=True)
@@ -358,6 +408,7 @@ class DocumentDetailSerializer(DocumentSummarySerializer):
     vat_context = VatContextSerializer(required=False)
     subledger_context = SubledgerContextSerializer(required=False)
     payment = PaymentBlockSerializer(required=False)
+    settlement_trail = SettlementTrailSerializer(required=False)
 
 
 class CurrencySummarySerializer(serializers.Serializer):

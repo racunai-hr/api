@@ -27,6 +27,7 @@ from accounting.models import (
     FiscalPeriod,
     JournalEntry,
     JournalEntryLine,
+    PrivateFundsClaim,
     SubledgerAllocation,
     SubledgerItem,
     SubmissionDestination,
@@ -229,7 +230,7 @@ class DocumentReadModelTests(TestCase):
         defaults.update(overrides)
         return Expense.all_objects.create(**defaults)
 
-    def _journal(self, source, *, status='posted', number='JE-1'):
+    def _journal(self, source, *, status='posted', number='JE-1', description='test'):
         ct = ContentType.objects.get_for_model(source)
         period, _ = FiscalPeriod.all_objects.get_or_create(
             tenant=source.tenant,
@@ -242,7 +243,7 @@ class DocumentReadModelTests(TestCase):
             entry_number=number,
             entry_date=date(2026, 5, 15),
             status=status,
-            description='test',
+            description=description,
             created_by=self.user,
             posted_by=self.user if status == 'posted' else None,
             posted_at=timezone.now() if status == 'posted' else None,
@@ -1386,3 +1387,229 @@ class DocumentReadModelTests(TestCase):
             outsider.get(f'/api/documents/incoming/{expense.pk}/').status_code,
             404,
         )
+
+    def test_settlement_trail_bank_pfc_possible_duplicate_expense_paid(self):
+        expense = self._expense(amount=Decimal('33000.00'), tax_amount=Decimal('0.00'))
+        approved = self._journal(
+            expense,
+            number='JE-APP',
+            description='[expense_approved] T — 33000.00 EUR',
+        )
+        bank_je = self._journal(
+            expense,
+            number='JE-BANK',
+            description='[bank_reconcile:btx-1] expense Bank reconcile',
+        )
+        pfc_je = self._journal(
+            expense,
+            number='JE-PFC',
+            description='[private_funds:1] supplier_payment',
+        )
+        paid_je = self._journal(
+            expense,
+            number='JE-PAID',
+            description='[expense_paid] T — 33000.00 EUR',
+        )
+        account = ChartOfAccounts.all_objects.filter(tenant=self.tenant).first()
+        JournalEntryLine.objects.create(
+            journal_entry=paid_je,
+            account=account,
+            debit_amount=Decimal('33000.00'),
+            credit_amount=Decimal('0.00'),
+        )
+        sub = self._subledger(
+            expense,
+            status='closed',
+            direction='payable',
+            open_amount=Decimal('0.00'),
+            journal_entry=approved,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=bank_je,
+            amount=Decimal('23100.00'),
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=pfc_je,
+            amount=Decimal('9900.00'),
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='Glavni',
+            bank_name='PBZ',
+            account_number='111',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-TRAIL-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 20),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('23100.00'),
+            imported_by=self.user,
+        )
+        tx = BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 20),
+            amount=Decimal('23100.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='doznaka',
+            counterparty_name='SaM Automobile',
+            match_status='matched',
+            matched_journal_entry=bank_je,
+        )
+        ante = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='Ante Vrcan',
+            tax_number='11528564544',
+            partner_type='other',
+            status='active',
+            address='X',
+            city='Zagreb',
+            postal_code='10000',
+            country_code='HR',
+        )
+        expense_ct = ContentType.objects.get_for_model(Expense)
+        PrivateFundsClaim.all_objects.create(
+            tenant=self.tenant,
+            number='PFC-202605-0001',
+            claim_type=PrivateFundsClaim.CLAIM_SUPPLIER_PAYMENT,
+            partner=ante,
+            amount=Decimal('9900.00'),
+            currency='EUR',
+            claim_date=date(2026, 5, 20),
+            status=PrivateFundsClaim.STATUS_POSTED,
+            related_content_type=expense_ct,
+            related_object_id=expense.pk,
+            journal_entry=pfc_je,
+            created_by=self.user,
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        trail = detail['settlement_trail']
+        self.assertEqual(trail['totals']['obligation'], '33000.00')
+        self.assertEqual(trail['totals']['allocated'], '33000.00')
+        self.assertEqual(trail['totals']['open'], '0.00')
+        self.assertEqual(trail['obligation']['journal_entry_id'], approved.pk)
+        kinds = [row['kind'] for row in trail['closings']]
+        self.assertEqual(kinds, ['bank', 'private_funds'])
+        bank_row = trail['closings'][0]
+        self.assertEqual(bank_row['bank_transaction_id'], tx.pk)
+        self.assertEqual(bank_row['bank_statement_id'], statement.pk)
+        self.assertEqual(bank_row['amount'], '23100.00')
+        pfc_row = trail['closings'][1]
+        self.assertEqual(pfc_row['claim_number'], 'PFC-202605-0001')
+        self.assertEqual(pfc_row['partner_id'], ante.pk)
+        self.assertEqual(pfc_row['amount'], '9900.00')
+        self.assertEqual(len(trail['system_entries']), 1)
+        self.assertEqual(trail['system_entries'][0]['journal_entry_id'], paid_je.pk)
+        self.assertEqual(trail['system_entries'][0]['amount'], '33000.00')
+        codes = [w['code'] for w in trail['warnings']]
+        self.assertIn('possible_duplicate_expense_paid', codes)
+
+    def test_settlement_trail_partial_close_no_duplicate_warning(self):
+        expense = self._expense(amount=Decimal('100.00'), tax_amount=Decimal('0.00'))
+        approved = self._journal(
+            expense,
+            number='JE-P-APP',
+            description='[expense_approved] partial',
+        )
+        bank_je = self._journal(
+            expense,
+            number='JE-P-BANK',
+            description='[bank_reconcile:btx-2] partial',
+        )
+        self._journal(
+            expense,
+            number='JE-P-PAID',
+            description='[expense_paid] still open',
+        )
+        sub = self._subledger(
+            expense,
+            status='open',
+            direction='payable',
+            open_amount=Decimal('60.00'),
+            journal_entry=approved,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=bank_je,
+            amount=Decimal('40.00'),
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='Glavni2',
+            bank_name='PBZ',
+            account_number='112',
+            iban='HR6124070001100204772',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-TRAIL-2',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 20),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('40.00'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 20),
+            amount=Decimal('40.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='partial',
+            match_status='matched',
+            matched_journal_entry=bank_je,
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        trail = detail['settlement_trail']
+        self.assertEqual(trail['totals']['open'], '60.00')
+        self.assertEqual(trail['totals']['allocated'], '40.00')
+        self.assertEqual([c['kind'] for c in trail['closings']], ['bank'])
+        self.assertEqual(trail['warnings'], [])
+        self.assertEqual(len(trail['system_entries']), 1)
+
+    def test_settlement_trail_other_kind_allocation_no_crash(self):
+        expense = self._expense(amount=Decimal('80.00'), tax_amount=Decimal('0.00'))
+        approved = self._journal(
+            expense,
+            number='JE-O-APP',
+            description='[expense_approved] other',
+        )
+        other_je = self._journal(
+            expense,
+            number='JE-O-MAN',
+            description='Manual settlement without bank or PFC',
+        )
+        sub = self._subledger(
+            expense,
+            status='closed',
+            direction='payable',
+            open_amount=Decimal('0.00'),
+            journal_entry=approved,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=other_je,
+            amount=Decimal('80.00'),
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        trail = detail['settlement_trail']
+        self.assertEqual(len(trail['closings']), 1)
+        self.assertEqual(trail['closings'][0]['kind'], 'other')
+        self.assertEqual(trail['closings'][0]['journal_entry_id'], other_je.pk)
+        self.assertIsNone(trail['closings'][0]['bank_transaction_id'])
+        self.assertIsNone(trail['closings'][0]['private_funds_claim_id'])
+        self.assertEqual(trail['warnings'], [])
