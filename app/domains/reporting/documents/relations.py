@@ -10,6 +10,7 @@ from accounting.models import (
     Deposit,
     JournalEntry,
     JournalEntryLine,
+    PrivateFundsClaim,
     SubledgerAllocation,
     SubledgerItem,
     SubmissionEvent,
@@ -123,7 +124,9 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         for s in rows
     ]
     alloc_by_sub = defaultdict(list)
-    for alloc in SubledgerAllocation.all_objects.filter(tenant=tenant, subledger_item_id__in=sub_ids):
+    for alloc in SubledgerAllocation.all_objects.filter(
+        tenant=tenant, subledger_item_id__in=sub_ids,
+    ).select_related('journal_entry'):
         alloc_by_sub[alloc.subledger_item_id].append(alloc)
 
     payments_by_invoice = defaultdict(list)
@@ -141,6 +144,13 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'bank_statement__bank_account'
     ):
         bank_by_je[tx.matched_journal_entry_id].append(tx)
+
+    pfc_by_je = defaultdict(list)
+    if je_ids:
+        for claim in PrivateFundsClaim.all_objects.filter(
+            tenant=tenant, journal_entry_id__in=je_ids,
+        ).select_related('partner'):
+            pfc_by_je[claim.journal_entry_id].append(claim)
 
     orders_by_payment = {}
     for order in PaymentOrder.all_objects.filter(tenant=tenant, payment_id__in=payment_ids):
@@ -212,6 +222,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'payments_by_invoice': payments_by_invoice,
         'bank_by_payment': bank_by_payment,
         'bank_by_je': bank_by_je,
+        'pfc_by_je': pfc_by_je,
         'orders_by_payment': orders_by_payment,
         'as4_out': _as4_map(invoice_ct, outgoing_ids),
         'as4_in': _as4_map(expense_ct, incoming_ids),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from domains.reporting.documents.projection import money
+from domains.reporting.documents.settlement_trail import build_settlement_trail
 from lxml import etree
 from ubl.parser.invoice import PARSER_VERSION, ParsedInvoice, UblMonetaryError, parse_invoice_ubl
 from super_integration.portal import build_super_external_view_url
@@ -476,6 +477,7 @@ def enrich_incoming_detail_payload(
     bank_txs=None,
     match_status: str | None = None,
     period_label: str | None = None,
+    sibling_jes=None,
 ) -> dict:
     """Attach PR A + PR C blocks onto an incoming DocumentDetail payload."""
     source = document.source
@@ -484,6 +486,7 @@ def enrich_incoming_detail_payload(
     allocations = allocations or []
     bank_txs = bank_txs or []
     ledger_rows = ledger_rows or []
+    sibling_jes = sibling_jes if sibling_jes is not None else []
 
     payload['number'] = document.receipt_number or document.expense_number
     payload['supplier'] = build_supplier_block(partner, parsed, rel)
@@ -519,6 +522,14 @@ def enrich_incoming_detail_payload(
         allocations=allocations,
     )
     payload['payment'] = build_payment_block(bank_txs=bank_txs, match_status=match_status)
+    payload['settlement_trail'] = build_settlement_trail(
+        subledger=subledger,
+        allocations=allocations,
+        sibling_jes=sibling_jes,
+        lines_by_je=rel.get('lines_by_je') or {},
+        bank_by_je=rel.get('bank_by_je') or {},
+        pfc_by_je=rel.get('pfc_by_je') or {},
+    )
     if parsed and parsed.notes and not (payload.get('notes') or '').strip():
         payload['notes'] = '\n'.join(parsed.notes)
     return payload
