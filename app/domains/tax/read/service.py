@@ -5,13 +5,20 @@ from __future__ import annotations
 from django.db.models import Exists, OuterRef
 
 from accounting.models import PDVSReturn, VATLedgerEntry, VATPeriod
+from accounting.services.submission.events import get_submission_events
 from accounting.services.submission.service import SubmissionService
 from accounting.services.tax_forms.pdv.canonical import payload_to_dict
 from accounting.services.tax_forms.pdv.integrity import check_vat_return_integrity
 from accounting.services.tax_forms.pdv.build import build_pdv_payload
 from accounting.services.tax_forms.pdv_s.aggregate import aggregate_pdv_s_rows
 from accounting.services.tax_forms.pdv_s.payload import PDV_S_SCHEMA_VERSION
-from domains.tax.read.dto import money2, parse_period_key, pdv_period_dto, period_key
+from domains.tax.read.dto import (
+    money2,
+    parse_period_key,
+    pdv_period_dto,
+    pdv_s_submission_dto,
+    period_key,
+)
 
 
 def list_pdv_periods(tenant) -> dict:
@@ -67,13 +74,19 @@ def pdv_boxes_dto(period: VATPeriod) -> dict:
 def pdv_s_period_dto(period: VATPeriod) -> dict:
     payload = aggregate_pdv_s_rows(period)
     event_uuid = None
+    current_submission = None
+    submissions: list[dict] = []
     pdv_s_return = (
         PDVSReturn.all_objects.filter(tenant=period.tenant, vat_period=period).first()
     )
     if pdv_s_return is not None:
-        event = SubmissionService.current_submission(pdv_s_return)
-        if event is not None:
-            event_uuid = str(event.event_uuid)
+        submissions = [
+            pdv_s_submission_dto(event) for event in get_submission_events(pdv_s_return)
+        ]
+        current = SubmissionService.current_submission(pdv_s_return)
+        if current is not None:
+            current_submission = pdv_s_submission_dto(current)
+            event_uuid = current_submission['event_uuid']
     rows = [
         {
             'country_code': row.country_code,
@@ -91,4 +104,6 @@ def pdv_s_period_dto(period: VATPeriod) -> dict:
         'total_services': money2(payload.total_services),
         'rows': rows,
         'event_uuid': event_uuid,
+        'current_submission': current_submission,
+        'submissions': submissions,
     }

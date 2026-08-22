@@ -286,6 +286,12 @@ class PdvWorkflowApiTests(TestCase):
         self.assertIsNone(workspace['return_status'])
         pdv_s = client.get('/api/tax/pdv-s/periods/2026-08/').json()
         self.assertEqual(pdv_s['event_uuid'], submitted.json()['event_uuid'])
+        self.assertEqual(pdv_s['current_submission']['event_uuid'], submitted.json()['event_uuid'])
+        self.assertEqual(pdv_s['current_submission']['submission_no'], 1)
+        self.assertEqual(pdv_s['current_submission']['submission_type'], 'initial')
+        self.assertEqual(len(pdv_s['submissions']), 1)
+        self.assertFalse(pdv_s['current_submission']['has_confirmation'])
+        self.assertEqual(len(pdv_s['current_submission']['payload_hash']), 64)
         ledger = client.post('/api/tax/pdv/periods/2026-08/ledger/')
         self.assertEqual(ledger.status_code, 200)
         draft = client.post('/api/tax/pdv/periods/2026-08/draft/')
@@ -293,6 +299,77 @@ class PdvWorkflowApiTests(TestCase):
         self.assertEqual(draft.json()['return_status'], VATReturnStatus.GENERATED)
         self.aug.refresh_from_db()
         self.assertEqual(self.aug.status, 'open')
+
+    def test_pdv_s_correction_history_keeps_hashes_and_confirmations(self):
+        client = self._auth_client()
+        first = client.post(
+            '/api/tax/pdv-s/periods/2026-08/submit/',
+            {
+                'eporezna_identifier': str(uuid4()),
+                'submitted_at': '2026-09-12T08:00:00+02:00',
+            },
+            format='json',
+        )
+        self.assertEqual(first.status_code, 200)
+        first_uuid = first.json()['event_uuid']
+        attached = client.post(
+            f'/api/tax/submissions/{first_uuid}/confirmation/',
+            {
+                'confirmation': SimpleUploadedFile(
+                    'pdvs-1.pdf',
+                    b'%PDF-1.4 first',
+                    content_type='application/pdf',
+                ),
+            },
+            format='multipart',
+        )
+        self.assertEqual(attached.status_code, 200)
+
+        VATLedgerEntry.all_objects.create(
+            tenant=self.tenant,
+            vat_period=self.aug,
+            ledger_type=VATLedgerEntry.LEDGER_U_RA,
+            entry_date=date(2026, 8, 20),
+            document_number='EU-AUG-2',
+            partner_name='EU Supplier B',
+            partner_oib='DE355497142',
+            base_amount=Decimal('10000.00'),
+            vat_rate=Decimal('0.00'),
+            vat_amount=Decimal('0.00'),
+            vat_box='207',
+        )
+
+        second = client.post(
+            '/api/tax/pdv-s/periods/2026-08/submit/',
+            {
+                'eporezna_identifier': str(uuid4()),
+                'submitted_at': '2026-09-20T10:00:00+02:00',
+            },
+            format='json',
+        )
+        self.assertEqual(second.status_code, 200)
+        second_uuid = second.json()['event_uuid']
+        self.assertNotEqual(first_uuid, second_uuid)
+
+        pdv_s = client.get('/api/tax/pdv-s/periods/2026-08/').json()
+        self.assertEqual(pdv_s['event_uuid'], second_uuid)
+        self.assertEqual(pdv_s['current_submission']['event_uuid'], second_uuid)
+        self.assertEqual(pdv_s['current_submission']['submission_no'], 2)
+        self.assertEqual(pdv_s['current_submission']['submission_type'], 'correction')
+        self.assertFalse(pdv_s['current_submission']['has_confirmation'])
+        self.assertEqual(len(pdv_s['submissions']), 2)
+        initial, correction = pdv_s['submissions']
+        self.assertEqual(initial['event_uuid'], first_uuid)
+        self.assertEqual(initial['submission_no'], 1)
+        self.assertEqual(initial['submission_type'], 'initial')
+        self.assertTrue(initial['has_confirmation'])
+        self.assertEqual(correction['event_uuid'], second_uuid)
+        self.assertNotEqual(initial['payload_hash'], correction['payload_hash'])
+        self.assertEqual(len(initial['payload_hash']), 64)
+        self.assertEqual(len(correction['payload_hash']), 64)
+        self.aug.refresh_from_db()
+        self.assertEqual(self.aug.status, 'open')
+        self.assertEqual(PDVSReturn.all_objects.filter(vat_period=self.aug).count(), 1)
 
     def test_boxes_are_period_scoped(self):
         client = self._auth_client()

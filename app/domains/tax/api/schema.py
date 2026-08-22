@@ -81,6 +81,16 @@ class PdvSRowSerializer(serializers.Serializer):
     services_value = money_field()
 
 
+class PdvSSubmissionSerializer(serializers.Serializer):
+    event_uuid = serializers.UUIDField()
+    submission_no = serializers.IntegerField()
+    submission_type = serializers.CharField()
+    external_identifier = serializers.UUIDField()
+    submitted_at = serializers.CharField(allow_null=True)
+    has_confirmation = serializers.BooleanField()
+    payload_hash = serializers.CharField()
+
+
 class PdvSPeriodSerializer(serializers.Serializer):
     period = serializers.CharField()
     schema_version = serializers.CharField()
@@ -89,3 +99,5 @@ class PdvSPeriodSerializer(serializers.Serializer):
     total_services = money_field()
     rows = PdvSRowSerializer(many=True)
     event_uuid = serializers.UUIDField(allow_null=True)
+    current_submission = PdvSSubmissionSerializer(allow_null=True)
+    submissions = PdvSSubmissionSerializer(many=True)

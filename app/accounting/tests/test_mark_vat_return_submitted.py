@@ -1,6 +1,7 @@
 """Tests for mark_vat_return_submitted and mark_pdv_s_submitted."""
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -13,9 +14,12 @@ from accounting.models import (
     SubmissionDestination,
     SubmissionSource,
     TaxDocumentType,
+    VATLedgerEntry,
     VATPeriod,
     VATReturnStatus,
 )
+from accounting.services.submission.protocol import pdv_s_payload_hash_from_aggregate
+from accounting.services.tax_forms.pdv_s.aggregate import aggregate_pdv_s_rows
 from accounting.services.submission.service import SubmissionService
 from accounting.services.tax_forms.pdv.submit import (
     MarkVatReturnSubmittedError,
@@ -164,6 +168,21 @@ class MarkPdvSSubmittedTests(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(username='pdv-s-admin', password='test')
 
+    def _eu_goods(self, *, document_number: str, partner_oib: str, amount: str, day: int = 10):
+        return VATLedgerEntry.all_objects.create(
+            tenant=self.tenant,
+            vat_period=self.period,
+            ledger_type=VATLedgerEntry.LEDGER_U_RA,
+            entry_date=date(2026, 5, day),
+            document_number=document_number,
+            partner_name='EU Supplier',
+            partner_oib=partner_oib,
+            base_amount=Decimal(amount),
+            vat_rate=Decimal('0.00'),
+            vat_amount=Decimal('0.00'),
+            vat_box='207',
+        )
+
     def test_happy_path(self):
         submitted_at = datetime(2026, 7, 6, 11, 59, 38, tzinfo=ZoneInfo('Europe/Zagreb'))
         ep_uuid = UUID('3d50e215-cf30-48a9-93c0-b68da8182ecb')
@@ -204,6 +223,44 @@ class MarkPdvSSubmittedTests(TestCase):
         )
         self.assertEqual(second.submission_no, 2)
         self.assertEqual(second.submission_type, 'correction')
+
+    def test_correction_freezes_distinct_payload_hashes(self):
+        self._eu_goods(document_number='EU-A', partner_oib='DE123456789', amount='33000.00')
+        hash_a = pdv_s_payload_hash_from_aggregate(aggregate_pdv_s_rows(self.period))
+        first = mark_pdv_s_submitted(
+            self.period,
+            submitted_at=timezone.now(),
+            eporezna_identifier=uuid4(),
+            submitted_by=self.user,
+            version_confirmed=True,
+        )
+        self.assertEqual(first.submission_no, 1)
+        self.assertEqual(first.payload_hash, hash_a)
+
+        self._eu_goods(
+            document_number='EU-B',
+            partner_oib='DE355497142',
+            amount='10000.00',
+            day=20,
+        )
+        hash_b = pdv_s_payload_hash_from_aggregate(aggregate_pdv_s_rows(self.period))
+        self.assertNotEqual(hash_a, hash_b)
+
+        second = mark_pdv_s_submitted(
+            self.period,
+            submitted_at=timezone.now(),
+            eporezna_identifier=uuid4(),
+            submitted_by=self.user,
+            version_confirmed=True,
+        )
+        first.refresh_from_db()
+        self.assertEqual(second.submission_no, 2)
+        self.assertEqual(second.submission_type, 'correction')
+        self.assertEqual(second.payload_hash, hash_b)
+        self.assertEqual(first.payload_hash, hash_a)
+        self.assertNotEqual(first.payload_hash, second.payload_hash)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.status, 'open')
 
     def test_rejects_duplicate_external_id(self):
         shared_uuid = uuid4()

@@ -6316,12 +6316,22 @@ components:
           type: string
           format: uuid
           nullable: true
+        current_submission:
+          allOf:
+          - $ref: '#/components/schemas/PdvSSubmission'
+          nullable: true
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdvSSubmission'
       required:
+      - current_submission
       - event_uuid
       - period
       - row_count
       - rows
       - schema_version
+      - submissions
       - total_goods
       - total_services
     PdvSRow:
@@ -6342,6 +6352,34 @@ components:
       - goods_value
       - pdv_id
       - services_value
+    PdvSSubmission:
+      type: object
+      properties:
+        event_uuid:
+          type: string
+          format: uuid
+        submission_no:
+          type: integer
+        submission_type:
+          type: string
+        external_identifier:
+          type: string
+          format: uuid
+        submitted_at:
+          type: string
+          nullable: true
+        has_confirmation:
+          type: boolean
+        payload_hash:
+          type: string
+      required:
+      - event_uuid
+      - external_identifier
+      - has_confirmation
+      - payload_hash
+      - submission_no
+      - submission_type
+      - submitted_at
     PdvSSubmitRequestRequest:
       type: object
       properties:

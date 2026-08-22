@@ -26,6 +26,19 @@ def parse_period_key(value: str) -> tuple[int, int] | None:
     return int(match.group(1)), int(match.group(2))
 
 
+def pdv_s_submission_dto(event) -> dict:
+    submitted_at = event.submitted_at
+    return {
+        'event_uuid': str(event.event_uuid),
+        'submission_no': event.submission_no,
+        'submission_type': event.submission_type,
+        'external_identifier': str(event.external_identifier),
+        'submitted_at': submitted_at.isoformat() if submitted_at is not None else None,
+        'has_confirmation': bool(event.confirmation_attachment),
+        'payload_hash': event.payload_hash,
+    }
+
+
 def pdv_period_dto(period: VATPeriod, *, has_ledger: bool) -> dict:
     vat_return = period.current_return
     vat_due = aggregate_vat_period(period)['vat_due']
