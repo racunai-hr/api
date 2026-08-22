@@ -66,6 +66,7 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('post', '/api/purchasing/invoices/import/{id}/apply-partner-updates/'),
         ('post', '/api/purchasing/invoices/import/{id}/confirm/'),
         ('post', '/api/purchasing/invoices/import/{id}/discard/'),
+        ('post', '/api/purchasing/expenses/{id}/eracun-rejection/'),
     }
 )
 
@@ -134,6 +135,10 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     ),
     'purchasing-invoice-import-confirm': ('post', '/api/purchasing/invoices/import/{id}/confirm/'),
     'purchasing-invoice-import-discard': ('post', '/api/purchasing/invoices/import/{id}/discard/'),
+    'purchasing-expense-eracun-rejection': (
+        'post',
+        '/api/purchasing/expenses/{id}/eracun-rejection/',
+    ),
 }
 
 EXCLUDED_URL_NAMES = frozenset(

@@ -18,6 +18,8 @@ from domains.purchasing.api.permissions import TenantPurchasingWritePermission
 from domains.purchasing.api.schema import (
     ConfirmInvoiceImportSerializer,
     CreatePartnerFromImportSerializer,
+    EracunRejectionRequestSerializer,
+    EracunRejectionResponseSerializer,
     IncomingInvoiceImportSerializer,
     PurchasingConflictSerializer,
 )
@@ -31,6 +33,8 @@ from domains.purchasing.services.invoice_import import (
     retry_invoice_import,
     submit_invoice_import,
 )
+from expenses.models import Expense
+from integrations.services.inbound_rejection import InboundRejectionError, submit_eracun_rejection
 
 
 def _require_tenant(request):
@@ -250,3 +254,61 @@ class InvoiceImportDiscardView(_PurchasingApiView):
             return Response(discard_invoice_import(tenant=_require_tenant(request), import_id=pk))
         except PurchasingConflict as exc:
             return _conflict(exc)
+
+
+def _require_idempotency_key(request) -> str:
+    key = (request.headers.get('Idempotency-Key') or request.META.get('HTTP_IDEMPOTENCY_KEY') or '').strip()
+    if not key:
+        raise ValidationError({'Idempotency-Key': 'Header Idempotency-Key je obavezan.'})
+    return key
+
+
+class ExpenseEracunRejectionView(_PurchasingApiView):
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_expenses_eracun_rejection',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=EracunRejectionRequestSerializer,
+        responses={
+            202: EracunRejectionResponseSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+            502: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request, pk: int):
+        tenant = _require_tenant(request)
+        expense = Expense.all_objects.filter(tenant=tenant, pk=pk).first()
+        if expense is None:
+            raise Http404()
+        serializer = EracunRejectionRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            idempotency_key = _require_idempotency_key(request)
+            body = submit_eracun_rejection(
+                expense,
+                reason_code=serializer.validated_data['reason_code'],
+                reason_text=serializer.validated_data.get('reason_text') or '',
+                idempotency_key=idempotency_key,
+            )
+        except InboundRejectionError as exc:
+            status_code = (
+                status.HTTP_502_BAD_GATEWAY
+                if exc.http_status == 502
+                else (
+                    status.HTTP_400_BAD_REQUEST
+                    if exc.http_status == 400
+                    else status.HTTP_409_CONFLICT
+                )
+            )
+            return Response({'code': exc.code, 'detail': exc.detail}, status=status_code)
+        return Response(body, status=status.HTTP_202_ACCEPTED)

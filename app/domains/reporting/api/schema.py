@@ -374,6 +374,16 @@ class TechnicalBlockSerializer(serializers.Serializer):
     source_hash = serializers.CharField(allow_null=True)
 
 
+class DocumentRejectActionSerializer(serializers.Serializer):
+    available = serializers.BooleanField()
+    reason_codes = serializers.ListField(child=serializers.CharField(), required=False)
+    unavailable_code = serializers.CharField(allow_null=True, required=False)
+
+
+class DocumentActionsSerializer(serializers.Serializer):
+    reject = DocumentRejectActionSerializer()
+
+
 class DocumentDetailSerializer(DocumentSummarySerializer):
     partner_id = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True, allow_null=True)
@@ -403,6 +413,7 @@ class DocumentDetailSerializer(DocumentSummarySerializer):
     references = DocumentReferenceSerializer(many=True, required=False)
     integration = IntegrationBlockSerializer(required=False)
     technical = TechnicalBlockSerializer(required=False)
+    actions = DocumentActionsSerializer(required=False)
     # PR C accounting context (incoming only; avoid colliding with provenanced vat/subledger)
     accounting = AccountingBlockSerializer(required=False)
     vat_context = VatContextSerializer(required=False)
