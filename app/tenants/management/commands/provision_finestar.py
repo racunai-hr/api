@@ -42,7 +42,7 @@ RESPONSIBLE_PERSON = {
     'title': 'director',
     'first_name': 'Toni',
     'last_name': 'Šupe',
-    'email': 'avrcan@finestar.hr',
+    'email': 'tsupe@finestar.hr',
 }
 
 
@@ -98,6 +98,15 @@ class Command(BaseCommand):
                 is_active=True,
                 **RESPONSIBLE_PERSON,
             )
+
+        # MDM: thin provision — Partner/IBAN + director primary live in canonical helpers.
+        from domains.partners.services.ensure_toni_supe import (
+            ensure_finestar_director_toni_supe,
+            ensure_partner_toni_supe,
+        )
+
+        ensure_partner_toni_supe(tenant=tenant)
+        ensure_finestar_director_toni_supe(tenant=tenant)
 
         call_command('setup_accounting', tenant=slug)
 
