@@ -2,9 +2,9 @@ openapi: 3.0.3
 info:
   title: računAI API
   version: 1.0.0
-  description: Tenant JWT REST ugovor za auth, documents, banking, partners, finance
-    i purchasing. Fiscal/intermediary i AS4 nisu dio ove sheme. openapi.yaml je generirani
-    artefakt — ne uređivati ručno.
+  description: Tenant JWT REST ugovor za auth, documents, banking, partners, finance,
+    purchasing i tax. Fiscal/intermediary i AS4 nisu dio ove sheme. openapi.yaml je
+    generirani artefakt — ne uređivati ručno.
 paths:
   /api/auth/me/:
     get:
@@ -3047,6 +3047,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchasingConflict'
           description: ''
+  /api/tax/pdv/periods/:
+    get:
+      operationId: tax_pdv_periods_list
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvPeriodList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
 components:
   schemas:
     AccountingBlock:
@@ -5634,6 +5665,48 @@ components:
       required:
       - creditor_iban
       - status
+    PdvPeriod:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Canonical period YYYY-MM
+        period_status:
+          type: string
+        has_ledger:
+          type: boolean
+        return_version:
+          type: integer
+          nullable: true
+        return_status:
+          type: string
+          nullable: true
+        vat_due:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        submitted_at:
+          type: string
+          nullable: true
+      required:
+      - has_ledger
+      - period
+      - period_status
+      - return_status
+      - return_version
+      - submitted_at
+      - vat_due
+    PdvPeriodList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdvPeriod'
+      required:
+      - count
+      - results
     PeriodReturn:
       type: object
       properties:
@@ -6583,3 +6656,5 @@ tags:
   description: Finance partner projections (ADR-0022)
 - name: purchasing
   description: Purchasing OCR ulaznih računa
+- name: tax
+  description: Tax PDV Razdoblja read-model

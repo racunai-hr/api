@@ -120,10 +120,10 @@ class OpenApiContractTests(SimpleTestCase):
                         f'{method.upper()} {path} missing bearerAuth security (got {security!r})',
                     )
 
-    def test_banking_and_documents_do_not_advertise_403(self):
+    def test_banking_documents_and_tax_do_not_advertise_403(self):
         schema = SchemaGenerator().get_schema(request=None, public=True)
         for path, operations in (schema.get('paths') or {}).items():
-            if '/banking/' not in path and '/documents/' not in path:
+            if '/banking/' not in path and '/documents/' not in path and '/tax/' not in path:
                 continue
             for method, op in operations.items():
                 if method.startswith('x-') or not isinstance(op, dict):

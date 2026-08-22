@@ -212,7 +212,7 @@ if _HAS_DRF_SPECTACULAR:
 SPECTACULAR_SETTINGS = {
     'TITLE': 'računAI API',
     'DESCRIPTION': (
-        'Tenant JWT REST ugovor za auth, documents, banking, partners, finance i purchasing. '
+        'Tenant JWT REST ugovor za auth, documents, banking, partners, finance, purchasing i tax. '
         'Fiscal/intermediary i AS4 nisu dio ove sheme. '
         'openapi.yaml je generirani artefakt — ne uređivati ručno.'
     ),
@@ -227,6 +227,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'partners', 'description': 'Partner MDM API (ADR-0022)'},
         {'name': 'finance', 'description': 'Finance partner projections (ADR-0022)'},
         {'name': 'purchasing', 'description': 'Purchasing OCR ulaznih računa'},
+        {'name': 'tax', 'description': 'Tax PDV Razdoblja read-model'},
     ],
     'POSTPROCESSING_HOOKS': [
         'drf_spectacular.hooks.postprocess_schema_enums',
