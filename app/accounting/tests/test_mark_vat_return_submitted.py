@@ -93,6 +93,32 @@ class MarkVatReturnSubmittedTests(PdvCheckpointApril2026Tests):
         vat_return.refresh_from_db()
         self.assertEqual(vat_return.status, VATReturnStatus.GENERATED)
 
+    def test_pdv_s_submit_leaves_period_open_for_pdv_draft_then_pdv_locks(self):
+        mark_pdv_s_submitted(
+            self.period,
+            submitted_at=datetime(2026, 8, 6, 13, 5, 8, tzinfo=ZoneInfo('Europe/Zagreb')),
+            eporezna_identifier=UUID('2c36debd-393a-40e6-b002-d172a2ac1ba5'),
+            submitted_by=self.user,
+            version_confirmed=True,
+        )
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.status, 'open')
+
+        vat_return = create_vat_return_draft(self.period, prepared_by=self.accountant)
+        self.assertEqual(vat_return.status, VATReturnStatus.GENERATED)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.status, 'open')
+
+        mark_vat_return_submitted(
+            vat_return,
+            submitted_at=timezone.now(),
+            eporezna_identifier=uuid4(),
+            submitted_by=self.user,
+            version_confirmed=True,
+        )
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.status, 'submitted')
+
     def test_rejects_already_submitted(self):
         vat_return = create_vat_return_draft(self.period, prepared_by=self.accountant)
         mark_vat_return_submitted(
@@ -155,6 +181,9 @@ class MarkPdvSSubmittedTests(TestCase):
         self.assertEqual(event.submitted_by, self.user)
         self.assertEqual(event.document_type, TaxDocumentType.PDV_S)
         self.assertTrue(PDVSReturn.all_objects.filter(vat_period=self.period).exists())
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.status, 'open')
+        self.assertIsNone(self.period.submitted_at)
 
     def test_allows_correction_chain(self):
         first_uuid = uuid4()

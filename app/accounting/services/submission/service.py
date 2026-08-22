@@ -420,7 +420,7 @@ class SubmissionService:
 
     @staticmethod
     def _update_document_workflow(document, *, submitted_at: datetime) -> None:
-        from accounting.models import PDVSReturn, VATReturn, ZPReturn
+        from accounting.models import VATReturn, ZPReturn
 
         if isinstance(document, VATReturn):
             period = VATPeriod.all_objects.select_for_update().get(pk=document.vat_period_id)
@@ -430,12 +430,14 @@ class SubmissionService:
             period.status = 'submitted'
             period.submitted_at = submitted_at
             period.save(update_fields=['status', 'submitted_at'])
-        elif isinstance(document, (PDVSReturn, ZPReturn)):
+        elif isinstance(document, ZPReturn):
             period = VATPeriod.all_objects.select_for_update().get(pk=document.vat_period_id)
             if period.status != 'submitted':
                 period.status = 'submitted'
                 period.submitted_at = submitted_at
                 period.save(update_fields=['status', 'submitted_at'])
+        # PDVSReturn has its own SubmissionEvent lifecycle. It must not lock VATPeriod
+        # (Obrazac PDV for the same YYYY-MM can still be drafted and submitted).
 
     @staticmethod
     @transaction.atomic
