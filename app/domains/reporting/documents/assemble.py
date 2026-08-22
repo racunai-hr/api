@@ -30,14 +30,37 @@ def _primary_subledger(rows):
     if not rows:
         return None
     active = [row for row in rows if row.status != 'cancelled']
-    return active[0] if active else rows[0]
+    return active[0] if active else None
 
 
-def _primary_posting(rows):
+def _primary_posting(rows, *, bank_by_je=None):
     if not rows:
         return None
     posted = [row for row in rows if row.status == 'posted']
-    return posted[0] if posted else rows[0]
+    candidates = posted or list(rows)
+    if bank_by_je:
+        for row in candidates:
+            txs = bank_by_je.get(row.pk) or []
+            if any(getattr(tx, 'match_status', None) == 'matched' for tx in txs):
+                return row
+    return candidates[0]
+
+
+def _collect_bank_txs(*, payments, payment_bank_map, journal_entries, je_bank_map) -> list:
+    """Union bank txs linked via payments or any sibling JE (deduped by pk)."""
+    bank_txs = []
+    seen: set[int] = set()
+    for pay in payments:
+        for tx in payment_bank_map.get(pay.pk, []):
+            if tx.pk not in seen:
+                seen.add(tx.pk)
+                bank_txs.append(tx)
+    for je in journal_entries or []:
+        for tx in je_bank_map.get(je.pk, []):
+            if tx.pk not in seen:
+                seen.add(tx.pk)
+                bank_txs.append(tx)
+    return bank_txs
 
 
 def _latest_as4(links):
@@ -52,7 +75,8 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         items = rel['items_by_invoice'].get(document.pk, [])
         ledger_rows = rel['vat_out'].get(document.pk, [])
         subledger = _primary_subledger(rel['sub_out'].get(document.pk, []))
-        posting = _primary_posting(rel['je_out'].get(document.pk, []))
+        sibling_jes = rel['je_out'].get(document.pk, [])
+        posting = _primary_posting(sibling_jes, bank_by_je=rel['bank_by_je'])
         as4_links = rel['as4_out'].get(document.pk, [])
         super_links = rel['super_out'].get(document.pk, [])
         payments = rel['payments_by_invoice'].get(document.pk, [])
@@ -75,7 +99,8 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         items = []
         ledger_rows = rel['vat_in'].get(document.pk, [])
         subledger = _primary_subledger(rel['sub_in'].get(document.pk, []))
-        posting = _primary_posting(rel['je_in'].get(document.pk, []))
+        sibling_jes = rel['je_in'].get(document.pk, [])
+        posting = _primary_posting(sibling_jes, bank_by_je=rel['bank_by_je'])
         as4_links = rel['as4_in'].get(document.pk, [])
         super_links = rel['super_in'].get(document.pk, [])
         payments = []
@@ -90,18 +115,23 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         source = document.source
         fiscal_logs = []
         outbox = []
-        has_pdf_xml = bool(attachments) or any(link.ubl_xml for link in as4_links) or any(
-            link.ubl_xml or link.pdf_path for link in super_links
+        # Electronic fiscal imports carry their own evidence — PDF scan is not required:
+        # AS4 / Fiskalizacija 2 (UBL), F1 CSV / prior intermediary (JIR fiscal receipt).
+        has_pdf_xml = (
+            bool(attachments)
+            or bool(as4_links)
+            or source == 'f1_csv'
+            or any(link.ubl_xml or link.pdf_path for link in super_links)
         )
 
     as4 = _latest_as4(as4_links)
     as4_status = as4.as4_status if as4 else None
-    payment_ids = [p.pk for p in payments]
-    bank_txs = []
-    for pay in payments:
-        bank_txs.extend(rel['bank_by_payment'].get(pay.pk, []))
-    if posting is not None:
-        bank_txs.extend(rel['bank_by_je'].get(posting.pk, []))
+    bank_txs = _collect_bank_txs(
+        payments=payments,
+        payment_bank_map=rel['bank_by_payment'],
+        journal_entries=sibling_jes,
+        je_bank_map=rel['bank_by_je'],
+    )
     match_status = None
     if any(tx.match_status == 'matched' for tx in bank_txs):
         match_status = 'matched'
@@ -157,6 +187,8 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             disputed=disputed,
             as_of_day=as_of_day,
             has_receipt_evidence=has_receipt,
+            posting=posting,
+            bank_matched=match_status == 'matched',
         )
 
     alerts, notices = collect_controls({
@@ -341,7 +373,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             bank_txs=bank_txs,
             match_status=match_status,
             period_label=period_label,
-            sibling_jes=rel['je_in'].get(document.pk, []),
+            sibling_jes=sibling_jes,
         )
     else:
         # Outgoing: on-demand generated PDF (existing DocumentPdfView contract).

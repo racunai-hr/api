@@ -395,6 +395,80 @@ class DocumentReadModelTests(TestCase):
         self.assertEqual(explicit['value'], 'disputed')
         self.assertEqual(explicit['source'], 'as4_document_link')
 
+    def test_incoming_paid_bank_matched_without_subledger_is_paid(self):
+        """Manual JE + bank match (e.g. uvoz vozila) — no AP subledger, still operational paid."""
+        expense = self._expense(status='paid', amount=Decimal('8000.00'), tax_amount=Decimal('0.00'))
+        purchase_je = self._journal(expense, number='JE-ASSET-1', description='Nabava OS')
+        vat_je = self._journal(expense, number='JE-ASSET-VAT', description='PDV reverse charge')
+        account = ChartOfAccounts.all_objects.filter(tenant=self.tenant).first()
+        self.assertIsNotNone(account)
+        JournalEntryLine.objects.create(
+            journal_entry=purchase_je,
+            account=account,
+            description='duguje',
+            debit_amount=Decimal('8000.00'),
+            credit_amount=Decimal('0.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=purchase_je,
+            account=account,
+            description='potražuje',
+            debit_amount=Decimal('0.00'),
+            credit_amount=Decimal('8000.00'),
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='EUR',
+            bank_name='OTP',
+            account_number='110',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-ASSET-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 22),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('8000.00'),
+            imported_by=self.user,
+        )
+        tx = BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 22),
+            amount=Decimal('8000.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='VW-CROSS',
+            match_status='matched',
+            matched_journal_entry=purchase_je,
+        )
+
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['operational_status']['value'], 'paid')
+        self.assertEqual(body['operational_status']['source'], 'bank_transaction')
+        self.assertNotIn('paid_status_subledger_missing', body['controls'])
+        self.assertEqual(body['status']['payment'], 'matched')
+        self.assertEqual(body['status']['posting'], 'posted')
+        # Prefer JE with bank match over sibling VAT JE as primary posting.
+        self.assertEqual(body['accounting']['journal_entry_id'], purchase_je.pk)
+        self.assertEqual(body['payment']['bank_transaction_id'], tx.pk)
+        self.assertTrue(body['payment']['matched'])
+        # vat_je remains linked as sibling (no crash / still detail OK)
+        self.assertEqual(vat_je.source_object_id, expense.pk)
+
+        proven = operational_incoming(
+            document=expense,
+            subledger=None,
+            disputed=False,
+            as_of_day=date(2026, 8, 19),
+            has_receipt_evidence=True,
+            posting=purchase_je,
+            bank_matched=True,
+        )
+        self.assertEqual(proven['value'], 'paid')
+        self.assertEqual(proven['source'], 'bank_transaction')
+
     def test_closed_subledger_with_allocation_no_bank_alarm(self):
         invoice = self._invoice(status='sent')
         item = self._subledger(invoice, status='closed', open_amount=Decimal('0'))
@@ -598,6 +672,62 @@ class DocumentReadModelTests(TestCase):
             'has_pdf_xml': True,
         })
         self.assertIn('missing_due_date', alerts)
+
+    def test_missing_due_date_suppressed_when_paid(self):
+        expense = self._expense(due_date=None, status='paid')
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertNotIn('missing_due_date', alerts)
+
+    def test_missing_due_date_suppressed_when_subledger_closed(self):
+        expense = self._expense(due_date=None, status='approved')
+        sub = SimpleNamespace(status='closed', open_amount=Decimal('0.00'))
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': sub,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertNotIn('missing_due_date', alerts)
+
+    def test_missing_pdf_xml_alerts_without_evidence(self):
+        expense = self._expense(due_date=date(2026, 7, 30), status='draft')
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': False,
+        })
+        self.assertIn('missing_pdf_xml', alerts)
+
+    def test_as4_inbound_suppresses_missing_pdf_xml(self):
+        """Fiskalizacija 2 (AS4) is the e-invoice — PDF/XML control must not fire."""
+        expense = self._expense(due_date=None, status='draft')
+        self._as4_inbound_link(expense, ubl_xml='')
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertNotIn('missing_pdf_xml', body['controls'])
+        # Unpaid AS4 without DueDate in UBL still alerts on due date.
+        self.assertIn('missing_due_date', body['controls'])
+
+    def test_f1_csv_paid_suppresses_missing_pdf_and_due_date(self):
+        """F1 / prior intermediary import + paid: no PDF/XML or due-date alerts."""
+        expense = self._expense(due_date=None, status='paid', source='f1_csv')
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertNotIn('missing_pdf_xml', body['controls'])
+        self.assertNotIn('missing_due_date', body['controls'])
 
     def test_attachment_after_posting_is_notice_not_mismatch(self):
         invoice = self._invoice()

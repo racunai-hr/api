@@ -267,6 +267,8 @@ def operational_incoming(
     disputed: bool,
     as_of_day: date,
     has_receipt_evidence: bool,
+    posting=None,
+    bank_matched: bool = False,
 ) -> dict:
     if document.status == 'rejected':
         return provenanced('rejected', source='document_read_model')
@@ -277,6 +279,13 @@ def operational_incoming(
     if subledger is not None and subledger.status == 'partial':
         return provenanced('partially_paid', source='document_read_model')
     if document.status == 'paid' and subledger is None:
+        # Manual asset / JE+bank close without AP subledger (e.g. uvoz vozila).
+        if (
+            bank_matched
+            and posting is not None
+            and getattr(posting, 'status', None) == 'posted'
+        ):
+            return provenanced('paid', source='bank_transaction')
         return provenanced(None, reason='not_provable')
     openish = _subledger_openish(subledger)
     if openish and document.due_date and document.due_date < as_of_day:
@@ -340,7 +349,9 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
 
     if partner_tax_identity_missing(partner):
         alerts.append('missing_partner_or_oib')
-    if not document.due_date:
+    # Due date matters for open payables; settled/paid invoices do not need it.
+    is_settled = document.status == 'paid' or _subledger_settled(subledger)
+    if not document.due_date and not is_settled:
         alerts.append('missing_due_date')
     if not has_pdf_xml:
         alerts.append('missing_pdf_xml')
@@ -388,7 +399,14 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
         alerts.append('overdue_unpaid')
     if document.status == 'paid':
         if subledger is None:
-            alerts.append('paid_status_subledger_missing')
+            # Bank-matched posted JE is settlement evidence without AP subledger
+            # (manual asset purchase / uvoz vozila).
+            if not (
+                bank_matched
+                and posting is not None
+                and getattr(posting, 'status', None) == 'posted'
+            ):
+                alerts.append('paid_status_subledger_missing')
         elif subledger.status in ('open', 'partial') and (
             subledger.open_amount is not None and subledger.open_amount > MONEY_TOLERANCE
         ):
