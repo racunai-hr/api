@@ -264,6 +264,39 @@ class InboundEracunRejectionServiceTests(TestCase):
         self.assertEqual(ctx.exception.code, 'gateway_unavailable')
         expense.refresh_from_db()
         self.assertEqual(expense.status, 'draft')
+        self.assertFalse(
+            InboundEracunRejectionAttempt.all_objects.filter(expense=expense).exists()
+        )
+
+    def test_pending_attempt_reserved_before_gateway_call(self):
+        expense = self._expense()
+        self._gateway_link(expense)
+        attempt_id = str(uuid.uuid4())
+        client = MagicMock()
+        client.reject_e_reporting.return_value = (
+            202,
+            {'attempt_id': attempt_id, 'e_reporting_status': 'PENDING'},
+        )
+        gateway_calls_at_create: list[int] = []
+        original_create = InboundEracunRejectionAttempt.all_objects.create
+
+        def tracked_create(**kwargs):
+            gateway_calls_at_create.append(client.reject_e_reporting.call_count)
+            return original_create(**kwargs)
+
+        with patch.object(
+            InboundEracunRejectionAttempt.all_objects,
+            'create',
+            side_effect=tracked_create,
+        ):
+            submit_eracun_rejection(
+                expense,
+                reason_code='REJECTED_BY_RECIPIENT',
+                idempotency_key='reserve-first',
+                client=client,
+            )
+        self.assertEqual(gateway_calls_at_create, [0])
+        self.assertEqual(client.reject_e_reporting.call_count, 1)
 
 
 @override_settings(

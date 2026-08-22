@@ -300,6 +300,16 @@ def submit_eracun_rejection(
             'Provider ne podržava e-reporting odbijanje.',
         )
 
+    attempt = _reserve_rejection_attempt(
+        expense,
+        link=link,
+        reason_code=reason_code,
+        reason_text=reason_text,
+        idempotency_key=idempotency_key,
+    )
+    if isinstance(attempt, dict):
+        return attempt
+
     taxpayer_oib = link.taxpayer_oib or _taxpayer_oib(expense.tenant)
     gw = client or GatewayV1Client(taxpayer_oib=taxpayer_oib)
     try:
@@ -310,6 +320,7 @@ def submit_eracun_rejection(
             idempotency_key=idempotency_key,
         )
     except GatewayV1Error as exc:
+        attempt.delete()
         if exc.status_code == 409 and (exc.code or '').upper() in {
             'IDEMPOTENCY_CONFLICT',
             'idempotency_conflict',
@@ -334,44 +345,99 @@ def submit_eracun_rejection(
 
     attempt_id = body.get('attempt_id')
     e_reporting = body.get('e_reporting_status') or 'PENDING'
+    attempt.attempt_id = attempt_id
+    attempt.e_reporting_status = e_reporting
+    attempt.save(update_fields=['attempt_id', 'e_reporting_status', 'updated_at'])
 
-    try:
-        with transaction.atomic():
-            attempt = InboundEracunRejectionAttempt.all_objects.create(
-                tenant=expense.tenant,
-                expense=expense,
+    expense.refresh_from_db(fields=['status'])
+    return _success_payload(expense, attempt)
+
+
+def _reserve_rejection_attempt(
+    expense: Expense,
+    *,
+    link: InboundGatewayDocumentLink,
+    reason_code: str,
+    reason_text: str,
+    idempotency_key: str,
+) -> InboundEracunRejectionAttempt | dict[str, Any]:
+    """Lock expense and insert pending attempt before any gateway side effect."""
+    with transaction.atomic():
+        locked_expense = Expense.all_objects.select_for_update().get(pk=expense.pk)
+        if locked_expense.status == 'rejected':
+            raise InboundRejectionError(
+                UNAVAILABLE_ALREADY_REJECTED,
+                'Dokument je već odbijen.',
+            )
+        if locked_expense.status in ('paid', 'cancelled'):
+            raise InboundRejectionError(
+                UNAVAILABLE_INVALID_STATUS,
+                'Dokument nije u stanju za odbijanje.',
+            )
+
+        prior = InboundEracunRejectionAttempt.all_objects.filter(
+            tenant=locked_expense.tenant,
+            idempotency_key=idempotency_key,
+        ).first()
+        if prior is not None:
+            if prior.expense_id != locked_expense.pk:
+                raise InboundRejectionError(
+                    'idempotency_conflict',
+                    'Idempotency-Key je već iskorišten za drugi dokument.',
+                )
+            body_hash = _request_hash(reason_code, reason_text)
+            prior_hash = _request_hash(prior.reason_code, prior.reason_text)
+            if body_hash != prior_hash:
+                raise InboundRejectionError(
+                    'idempotency_conflict',
+                    'Idempotency-Key je već iskorišten s drugim tijelom zahtjeva.',
+                )
+            return _success_payload(locked_expense, prior)
+
+        pending = get_pending_rejection(locked_expense)
+        if pending is not None:
+            raise InboundRejectionError(
+                UNAVAILABLE_REJECTION_PENDING,
+                'Odbijanje je već u tijeku.',
+            )
+
+        try:
+            return InboundEracunRejectionAttempt.all_objects.create(
+                tenant=locked_expense.tenant,
+                expense=locked_expense,
                 gateway_document_id=link.gateway_document_id,
-                attempt_id=attempt_id,
                 idempotency_key=idempotency_key,
                 reason_code=reason_code,
                 reason_text=reason_text or '',
                 status=InboundEracunRejectionAttempt.STATUS_PENDING,
-                e_reporting_status=e_reporting,
+                e_reporting_status='PENDING',
                 provider_ref=link.provider_ref,
             )
-    except IntegrityError as exc:
-        # Concurrent pending or idempotency race — re-read.
-        raced = InboundEracunRejectionAttempt.all_objects.filter(
-            tenant=expense.tenant,
-            idempotency_key=idempotency_key,
-        ).first()
-        if raced:
-            if raced.expense_id != expense.pk:
+        except IntegrityError as exc:
+            raced = InboundEracunRejectionAttempt.all_objects.filter(
+                tenant=locked_expense.tenant,
+                idempotency_key=idempotency_key,
+            ).first()
+            if raced:
+                if raced.expense_id != locked_expense.pk:
+                    raise InboundRejectionError(
+                        'idempotency_conflict',
+                        'Idempotency-Key je već iskorišten za drugi dokument.',
+                    ) from exc
+                body_hash = _request_hash(reason_code, reason_text)
+                prior_hash = _request_hash(raced.reason_code, raced.reason_text)
+                if body_hash != prior_hash:
+                    raise InboundRejectionError(
+                        'idempotency_conflict',
+                        'Idempotency-Key je već iskorišten s drugim tijelom zahtjeva.',
+                    ) from exc
+                return _success_payload(locked_expense, raced)
+            if get_pending_rejection(locked_expense):
                 raise InboundRejectionError(
-                    'idempotency_conflict',
-                    'Idempotency-Key je već iskorišten za drugi dokument.',
+                    UNAVAILABLE_REJECTION_PENDING,
+                    'Odbijanje je već u tijeku.',
                 ) from exc
-            return _success_payload(expense, raced)
-        pending = get_pending_rejection(expense)
-        if pending:
-            raise InboundRejectionError(
-                UNAVAILABLE_REJECTION_PENDING,
-                'Odbijanje je već u tijeku.',
-            ) from exc
-        raise
-
-    expense.refresh_from_db(fields=['status'])
-    return _success_payload(expense, attempt)
+            raise
 
 
 def _request_hash(reason_code: str, reason_text: str) -> str:
