@@ -250,6 +250,11 @@ def submit_eracun_rejection(
         idempotency_key=idempotency_key,
     ).first()
     if prior is not None:
+        if prior.expense_id != expense.pk:
+            raise InboundRejectionError(
+                'idempotency_conflict',
+                'Idempotency-Key je već iskorišten za drugi dokument.',
+            )
         body_hash = _request_hash(reason_code, reason_text)
         prior_hash = _request_hash(prior.reason_code, prior.reason_text)
         if body_hash != prior_hash:
@@ -327,6 +332,11 @@ def submit_eracun_rejection(
             idempotency_key=idempotency_key,
         ).first()
         if raced:
+            if raced.expense_id != expense.pk:
+                raise InboundRejectionError(
+                    'idempotency_conflict',
+                    'Idempotency-Key je već iskorišten za drugi dokument.',
+                ) from exc
             return _success_payload(expense, raced)
         pending = get_pending_rejection(expense)
         if pending:

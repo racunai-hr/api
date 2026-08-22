@@ -166,6 +166,32 @@ class InboundEracunRejectionServiceTests(TestCase):
         self.assertEqual(ctx.exception.code, UNAVAILABLE_REJECTION_PENDING)
         client.reject_e_reporting.assert_not_called()
 
+    def test_idempotency_conflict_different_expense(self):
+        expense_a = self._expense(number='T-REJ-A')
+        expense_b = self._expense(number='T-REJ-B')
+        link_a = self._gateway_link(expense_a)
+        self._gateway_link(expense_b)
+        InboundEracunRejectionAttempt.all_objects.create(
+            tenant=self.tenant,
+            expense=expense_a,
+            gateway_document_id=link_a.gateway_document_id,
+            idempotency_key='shared-key',
+            reason_code='REJECTED_BY_RECIPIENT',
+            reason_text='same body',
+            status=InboundEracunRejectionAttempt.STATUS_PENDING,
+        )
+        client = MagicMock()
+        with self.assertRaises(InboundRejectionError) as ctx:
+            submit_eracun_rejection(
+                expense_b,
+                reason_code='REJECTED_BY_RECIPIENT',
+                reason_text='same body',
+                idempotency_key='shared-key',
+                client=client,
+            )
+        self.assertEqual(ctx.exception.code, 'idempotency_conflict')
+        client.reject_e_reporting.assert_not_called()
+
     def test_no_legacy_fallback_on_gateway_error(self):
         expense = self._expense()
         self._gateway_link(expense)
