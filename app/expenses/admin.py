@@ -9,6 +9,12 @@ from django.utils.html import format_html, format_html_join
 from fiscal_gateway.models import As4DocumentLink
 from fiscal_gateway.services.inbound_as4_actions import InboundExpenseError
 from integrations.admin_display import expense_integration_status
+from integrations.errors import IntegrationError
+from integrations.manager import IntegrationManager
+from integrations.services.inbound_rejection import (
+    InboundRejectionError,
+    reject_inbound_expense_from_admin,
+)
 from super_integration.models import SuperDocumentLink
 from accounting.admin_subledger import SubledgerSourceInline
 from tenants.mixins import TenantAdminMixin
@@ -324,15 +330,30 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     @admin.action(description='Odbij ulazni eRačun')
     def reject_inbound_action(self, request, queryset):
-        rejected = 0
+        rejected_as4 = 0
+        rejected_gateway = 0
         for expense in queryset:
             try:
-                IntegrationManager.reject_inbound_expense(expense)
-                rejected += 1
-            except (IntegrationError, InboundExpenseError) as exc:
-                self.message_user(request, f'{expense}: {exc}', level=messages.ERROR)
-        if rejected:
-            self.message_user(request, f'Odbijeno {rejected} troškova.', level=messages.SUCCESS)
+                channel = reject_inbound_expense_from_admin(expense)
+                if channel == 'gateway':
+                    rejected_gateway += 1
+                else:
+                    rejected_as4 += 1
+            except (InboundRejectionError, IntegrationError, InboundExpenseError) as exc:
+                detail = getattr(exc, 'detail', str(exc))
+                self.message_user(request, f'{expense}: {detail}', level=messages.ERROR)
+        if rejected_as4:
+            self.message_user(
+                request,
+                f'Odbijeno {rejected_as4} troškova (AS4).',
+                level=messages.SUCCESS,
+            )
+        if rejected_gateway:
+            self.message_user(
+                request,
+                f'Zaprimljeno odbijanje za {rejected_gateway} troškova (gateway).',
+                level=messages.SUCCESS,
+            )
 
 
 @admin.register(IncomingInvoiceImport)

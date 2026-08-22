@@ -17,8 +17,7 @@ from integrations.manager import IntegrationManager
 from integrations.models import IntegrationConfig
 from integrations.registry import discover_connectors, registered_pairs
 from fiscal_gateway.connector_platform import FiskalPlatformFiscalizationConnector
-from fiscal_gateway.models import FiscalTenantConfig
-from super_integration.models import SuperTenantConfig
+from fiscal_gateway.models import DirectTenantConfig, FiscalTenantConfig
 from tenants.models import Tenant
 from ubl.domain.document import UblDocument
 
@@ -46,17 +45,15 @@ class FiskalPlatformConnectorE2ETests(TestCase):
             oib='36619131370',
             is_active=True,
         )
-        SuperTenantConfig.all_objects.create(
+        DirectTenantConfig.all_objects.create(
             tenant=self.tenant,
-            username='user',
-            password='pass',
-            company_guid='guid-platform',
+            oib='36619131370',
             is_active=True,
         )
         IntegrationConfig.all_objects.create(
             tenant=self.tenant,
             integration_type=IntegrationType.ERACUN,
-            provider=IntegrationProvider.SUPER,
+            provider=IntegrationProvider.DIRECT,
             environment=IntegrationEnvironment.PRODUCTION,
             is_active=True,
         )

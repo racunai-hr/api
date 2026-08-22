@@ -33,9 +33,6 @@ def _apply_provider_profile(integration_config: IntegrationConfig, config) -> No
     if profile is None:
         return
 
-    if integration_config.provider == IntegrationProvider.SUPER and hasattr(config, 'api_base_url'):
-        config.api_base_url = profile.api_base_url
-
     if integration_config.provider == IntegrationProvider.CIS and hasattr(config, 'cis_env'):
         config.cis_env = cis_env_for_integration(integration_config.environment)
 
@@ -44,23 +41,6 @@ def _apply_provider_profile(integration_config: IntegrationConfig, config) -> No
             config.domibus_ws_url = profile.api_base_url
         if profile and hasattr(config, 'mps_service_url') and not config.mps_service_url:
             config.mps_service_url = profile.mps_service_url
-
-
-def _load_super_eracun(integration_config: IntegrationConfig):
-    from super_integration.models import SuperTenantConfig
-
-    try:
-        config = SuperTenantConfig.all_objects.get(tenant=integration_config.tenant)
-    except SuperTenantConfig.DoesNotExist as exc:
-        raise InactiveIntegrationError(
-            f'Nema SUPER konfiguracije za tenant {integration_config.tenant.slug}.'
-        ) from exc
-
-    if not config.is_active:
-        raise InactiveIntegrationError(
-            f'SUPER konfiguracija za {integration_config.tenant.slug} nije aktivna.'
-        )
-    return config
 
 
 def _load_fiskal_platform_fiscalization(integration_config: IntegrationConfig):
@@ -136,7 +116,6 @@ def _load_otp_payment(integration_config: IntegrationConfig):
 
 
 _LOADERS = {
-    (IntegrationType.ERACUN, IntegrationProvider.SUPER): _load_super_eracun,
     (IntegrationType.ERACUN, IntegrationProvider.DIRECT): _load_direct_eracun,
     (IntegrationType.FISCALIZATION, IntegrationProvider.CIS): _load_cis_fiscalization,
     (IntegrationType.FISCALIZATION, IntegrationProvider.FISKAL_PLATFORM): _load_fiskal_platform_fiscalization,

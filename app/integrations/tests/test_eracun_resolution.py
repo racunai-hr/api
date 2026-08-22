@@ -12,7 +12,7 @@ from super_integration.models import SuperTenantConfig
 from tenants.models import Tenant
 
 
-@override_settings(TENANT_PLATFORM_DOMAIN='racunai.hr', USE_SUPER_ERACUN_FALLBACK=True)
+@override_settings(TENANT_PLATFORM_DOMAIN='racunai.hr')
 class EracunConfigResolutionTests(TestCase):
     def setUp(self):
         self.tenant = Tenant.objects.create(slug='resolve-test', name='Resolve Test')
@@ -51,13 +51,25 @@ class EracunConfigResolutionTests(TestCase):
         )
         self.assertEqual(config.provider, IntegrationProvider.DIRECT)
 
-    @override_settings(USE_SUPER_ERACUN_FALLBACK=True)
-    def test_super_fallback_when_no_direct_config(self):
+    def test_a2_direct_config_active_but_direct_tenant_inactive_returns_none(self):
+        """A2: SUPER must not win when DirectTenantConfig is inactive."""
+        DirectTenantConfig.all_objects.create(
+            tenant=self.tenant,
+            oib='36619131370',
+            is_active=False,
+        )
         SuperTenantConfig.all_objects.create(
             tenant=self.tenant,
             username='user',
             password='pass',
-            company_guid='guid-2',
+            company_guid='guid-a2',
+            is_active=True,
+        )
+        IntegrationConfig.all_objects.create(
+            tenant=self.tenant,
+            integration_type=IntegrationType.ERACUN,
+            provider=IntegrationProvider.DIRECT,
+            environment=IntegrationEnvironment.PRODUCTION,
             is_active=True,
         )
         IntegrationConfig.all_objects.create(
@@ -65,23 +77,21 @@ class EracunConfigResolutionTests(TestCase):
             integration_type=IntegrationType.ERACUN,
             provider=IntegrationProvider.SUPER,
             environment=IntegrationEnvironment.PRODUCTION,
-            is_active=True,
+            is_active=False,
         )
 
-        with self.assertWarns(DeprecationWarning):
-            config = IntegrationRepository.resolve_eracun_config(
-                self.tenant,
-                IntegrationEnvironment.PRODUCTION,
-            )
-        self.assertEqual(config.provider, IntegrationProvider.SUPER)
+        config = IntegrationRepository.resolve_eracun_config(
+            self.tenant,
+            IntegrationEnvironment.PRODUCTION,
+        )
+        self.assertIsNone(config)
 
-    @override_settings(USE_SUPER_ERACUN_FALLBACK=False)
-    def test_no_super_fallback_when_flag_disabled(self):
+    def test_only_super_config_active_returns_none(self):
         SuperTenantConfig.all_objects.create(
             tenant=self.tenant,
             username='user',
             password='pass',
-            company_guid='guid-3',
+            company_guid='guid-2',
             is_active=True,
         )
         IntegrationConfig.all_objects.create(

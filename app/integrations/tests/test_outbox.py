@@ -12,7 +12,7 @@ from integrations.models import IntegrationConfig, IntegrationOutboxMessage
 from integrations.registry import discover_connectors
 from integrations.retry_policy import is_retryable_exception
 from integrations.services.outbox import enqueue_outbox, schedule_next_retry
-from super_integration.models import SuperTenantConfig
+from fiscal_gateway.models import DirectTenantConfig
 from tenants.models import Tenant
 from ubl.domain.errors import SemanticValidationError
 
@@ -59,17 +59,15 @@ class ManagerOutboxHookTests(TestCase):
     def setUp(self):
         discover_connectors()
         self.tenant = Tenant.objects.create(slug='mgr-outbox', name='Mgr Outbox')
-        SuperTenantConfig.all_objects.create(
+        DirectTenantConfig.all_objects.create(
             tenant=self.tenant,
-            username='u',
-            password='p',
-            company_guid='g',
+            oib='36619131370',
             is_active=True,
         )
         IntegrationConfig.all_objects.create(
             tenant=self.tenant,
             integration_type=IntegrationType.ERACUN,
-            provider=IntegrationProvider.SUPER,
+            provider=IntegrationProvider.DIRECT,
             environment=IntegrationEnvironment.PRODUCTION,
             is_active=True,
         )

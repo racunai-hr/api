@@ -78,6 +78,54 @@ def _provider_ref_for_expense(expense: Expense) -> tuple[str | None, str | None]
     return None, None
 
 
+def expense_has_inbound_as4_link(expense: Expense) -> bool:
+    ct = ContentType.objects.get_for_model(Expense)
+    return As4DocumentLink.all_objects.filter(
+        tenant=expense.tenant,
+        direction=As4DocumentLink.DIRECTION_INBOUND,
+        content_type=ct,
+        object_id=expense.pk,
+    ).exists()
+
+
+def expense_has_inbound_super_link(expense: Expense) -> bool:
+    ct = ContentType.objects.get_for_model(Expense)
+    return SuperDocumentLink.all_objects.filter(
+        tenant=expense.tenant,
+        direction=SuperDocumentLink.DIRECTION_INBOUND,
+        content_type=ct,
+        object_id=expense.pk,
+    ).exists()
+
+
+def reject_inbound_expense_from_admin(
+    expense: Expense,
+    *,
+    reason_text: str = 'Odbijeno u adminu',
+    idempotency_key: str | None = None,
+) -> str:
+    """Route admin rejection: DIRECT/AS4 inbound stays on connector; SUPER-origin uses gateway."""
+    from integrations.manager import IntegrationManager
+
+    if expense_has_inbound_as4_link(expense):
+        IntegrationManager.reject_inbound_expense(expense, description=reason_text)
+        return 'as4'
+
+    if expense_has_inbound_super_link(expense):
+        import uuid as uuid_mod
+
+        submit_eracun_rejection(
+            expense,
+            reason_code='REJECTED_BY_RECIPIENT',
+            reason_text=reason_text,
+            idempotency_key=idempotency_key or str(uuid_mod.uuid4()),
+        )
+        return 'gateway'
+
+    IntegrationManager.reject_inbound_expense(expense, description=reason_text)
+    return 'as4'
+
+
 def get_pending_rejection(expense: Expense) -> InboundEracunRejectionAttempt | None:
     return (
         InboundEracunRejectionAttempt.all_objects.filter(

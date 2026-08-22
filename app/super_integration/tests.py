@@ -173,39 +173,3 @@ class InvoiceNumberingTests(TestCase):
         ubl = build_invoice_ubl(invoice, company, self.partner)
         self.assertIn('2026-0001', ubl)
         self.assertIn('Fine Star d.o.o.', ubl)
-
-
-@override_settings(TENANT_PLATFORM_DOMAIN='racunai.hr')
-class SuperEracunConnectorTests(TestCase):
-    def setUp(self):
-        from integrations.registry import discover_connectors
-
-        discover_connectors()
-        self.tenant = Tenant.objects.create(slug='connector-test', name='Connector Test')
-        self.config = SuperTenantConfig.all_objects.create(
-            tenant=self.tenant,
-            username='user',
-            password='pass',
-            company_guid='guid-1',
-            is_active=True,
-        )
-
-    @patch('super_integration.connector.sync_inbound_invoices')
-    def test_connector_delegates_sync_inbound(self, mock_sync):
-        from super_integration.connector import SuperEracunConnector
-
-        mock_sync.return_value = 3
-        connector = SuperEracunConnector(self.config)
-        self.assertEqual(connector.sync_inbound(), 3)
-        mock_sync.assert_called_once_with(self.config)
-
-    @patch('super_integration.connector.send_outbound_invoice')
-    def test_connector_delegates_send_outbound(self, mock_send):
-        from super_integration.connector import SuperEracunConnector
-
-        invoice = MagicMock()
-        document = MagicMock()
-        ubl_xml = '<Invoice/>'
-        connector = SuperEracunConnector(self.config)
-        connector.send_outbound(invoice, document, ubl_xml)
-        mock_send.assert_called_once_with(invoice, ubl_xml=ubl_xml, correlation_id=None)

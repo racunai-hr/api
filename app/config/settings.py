@@ -296,8 +296,7 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 SUPER_DEFAULT_API_BASE_URL = env('SUPER_DEFAULT_API_BASE_URL', default='https://apitest.super.hr')
 # Human portal base for integration.external_view_url (fail closed if empty / unconfirmed).
 SUPER_PORTAL_BASE_URL = env('SUPER_PORTAL_BASE_URL', default='')
-# Rollback flag: allow SUPER eRačun when DIRECT config is missing (M1.7 deprecation).
-USE_SUPER_ERACUN_FALLBACK = env.bool('USE_SUPER_ERACUN_FALLBACK', default=True)
+# M1.7: removed — SUPER eRačun is never resolved in racunai-api (gateway-only via intermediary).
 
 # Fiskalizacija 2.0 (CIS) — defaulti za Docker mount /run/secrets/fiscal-cert
 FISCAL_CERT_P12_PATH = env(
