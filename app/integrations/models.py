@@ -217,11 +217,15 @@ class InboundGatewayDocumentLink(TenantMixin, models.Model):
         on_delete=models.CASCADE,
         related_name='gateway_document_link',
     )
-    gateway_document_id = models.UUIDField(db_index=True)
+    gateway_document_id = models.UUIDField(db_index=True, null=True, blank=True)
     bound_provider = models.CharField(max_length=40, blank=True)
     provider_ref = models.CharField(max_length=128, blank=True)
     taxpayer_oib = models.CharField(max_length=11)
     rejection_capable = models.BooleanField(default=False)
+    rejection_capability_checked = models.BooleanField(
+        default=False,
+        help_text='True once provider_capabilities returned a definitive answer.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -230,6 +234,8 @@ class InboundGatewayDocumentLink(TenantMixin, models.Model):
         verbose_name_plural = 'Gateway inbound document links'
 
     def __str__(self):
+        if self.gateway_document_id is None:
+            return f'Expense {self.expense_id} → not on gateway'
         return f'Expense {self.expense_id} → {self.gateway_document_id}'
 
 

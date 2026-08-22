@@ -83,7 +83,15 @@ class InboundEracunRejectionServiceTests(TestCase):
             super_status=10,
         )
 
-    def _gateway_link(self, expense: Expense, *, capable: bool = True) -> InboundGatewayDocumentLink:
+    def _gateway_link(
+        self,
+        expense: Expense,
+        *,
+        capable: bool = True,
+        capability_checked: bool | None = None,
+    ) -> InboundGatewayDocumentLink:
+        if capability_checked is None:
+            capability_checked = capable
         return InboundGatewayDocumentLink.all_objects.create(
             tenant=self.tenant,
             expense=expense,
@@ -92,6 +100,7 @@ class InboundEracunRejectionServiceTests(TestCase):
             provider_ref='guid-abc',
             taxpayer_oib='36619131370',
             rejection_capable=capable,
+            rejection_capability_checked=capability_checked,
         )
 
     def test_actions_not_on_gateway_without_link(self):
@@ -148,7 +157,7 @@ class InboundEracunRejectionServiceTests(TestCase):
 
     def test_cached_link_retries_capability_after_transient_failure(self):
         expense = self._expense()
-        link = self._gateway_link(expense, capable=False)
+        link = self._gateway_link(expense, capable=False, capability_checked=False)
         client = MagicMock()
         client.provider_capabilities.return_value = {
             'supports': {'inbound_e_reporting_rejection': True},
@@ -157,7 +166,39 @@ class InboundEracunRejectionServiceTests(TestCase):
         self.assertTrue(action.available)
         link.refresh_from_db()
         self.assertTrue(link.rejection_capable)
+        self.assertTrue(link.rejection_capability_checked)
         client.provider_capabilities.assert_called_once()
+
+    def test_resolve_gateway_document_caches_miss_without_repeat_list(self):
+        expense = self._expense()
+        self._super_link(expense, guid='guid-miss')
+        client = MagicMock()
+        client.list_inbound_documents.return_value = {'items': [], 'has_more': False}
+
+        first = resolve_gateway_document(expense, client=client)
+        second = resolve_gateway_document(expense, client=client)
+
+        self.assertIsNone(first)
+        self.assertIsNone(second)
+        client.list_inbound_documents.assert_called_once()
+        cached = InboundGatewayDocumentLink.all_objects.get(expense=expense)
+        self.assertIsNone(cached.gateway_document_id)
+        self.assertEqual(cached.provider_ref, 'guid-miss')
+
+    def test_definitive_capability_false_does_not_requery(self):
+        expense = self._expense()
+        link = self._gateway_link(expense, capable=False, capability_checked=True)
+        client = MagicMock()
+        client.provider_capabilities.return_value = {
+            'supports': {'inbound_e_reporting_rejection': False},
+        }
+        action = resolve_reject_action(expense, client=client)
+        resolve_reject_action(expense, client=client)
+        self.assertFalse(action.available)
+        self.assertEqual(action.unavailable_code, UNAVAILABLE_CAPABILITY)
+        link.refresh_from_db()
+        self.assertFalse(link.rejection_capable)
+        client.provider_capabilities.assert_not_called()
 
     def test_resolve_gateway_document_does_not_cache_transient_capability_failure(self):
         expense = self._expense()
@@ -178,6 +219,7 @@ class InboundEracunRejectionServiceTests(TestCase):
         link = resolve_gateway_document(expense, client=client)
         self.assertIsNotNone(link)
         self.assertFalse(link.rejection_capable)
+        self.assertFalse(link.rejection_capability_checked)
 
         client.provider_capabilities.side_effect = None
         client.provider_capabilities.return_value = {
@@ -185,12 +227,13 @@ class InboundEracunRejectionServiceTests(TestCase):
         }
         refreshed = resolve_gateway_document(expense, client=client)
         self.assertTrue(refreshed.rejection_capable)
+        self.assertTrue(refreshed.rejection_capability_checked)
         action = resolve_reject_action(expense, client=client)
         self.assertTrue(action.available)
 
     def test_definitive_capability_false_stays_unavailable(self):
         expense = self._expense()
-        link = self._gateway_link(expense, capable=False)
+        link = self._gateway_link(expense, capable=False, capability_checked=False)
         client = MagicMock()
         client.provider_capabilities.return_value = {
             'supports': {'inbound_e_reporting_rejection': False},
@@ -200,6 +243,34 @@ class InboundEracunRejectionServiceTests(TestCase):
         self.assertEqual(action.unavailable_code, UNAVAILABLE_CAPABILITY)
         link.refresh_from_db()
         self.assertFalse(link.rejection_capable)
+        self.assertTrue(link.rejection_capability_checked)
+
+    def test_idempotency_replay_while_pending(self):
+        expense = self._expense()
+        link = self._gateway_link(expense)
+        attempt_id = uuid.uuid4()
+        InboundEracunRejectionAttempt.all_objects.create(
+            tenant=self.tenant,
+            expense=expense,
+            gateway_document_id=link.gateway_document_id,
+            attempt_id=attempt_id,
+            idempotency_key='idem-replay',
+            reason_code='REJECTED_BY_RECIPIENT',
+            reason_text='retry me',
+            status=InboundEracunRejectionAttempt.STATUS_PENDING,
+            e_reporting_status='PENDING',
+        )
+        client = MagicMock()
+        body = submit_eracun_rejection(
+            expense,
+            reason_code='REJECTED_BY_RECIPIENT',
+            reason_text='retry me',
+            idempotency_key='idem-replay',
+            client=client,
+        )
+        self.assertEqual(body['lifecycle']['workflow'], 'rejection_pending')
+        self.assertEqual(body['e_reporting']['attempt_id'], str(attempt_id))
+        client.reject_e_reporting.assert_not_called()
 
     def test_second_reject_while_pending_is_409(self):
         expense = self._expense()

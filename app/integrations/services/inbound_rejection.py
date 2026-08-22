@@ -125,19 +125,73 @@ def _sync_rejection_capability(
     *,
     client: GatewayV1Client | None = None,
 ) -> InboundGatewayDocumentLink:
-    """Re-check gateway capabilities when cache says not capable (transient failure safe)."""
-    if link.rejection_capable or not link.bound_provider:
+    """Re-check gateway capabilities only while capability is still unknown."""
+    if (
+        link.rejection_capable
+        or link.rejection_capability_checked
+        or not link.bound_provider
+        or link.gateway_document_id is None
+    ):
         return link
     taxpayer_oib = link.taxpayer_oib or _taxpayer_oib(link.tenant)
     if not taxpayer_oib:
         return link
     gw = client or GatewayV1Client(taxpayer_oib=taxpayer_oib, timeout=5)
     capable = _provider_supports_rejection(gw, link.bound_provider, taxpayer_oib)
-    if capable is None or capable == link.rejection_capable:
+    if capable is None:
         return link
     link.rejection_capable = capable
-    link.save(update_fields=['rejection_capable', 'updated_at'])
+    link.rejection_capability_checked = True
+    link.save(update_fields=['rejection_capable', 'rejection_capability_checked', 'updated_at'])
     return link
+
+
+def _cache_gateway_miss(
+    expense: Expense,
+    *,
+    provider_ref: str,
+    taxpayer_oib: str,
+) -> None:
+    InboundGatewayDocumentLink.all_objects.update_or_create(
+        tenant=expense.tenant,
+        expense=expense,
+        defaults={
+            'gateway_document_id': None,
+            'bound_provider': '',
+            'provider_ref': provider_ref,
+            'taxpayer_oib': taxpayer_oib,
+            'rejection_capable': False,
+            'rejection_capability_checked': True,
+        },
+    )
+
+
+def _lookup_idempotent_replay(
+    expense: Expense,
+    *,
+    reason_code: str,
+    reason_text: str,
+    idempotency_key: str,
+) -> dict[str, Any] | None:
+    prior = InboundEracunRejectionAttempt.all_objects.filter(
+        tenant=expense.tenant,
+        idempotency_key=idempotency_key,
+    ).first()
+    if prior is None:
+        return None
+    if prior.expense_id != expense.pk:
+        raise InboundRejectionError(
+            'idempotency_conflict',
+            'Idempotency-Key je već iskorišten za drugi dokument.',
+        )
+    body_hash = _request_hash(reason_code, reason_text)
+    prior_hash = _request_hash(prior.reason_code, prior.reason_text)
+    if body_hash != prior_hash:
+        raise InboundRejectionError(
+            'idempotency_conflict',
+            'Idempotency-Key je već iskorišten s drugim tijelom zahtjeva.',
+        )
+    return _success_payload(expense, prior)
 
 
 def resolve_gateway_document(
@@ -150,6 +204,8 @@ def resolve_gateway_document(
         tenant=expense.tenant, expense=expense
     ).first()
     if existing:
+        if existing.gateway_document_id is None:
+            return None
         return _sync_rejection_capability(existing, client=client)
 
     provider_ref, _hint = _provider_ref_for_expense(expense)
@@ -179,6 +235,7 @@ def resolve_gateway_document(
         return None
 
     if not matched:
+        _cache_gateway_miss(expense, provider_ref=provider_ref, taxpayer_oib=taxpayer_oib)
         return None
 
     document_id = matched.get('document_id')
@@ -196,6 +253,7 @@ def resolve_gateway_document(
             'provider_ref': provider_ref,
             'taxpayer_oib': taxpayer_oib,
             'rejection_capable': capable is True,
+            'rejection_capability_checked': capable is not None,
         },
     )
     return link
@@ -262,31 +320,21 @@ def submit_eracun_rejection(
             'Dokument nije u stanju za odbijanje.',
         )
 
+    replay = _lookup_idempotent_replay(
+        expense,
+        reason_code=reason_code,
+        reason_text=reason_text,
+        idempotency_key=idempotency_key,
+    )
+    if replay is not None:
+        return replay
+
     existing_pending = get_pending_rejection(expense)
     if existing_pending is not None:
         raise InboundRejectionError(
             UNAVAILABLE_REJECTION_PENDING,
             'Odbijanje je već u tijeku.',
         )
-
-    prior = InboundEracunRejectionAttempt.all_objects.filter(
-        tenant=expense.tenant,
-        idempotency_key=idempotency_key,
-    ).first()
-    if prior is not None:
-        if prior.expense_id != expense.pk:
-            raise InboundRejectionError(
-                'idempotency_conflict',
-                'Idempotency-Key je već iskorišten za drugi dokument.',
-            )
-        body_hash = _request_hash(reason_code, reason_text)
-        prior_hash = _request_hash(prior.reason_code, prior.reason_text)
-        if body_hash != prior_hash:
-            raise InboundRejectionError(
-                'idempotency_conflict',
-                'Idempotency-Key je već iskorišten s drugim tijelom zahtjeva.',
-            )
-        return _success_payload(expense, prior)
 
     link = resolve_gateway_document(expense, client=client)
     if link is None:
@@ -375,24 +423,14 @@ def _reserve_rejection_attempt(
                 'Dokument nije u stanju za odbijanje.',
             )
 
-        prior = InboundEracunRejectionAttempt.all_objects.filter(
-            tenant=locked_expense.tenant,
+        replay = _lookup_idempotent_replay(
+            locked_expense,
+            reason_code=reason_code,
+            reason_text=reason_text,
             idempotency_key=idempotency_key,
-        ).first()
-        if prior is not None:
-            if prior.expense_id != locked_expense.pk:
-                raise InboundRejectionError(
-                    'idempotency_conflict',
-                    'Idempotency-Key je već iskorišten za drugi dokument.',
-                )
-            body_hash = _request_hash(reason_code, reason_text)
-            prior_hash = _request_hash(prior.reason_code, prior.reason_text)
-            if body_hash != prior_hash:
-                raise InboundRejectionError(
-                    'idempotency_conflict',
-                    'Idempotency-Key je već iskorišten s drugim tijelom zahtjeva.',
-                )
-            return _success_payload(locked_expense, prior)
+        )
+        if replay is not None:
+            return replay
 
         pending = get_pending_rejection(locked_expense)
         if pending is not None:
@@ -414,24 +452,14 @@ def _reserve_rejection_attempt(
                 provider_ref=link.provider_ref,
             )
         except IntegrityError as exc:
-            raced = InboundEracunRejectionAttempt.all_objects.filter(
-                tenant=locked_expense.tenant,
+            replay = _lookup_idempotent_replay(
+                locked_expense,
+                reason_code=reason_code,
+                reason_text=reason_text,
                 idempotency_key=idempotency_key,
-            ).first()
-            if raced:
-                if raced.expense_id != locked_expense.pk:
-                    raise InboundRejectionError(
-                        'idempotency_conflict',
-                        'Idempotency-Key je već iskorišten za drugi dokument.',
-                    ) from exc
-                body_hash = _request_hash(reason_code, reason_text)
-                prior_hash = _request_hash(raced.reason_code, raced.reason_text)
-                if body_hash != prior_hash:
-                    raise InboundRejectionError(
-                        'idempotency_conflict',
-                        'Idempotency-Key je već iskorišten s drugim tijelom zahtjeva.',
-                    ) from exc
-                return _success_payload(locked_expense, raced)
+            )
+            if replay is not None:
+                return replay
             if get_pending_rejection(locked_expense):
                 raise InboundRejectionError(
                     UNAVAILABLE_REJECTION_PENDING,
