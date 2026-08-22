@@ -1647,6 +1647,7 @@ class DocumentReadModelTests(TestCase):
         self.assertEqual(trail['system_entries'][0]['amount'], '33000.00')
         codes = [w['code'] for w in trail['warnings']]
         self.assertIn('possible_duplicate_expense_paid', codes)
+        self.assertEqual(detail['accounting']['journal_entry_id'], approved.pk)
 
     def test_settlement_trail_partial_close_no_duplicate_warning(self):
         expense = self._expense(amount=Decimal('100.00'), tax_amount=Decimal('0.00'))

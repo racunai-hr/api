@@ -103,17 +103,41 @@ def _match_provider_ref(item: dict, provider_ref: str) -> bool:
     return any(str(c) == provider_ref for c in candidates if c)
 
 
-def _provider_supports_rejection(client: GatewayV1Client, provider: str, taxpayer_oib: str) -> bool:
+def _provider_supports_rejection(
+    client: GatewayV1Client,
+    provider: str,
+    taxpayer_oib: str,
+) -> bool | None:
     if not provider:
         return False
     try:
         caps = client.provider_capabilities(provider, taxpayer_oib=taxpayer_oib)
     except GatewayV1Error:
-        return False
+        return None
     supports = caps.get('supports') if isinstance(caps, dict) else None
     if isinstance(supports, dict):
         return bool(supports.get('inbound_e_reporting_rejection'))
     return False
+
+
+def _sync_rejection_capability(
+    link: InboundGatewayDocumentLink,
+    *,
+    client: GatewayV1Client | None = None,
+) -> InboundGatewayDocumentLink:
+    """Re-check gateway capabilities when cache says not capable (transient failure safe)."""
+    if link.rejection_capable or not link.bound_provider:
+        return link
+    taxpayer_oib = link.taxpayer_oib or _taxpayer_oib(link.tenant)
+    if not taxpayer_oib:
+        return link
+    gw = client or GatewayV1Client(taxpayer_oib=taxpayer_oib, timeout=5)
+    capable = _provider_supports_rejection(gw, link.bound_provider, taxpayer_oib)
+    if capable is None or capable == link.rejection_capable:
+        return link
+    link.rejection_capable = capable
+    link.save(update_fields=['rejection_capable', 'updated_at'])
+    return link
 
 
 def resolve_gateway_document(
@@ -126,7 +150,7 @@ def resolve_gateway_document(
         tenant=expense.tenant, expense=expense
     ).first()
     if existing:
-        return existing
+        return _sync_rejection_capability(existing, client=client)
 
     provider_ref, _hint = _provider_ref_for_expense(expense)
     if not provider_ref:
@@ -171,7 +195,7 @@ def resolve_gateway_document(
             'bound_provider': bound_provider,
             'provider_ref': provider_ref,
             'taxpayer_oib': taxpayer_oib,
-            'rejection_capable': capable,
+            'rejection_capable': capable is True,
         },
     )
     return link

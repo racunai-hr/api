@@ -19,8 +19,10 @@ from integrations.models import InboundEracunRejectionAttempt, InboundGatewayDoc
 from integrations.services.inbound_rejection import (
     InboundRejectionError,
     build_actions_reject_block,
+    resolve_gateway_document,
     resolve_reject_action,
     submit_eracun_rejection,
+    UNAVAILABLE_CAPABILITY,
     UNAVAILABLE_NOT_ON_GATEWAY,
     UNAVAILABLE_REJECTION_PENDING,
 )
@@ -143,6 +145,61 @@ class InboundEracunRejectionServiceTests(TestCase):
         pending = InboundEracunRejectionAttempt.all_objects.get(expense=expense)
         self.assertEqual(pending.status, 'pending')
         self.assertEqual(str(pending.gateway_document_id), str(link.gateway_document_id))
+
+    def test_cached_link_retries_capability_after_transient_failure(self):
+        expense = self._expense()
+        link = self._gateway_link(expense, capable=False)
+        client = MagicMock()
+        client.provider_capabilities.return_value = {
+            'supports': {'inbound_e_reporting_rejection': True},
+        }
+        action = resolve_reject_action(expense, client=client)
+        self.assertTrue(action.available)
+        link.refresh_from_db()
+        self.assertTrue(link.rejection_capable)
+        client.provider_capabilities.assert_called_once()
+
+    def test_resolve_gateway_document_does_not_cache_transient_capability_failure(self):
+        expense = self._expense()
+        self._super_link(expense, guid='guid-resolve')
+        doc_id = uuid.uuid4()
+        client = MagicMock()
+        client.list_inbound_documents.return_value = {
+            'items': [
+                {
+                    'document_id': str(doc_id),
+                    'bound_provider': 'super',
+                    'provider_refs': {'invoice_guid': 'guid-resolve'},
+                }
+            ],
+            'has_more': False,
+        }
+        client.provider_capabilities.side_effect = GatewayV1Error('down', status_code=503)
+        link = resolve_gateway_document(expense, client=client)
+        self.assertIsNotNone(link)
+        self.assertFalse(link.rejection_capable)
+
+        client.provider_capabilities.side_effect = None
+        client.provider_capabilities.return_value = {
+            'supports': {'inbound_e_reporting_rejection': True},
+        }
+        refreshed = resolve_gateway_document(expense, client=client)
+        self.assertTrue(refreshed.rejection_capable)
+        action = resolve_reject_action(expense, client=client)
+        self.assertTrue(action.available)
+
+    def test_definitive_capability_false_stays_unavailable(self):
+        expense = self._expense()
+        link = self._gateway_link(expense, capable=False)
+        client = MagicMock()
+        client.provider_capabilities.return_value = {
+            'supports': {'inbound_e_reporting_rejection': False},
+        }
+        action = resolve_reject_action(expense, client=client)
+        self.assertFalse(action.available)
+        self.assertEqual(action.unavailable_code, UNAVAILABLE_CAPABILITY)
+        link.refresh_from_db()
+        self.assertFalse(link.rejection_capable)
 
     def test_second_reject_while_pending_is_409(self):
         expense = self._expense()

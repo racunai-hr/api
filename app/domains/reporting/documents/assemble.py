@@ -22,8 +22,11 @@ from domains.reporting.documents.projection import (
     posting_block,
     vat_lifecycle,
 )
+from accounting.services.journal_markers import extract_document_type
 from fiscal_gateway.models import As4DocumentLink
 from integrations.models import IntegrationOutboxMessage
+
+OBLIGATION_DOCUMENT_TYPES = frozenset({'expense_approved', 'invoice_issued'})
 
 
 def _primary_subledger(rows):
@@ -38,6 +41,15 @@ def _primary_posting(rows, *, bank_by_je=None):
         return None
     posted = [row for row in rows if row.status == 'posted']
     candidates = posted or list(rows)
+    obligations = [
+        row
+        for row in candidates
+        if extract_document_type(getattr(row, 'description', None) or '')
+        in OBLIGATION_DOCUMENT_TYPES
+    ]
+    if obligations:
+        obligations.sort(key=lambda je: (je.posted_at or je.created_at, je.pk))
+        return obligations[0]
     if bank_by_je:
         for row in candidates:
             txs = bank_by_je.get(row.pk) or []
