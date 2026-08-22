@@ -7,6 +7,9 @@ from django.db import transaction
 from accounting.services.posting import post_document
 from expenses.models import Expense, SettlementMethod
 
+# Sentinel: omit ``settlement_method`` → keep legacy fill-in (blank → business_account).
+_USE_EXISTING_SETTLEMENT_DEFAULT = object()
+
 
 class ExpenseApproveBadRequest(Exception):
     def __init__(self, code: str, detail: str):
@@ -38,10 +41,20 @@ def expense_dto(expense: Expense) -> dict:
 
 
 @transaction.atomic
-def approve_expense_for_posting(*, tenant, expense_id: int, user) -> dict:
+def approve_expense_for_posting(
+    *,
+    tenant,
+    expense_id: int,
+    user,
+    settlement_method=_USE_EXISTING_SETTLEMENT_DEFAULT,
+) -> dict:
     """draft → approved + post ``expense_approved`` (creates payable SubledgerItem).
 
     Idempotent when already approved with posted JE (heals missing subledger via post_document).
+
+    ``settlement_method``:
+    - omitted (default): legacy behaviour — if blank, set ``business_account``
+    - explicit value (including ``''`` / ``None``): store that value; blank stays blank
     """
     expense = (
         Expense.all_objects.select_for_update()
@@ -60,8 +73,13 @@ def approve_expense_for_posting(*, tenant, expense_id: int, user) -> dict:
     if expense.status == 'draft':
         expense.status = 'approved'
         expense.approved_by = user if getattr(user, 'is_authenticated', False) else None
-        if not (expense.settlement_method or '').strip():
-            expense.settlement_method = SettlementMethod.BUSINESS_ACCOUNT
+        if settlement_method is _USE_EXISTING_SETTLEMENT_DEFAULT:
+            if not (expense.settlement_method or '').strip():
+                expense.settlement_method = SettlementMethod.BUSINESS_ACCOUNT
+        else:
+            expense.settlement_method = (
+                '' if settlement_method is None else str(settlement_method).strip()
+            )
         update_fields = ['status', 'approved_by', 'settlement_method', 'updated_at']
         expense.save(update_fields=update_fields)
     elif expense.status not in ('approved', 'paid'):
