@@ -107,3 +107,32 @@ class ConfirmInvoiceImportSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     iban = serializers.CharField(required=False, allow_blank=True)
     duplicate_override = serializers.BooleanField(required=False)
+
+
+class EracunRejectionRequestSerializer(serializers.Serializer):
+    reason_code = serializers.ChoiceField(
+        choices=[
+            'REJECTED_BY_RECIPIENT',
+            'TAX_NEUTRAL_MISMATCH',
+            'TAX_AFFECTING_MISMATCH',
+            'OTHER',
+        ]
+    )
+    reason_text = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+
+class EracunRejectionEReportingSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    attempt_id = serializers.CharField(allow_null=True)
+
+
+class EracunRejectionLifecycleSerializer(serializers.Serializer):
+    document = serializers.CharField(allow_null=True)
+    workflow = serializers.CharField(allow_null=True)
+
+
+class EracunRejectionResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    status = serializers.CharField()
+    e_reporting = EracunRejectionEReportingSerializer()
+    lifecycle = EracunRejectionLifecycleSerializer()

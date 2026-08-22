@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from domains.reporting.documents.projection import money
 from domains.reporting.documents.settlement_trail import build_settlement_trail
+from integrations.services.inbound_rejection import (
+    build_actions_reject_block,
+    get_pending_rejection,
+)
 from lxml import etree
 from ubl.parser.invoice import PARSER_VERSION, ParsedInvoice, UblMonetaryError, parse_invoice_ubl
 from super_integration.portal import build_super_external_view_url
@@ -499,6 +503,11 @@ def enrich_incoming_detail_payload(
         ledger_rows=ledger_rows,
         match_status=match_status,
     )
+    if get_pending_rejection(document) is not None and document.status != 'rejected':
+        payload['status']['workflow'] = 'rejection_pending'
+    payload['actions'] = {
+        'reject': build_actions_reject_block(document),
+    }
     payload['lines'] = build_lines_block(parsed)
     payload['charges'] = build_charges_block(parsed)
     payload['tax_summary'] = build_tax_summary_block(parsed)

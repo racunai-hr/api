@@ -2622,6 +2622,78 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/expenses/{id}/eracun-rejection/:
+    post:
+      operationId: purchasing_expenses_eracun_rejection
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EracunRejectionRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EracunRejectionRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EracunRejectionRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EracunRejectionResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
   /api/purchasing/invoices/import/:
     post:
       operationId: purchasing_invoice_imports_create
@@ -3623,6 +3695,13 @@ components:
         * `incoming` - incoming
         * `outgoing` - outgoing
         * `deposit` - deposit
+    DocumentActions:
+      type: object
+      properties:
+        reject:
+          $ref: '#/components/schemas/DocumentRejectAction'
+      required:
+      - reject
     DocumentDetail:
       type: object
       properties:
@@ -3763,6 +3842,8 @@ components:
           $ref: '#/components/schemas/IntegrationBlock'
         technical:
           $ref: '#/components/schemas/TechnicalBlock'
+        actions:
+          $ref: '#/components/schemas/DocumentActions'
         accounting:
           $ref: '#/components/schemas/AccountingBlock'
         vat_context:
@@ -3878,6 +3959,20 @@ components:
       required:
       - type
       - value
+    DocumentRejectAction:
+      type: object
+      properties:
+        available:
+          type: boolean
+        reason_codes:
+          type: array
+          items:
+            type: string
+        unavailable_code:
+          type: string
+          nullable: true
+      required:
+      - available
     DocumentSummary:
       type: object
       properties:
@@ -3990,6 +4085,55 @@ components:
       - as4_status
       - message_id
       - source
+    EracunRejectionEReporting:
+      type: object
+      properties:
+        status:
+          type: string
+        attempt_id:
+          type: string
+          nullable: true
+      required:
+      - attempt_id
+      - status
+    EracunRejectionLifecycle:
+      type: object
+      properties:
+        document:
+          type: string
+          nullable: true
+        workflow:
+          type: string
+          nullable: true
+      required:
+      - document
+      - workflow
+    EracunRejectionRequestRequest:
+      type: object
+      properties:
+        reason_code:
+          $ref: '#/components/schemas/ReasonCodeEnum'
+        reason_text:
+          type: string
+          maxLength: 2000
+      required:
+      - reason_code
+    EracunRejectionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        e_reporting:
+          $ref: '#/components/schemas/EracunRejectionEReporting'
+        lifecycle:
+          $ref: '#/components/schemas/EracunRejectionLifecycle'
+      required:
+      - e_reporting
+      - id
+      - lifecycle
+      - status
     ErrorDetail:
       type: object
       description: 'DRF-style error body: ``{"detail": ...}`` where detail may be
@@ -5623,6 +5767,18 @@ components:
       required:
       - code
       - detail
+    ReasonCodeEnum:
+      enum:
+      - REJECTED_BY_RECIPIENT
+      - TAX_NEUTRAL_MISMATCH
+      - TAX_AFFECTING_MISMATCH
+      - OTHER
+      type: string
+      description: |-
+        * `REJECTED_BY_RECIPIENT` - REJECTED_BY_RECIPIENT
+        * `TAX_NEUTRAL_MISMATCH` - TAX_NEUTRAL_MISMATCH
+        * `TAX_AFFECTING_MISMATCH` - TAX_AFFECTING_MISMATCH
+        * `OTHER` - OTHER
     ReasonEnum:
       enum:
       - not_recorded

@@ -207,3 +207,78 @@ class IntegrationOutboxMessage(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.operation} — {self.status} ({self.correlation_id})'
+
+
+class InboundGatewayDocumentLink(TenantMixin, models.Model):
+    """Cached mapping from Expense → intermediary inbound document_id (read-only resolve)."""
+
+    expense = models.OneToOneField(
+        'expenses.Expense',
+        on_delete=models.CASCADE,
+        related_name='gateway_document_link',
+    )
+    gateway_document_id = models.UUIDField(db_index=True)
+    bound_provider = models.CharField(max_length=40, blank=True)
+    provider_ref = models.CharField(max_length=128, blank=True)
+    taxpayer_oib = models.CharField(max_length=11)
+    rejection_capable = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Gateway inbound document link'
+        verbose_name_plural = 'Gateway inbound document links'
+
+    def __str__(self):
+        return f'Expense {self.expense_id} → {self.gateway_document_id}'
+
+
+class InboundEracunRejectionAttempt(TenantMixin, models.Model):
+    """Local pending e-reporting rejection attempt (Expense.status stays unchanged until terminal sync)."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    expense = models.ForeignKey(
+        'expenses.Expense',
+        on_delete=models.CASCADE,
+        related_name='eracun_rejection_attempts',
+    )
+    gateway_document_id = models.UUIDField()
+    attempt_id = models.UUIDField(null=True, blank=True)
+    idempotency_key = models.CharField(max_length=200)
+    reason_code = models.CharField(max_length=64)
+    reason_text = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    e_reporting_status = models.CharField(max_length=32, default='PENDING')
+    provider_ref = models.CharField(max_length=128, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Inbound eRačun rejection attempt'
+        verbose_name_plural = 'Inbound eRačun rejection attempts'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'idempotency_key'],
+                name='unique_inbound_eracun_rejection_idempotency',
+            ),
+            models.UniqueConstraint(
+                fields=['expense'],
+                condition=models.Q(status='pending'),
+                name='unique_pending_inbound_eracun_rejection_per_expense',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Reject expense={self.expense_id} {self.status} ({self.e_reporting_status})'
