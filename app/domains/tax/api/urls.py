@@ -1,7 +1,69 @@
 from django.urls import path
 
-from domains.tax.api.views import PdvPeriodListView
+from domains.tax.api.views import (
+    PdvPeriodBoxesView,
+    PdvPeriodDraftView,
+    PdvPeriodLedgerView,
+    PdvPeriodListView,
+    PdvPeriodSubmitView,
+    PdvPeriodWorkspaceView,
+    PdvPeriodXmlView,
+    PdvSPeriodSubmitView,
+    PdvSPeriodView,
+    PdvSPeriodXmlView,
+    SubmissionConfirmationView,
+)
 
 urlpatterns = [
     path('tax/pdv/periods/', PdvPeriodListView.as_view(), name='tax-pdv-periods-list'),
+    path(
+        'tax/pdv/periods/<str:period>/ledger/',
+        PdvPeriodLedgerView.as_view(),
+        name='tax-pdv-period-ledger',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/boxes/',
+        PdvPeriodBoxesView.as_view(),
+        name='tax-pdv-period-boxes',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/draft/',
+        PdvPeriodDraftView.as_view(),
+        name='tax-pdv-period-draft',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/xml/',
+        PdvPeriodXmlView.as_view(),
+        name='tax-pdv-period-xml',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/submit/',
+        PdvPeriodSubmitView.as_view(),
+        name='tax-pdv-period-submit',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/',
+        PdvPeriodWorkspaceView.as_view(),
+        name='tax-pdv-period-detail',
+    ),
+    path(
+        'tax/pdv-s/periods/<str:period>/xml/',
+        PdvSPeriodXmlView.as_view(),
+        name='tax-pdv-s-period-xml',
+    ),
+    path(
+        'tax/pdv-s/periods/<str:period>/submit/',
+        PdvSPeriodSubmitView.as_view(),
+        name='tax-pdv-s-period-submit',
+    ),
+    path(
+        'tax/pdv-s/periods/<str:period>/',
+        PdvSPeriodView.as_view(),
+        name='tax-pdv-s-period-detail',
+    ),
+    path(
+        'tax/submissions/<uuid:event_uuid>/confirmation/',
+        SubmissionConfirmationView.as_view(),
+        name='tax-submission-confirmation',
+    ),
 ]

@@ -1,1 +1,1 @@
-"""Tax domain HTTP API (PDV Razdoblja read-model)."""
+"""Tax domain HTTP API."""

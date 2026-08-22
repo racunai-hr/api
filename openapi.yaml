@@ -3047,6 +3047,154 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchasingConflict'
           description: ''
+  /api/tax/pdv-s/periods/{period}/:
+    get:
+      operationId: tax_pdv_s_period_retrieve
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvSPeriod'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv-s/periods/{period}/submit/:
+    post:
+      operationId: tax_pdv_s_period_submit
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/pdv-s/periods/{period}/xml/:
+    get:
+      operationId: tax_pdv_s_period_xml
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Unsigned Obrazac PDV-S XML
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/tax/pdv/periods/:
     get:
       operationId: tax_pdv_periods_list
@@ -3078,6 +3226,339 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv/periods/{period}/:
+    get:
+      operationId: tax_pdv_period_retrieve
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvPeriodWorkspace'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv/periods/{period}/boxes/:
+    get:
+      operationId: tax_pdv_period_boxes
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvBoxes'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv/periods/{period}/draft/:
+    post:
+      operationId: tax_pdv_period_draft
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvDraft'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv/periods/{period}/ledger/:
+    post:
+      operationId: tax_pdv_period_ledger
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvLedgerRebuild'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/pdv/periods/{period}/submit/:
+    post:
+      operationId: tax_pdv_period_submit
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PdvSubmitRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PdvSubmitRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PdvSubmitRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/pdv/periods/{period}/xml/:
+    get:
+      operationId: tax_pdv_period_xml
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Unsigned Obrazac PDV XML
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/submissions/{event_uuid}/confirmation/:
+    post:
+      operationId: tax_submission_confirmation
+      parameters:
+      - in: path
+        name: event_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConfirmationUploadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConfirmationUploadRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmationUploadRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
 components:
   schemas:
     AccountingBlock:
@@ -3399,6 +3880,25 @@ components:
           type: string
         duplicate_override:
           type: boolean
+    ConfirmationResult:
+      type: object
+      properties:
+        event_uuid:
+          type: string
+          format: uuid
+        has_confirmation:
+          type: boolean
+      required:
+      - event_uuid
+      - has_confirmation
+    ConfirmationUploadRequest:
+      type: object
+      properties:
+        confirmation:
+          type: string
+          format: binary
+      required:
+      - confirmation
     ConnectionSummary:
       type: object
       properties:
@@ -5665,6 +6165,53 @@ components:
       required:
       - creditor_iban
       - status
+    PdvBoxes:
+      type: object
+      properties:
+        period:
+          type: string
+        schema_version:
+          type: string
+        mapping_version:
+          type: integer
+        vat_due:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        fields:
+          type: object
+          additionalProperties: {}
+      required:
+      - fields
+      - mapping_version
+      - period
+      - schema_version
+      - vat_due
+    PdvDraft:
+      type: object
+      properties:
+        period:
+          type: string
+        return_version:
+          type: integer
+        return_status:
+          type: string
+        xml_integrity:
+          type: string
+      required:
+      - period
+      - return_status
+      - return_version
+      - xml_integrity
+    PdvLedgerRebuild:
+      type: object
+      properties:
+        created:
+          type: integer
+        total:
+          type: integer
+      required:
+      - created
+      - total
     PdvPeriod:
       type: object
       properties:
@@ -5707,6 +6254,121 @@ components:
       required:
       - count
       - results
+    PdvPeriodWorkspace:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Canonical period YYYY-MM
+        period_status:
+          type: string
+        has_ledger:
+          type: boolean
+        return_version:
+          type: integer
+          nullable: true
+        return_status:
+          type: string
+          nullable: true
+        vat_due:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        submitted_at:
+          type: string
+          nullable: true
+        xml_integrity:
+          type: string
+          nullable: true
+        event_uuid:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - event_uuid
+      - has_ledger
+      - period
+      - period_status
+      - return_status
+      - return_version
+      - submitted_at
+      - vat_due
+      - xml_integrity
+    PdvSPeriod:
+      type: object
+      properties:
+        period:
+          type: string
+        schema_version:
+          type: string
+        row_count:
+          type: integer
+        total_goods:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_services:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdvSRow'
+        event_uuid:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - event_uuid
+      - period
+      - row_count
+      - rows
+      - schema_version
+      - total_goods
+      - total_services
+    PdvSRow:
+      type: object
+      properties:
+        country_code:
+          type: string
+        pdv_id:
+          type: string
+        goods_value:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        services_value:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - country_code
+      - goods_value
+      - pdv_id
+      - services_value
+    PdvSSubmitRequestRequest:
+      type: object
+      properties:
+        eporezna_identifier:
+          type: string
+          format: uuid
+        submitted_at:
+          type: string
+          format: date-time
+      required:
+      - eporezna_identifier
+      - submitted_at
+    PdvSubmitRequestRequest:
+      type: object
+      properties:
+        eporezna_identifier:
+          type: string
+          format: uuid
+        submitted_at:
+          type: string
+          format: date-time
+        return_version:
+          type: integer
+      required:
+      - eporezna_identifier
+      - return_version
+      - submitted_at
     PeriodReturn:
       type: object
       properties:
@@ -6231,6 +6893,24 @@ components:
       - open_amount
       - original_amount
       - state
+    SubmissionResult:
+      type: object
+      properties:
+        event_uuid:
+          type: string
+          format: uuid
+        external_identifier:
+          type: string
+          format: uuid
+        submitted_at:
+          type: string
+        has_confirmation:
+          type: boolean
+      required:
+      - event_uuid
+      - external_identifier
+      - has_confirmation
+      - submitted_at
     Supplier:
       type: object
       properties:

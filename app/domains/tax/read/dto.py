@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 from accounting.models import VATPeriod
 from accounting.services.vat import aggregate_vat_period
+
+_PERIOD_RE = re.compile(r'^(\d{4})-(0[1-9]|1[0-2])$')
 
 
 def money2(value) -> str:
@@ -14,6 +17,13 @@ def money2(value) -> str:
 
 def period_key(period: VATPeriod) -> str:
     return f'{period.year:04d}-{period.month:02d}'
+
+
+def parse_period_key(value: str) -> tuple[int, int] | None:
+    match = _PERIOD_RE.fullmatch(value or '')
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
 
 
 def pdv_period_dto(period: VATPeriod, *, has_ledger: bool) -> dict:

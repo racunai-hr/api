@@ -68,6 +68,16 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('post', '/api/purchasing/invoices/import/{id}/discard/'),
         ('post', '/api/purchasing/expenses/{id}/eracun-rejection/'),
         ('get', '/api/tax/pdv/periods/'),
+        ('get', '/api/tax/pdv/periods/{period}/'),
+        ('post', '/api/tax/pdv/periods/{period}/ledger/'),
+        ('get', '/api/tax/pdv/periods/{period}/boxes/'),
+        ('post', '/api/tax/pdv/periods/{period}/draft/'),
+        ('get', '/api/tax/pdv/periods/{period}/xml/'),
+        ('post', '/api/tax/pdv/periods/{period}/submit/'),
+        ('get', '/api/tax/pdv-s/periods/{period}/'),
+        ('get', '/api/tax/pdv-s/periods/{period}/xml/'),
+        ('post', '/api/tax/pdv-s/periods/{period}/submit/'),
+        ('post', '/api/tax/submissions/{event_uuid}/confirmation/'),
     }
 )
 
@@ -141,6 +151,16 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
         '/api/purchasing/expenses/{id}/eracun-rejection/',
     ),
     'tax-pdv-periods-list': ('get', '/api/tax/pdv/periods/'),
+    'tax-pdv-period-detail': ('get', '/api/tax/pdv/periods/{period}/'),
+    'tax-pdv-period-ledger': ('post', '/api/tax/pdv/periods/{period}/ledger/'),
+    'tax-pdv-period-boxes': ('get', '/api/tax/pdv/periods/{period}/boxes/'),
+    'tax-pdv-period-draft': ('post', '/api/tax/pdv/periods/{period}/draft/'),
+    'tax-pdv-period-xml': ('get', '/api/tax/pdv/periods/{period}/xml/'),
+    'tax-pdv-period-submit': ('post', '/api/tax/pdv/periods/{period}/submit/'),
+    'tax-pdv-s-period-detail': ('get', '/api/tax/pdv-s/periods/{period}/'),
+    'tax-pdv-s-period-xml': ('get', '/api/tax/pdv-s/periods/{period}/xml/'),
+    'tax-pdv-s-period-submit': ('post', '/api/tax/pdv-s/periods/{period}/submit/'),
+    'tax-submission-confirmation': ('post', '/api/tax/submissions/{event_uuid}/confirmation/'),
 }
 
 EXCLUDED_URL_NAMES = frozenset(
