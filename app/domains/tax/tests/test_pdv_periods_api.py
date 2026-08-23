@@ -25,6 +25,9 @@ PERIOD_FIELDS = {
     'has_ledger',
     'return_version',
     'return_status',
+    'latest_return_version',
+    'latest_return_status',
+    'correction_in_progress',
     'vat_due',
     'submitted_at',
 }
@@ -167,3 +170,67 @@ class PdvPeriodsApiTests(TestCase):
         self.assertIsNone(august['return_version'])
         self.assertIsNone(august['return_status'])
         self.assertIsNone(august['submitted_at'])
+
+    def test_list_and_workspace_vat_due_keeps_eu_207_307_neutral(self):
+        june = VATPeriod.all_objects.create(tenant=self.tenant, year=2026, month=6, status='open')
+        VATLedgerEntry.all_objects.create(
+            tenant=self.tenant,
+            vat_period=june,
+            ledger_type=VATLedgerEntry.LEDGER_I_RA,
+            entry_date=date(2026, 6, 10),
+            document_number='OUT-DOM',
+            partner_name='Kupac',
+            partner_oib='12345678901',
+            base_amount=Decimal('3360.00'),
+            vat_rate=Decimal('25.00'),
+            vat_amount=Decimal('840.00'),
+            vat_box='203',
+        )
+        VATLedgerEntry.all_objects.create(
+            tenant=self.tenant,
+            vat_period=june,
+            ledger_type=VATLedgerEntry.LEDGER_U_RA,
+            entry_date=date(2026, 6, 30),
+            document_number='EU-BASE',
+            partner_name='EU Supplier',
+            partner_oib='DE355497142',
+            base_amount=Decimal('33000.00'),
+            vat_rate=Decimal('0.00'),
+            vat_amount=Decimal('0.00'),
+            vat_box='207',
+        )
+        VATLedgerEntry.all_objects.create(
+            tenant=self.tenant,
+            vat_period=june,
+            ledger_type=VATLedgerEntry.LEDGER_U_RA,
+            entry_date=date(2026, 6, 30),
+            document_number='EU-OBVEZA',
+            partner_name='EU Supplier',
+            partner_oib='DE355497142',
+            base_amount=Decimal('0.00'),
+            vat_rate=Decimal('0.00'),
+            vat_amount=Decimal('8250.00'),
+            vat_box='207',
+        )
+        VATLedgerEntry.all_objects.create(
+            tenant=self.tenant,
+            vat_period=june,
+            ledger_type=VATLedgerEntry.LEDGER_U_RA,
+            entry_date=date(2026, 6, 30),
+            document_number='EU-PRETPOREZ',
+            partner_name='EU Supplier',
+            partner_oib='DE355497142',
+            base_amount=Decimal('33000.00'),
+            vat_rate=Decimal('25.00'),
+            vat_amount=Decimal('8250.00'),
+            vat_box='307',
+        )
+
+        client = self._auth_client()
+        listed = next(
+            row for row in client.get('/api/tax/pdv/periods/').json()['results'] if row['period'] == '2026-06'
+        )
+        workspace = client.get('/api/tax/pdv/periods/2026-06/').json()
+        self.assertEqual(listed['vat_due'], '840.00')
+        self.assertEqual(workspace['vat_due'], '840.00')
+        self.assertNotEqual(listed['vat_due'], '-15660.00')

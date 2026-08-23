@@ -2,6 +2,7 @@ from django.urls import path
 
 from domains.tax.api.views import (
     PdvPeriodBoxesView,
+    PdvPeriodCorrectionView,
     PdvPeriodDraftView,
     PdvPeriodLedgerView,
     PdvPeriodListView,
@@ -30,6 +31,11 @@ urlpatterns = [
         'tax/pdv/periods/<str:period>/draft/',
         PdvPeriodDraftView.as_view(),
         name='tax-pdv-period-draft',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/correction/',
+        PdvPeriodCorrectionView.as_view(),
+        name='tax-pdv-period-correction',
     ),
     path(
         'tax/pdv/periods/<str:period>/xml/',

@@ -49,6 +49,7 @@ from domains.tax.write.service import (
     create_period_draft,
     pdv_s_xml_bytes,
     pdv_unsigned_xml_bytes,
+    prepare_period_correction,
     rebuild_period_ledger,
     submit_pdv_period,
     submit_pdv_s_period,
@@ -186,12 +187,41 @@ class PdvPeriodDraftView(TaxWriteApiView):
             400: ERROR_400,
             401: ERROR_401,
             404: ERROR_404,
+            409: ERROR_409,
         },
     )
     def post(self, request, period):
         vat_period = _period_or_404(_require_tenant(request), period)
         try:
             payload = create_period_draft(vat_period)
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        except TaxConflict as exc:
+            return _error_response(exc, status.HTTP_409_CONFLICT)
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+
+class PdvPeriodCorrectionView(TaxWriteApiView):
+    http_method_names = ['post', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_pdv_period_correction',
+        request=None,
+        responses={
+            201: PdvDraftSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, period):
+        vat_period = _period_or_404(_require_tenant(request), period)
+        try:
+            payload = prepare_period_correction(vat_period, actor=request.user)
+        except TaxConflict as exc:
+            return _error_response(exc, status.HTTP_409_CONFLICT)
         except TaxBadRequest as exc:
             return _error_response(exc, status.HTTP_400_BAD_REQUEST)
         return Response(payload, status=status.HTTP_201_CREATED)
@@ -224,21 +254,31 @@ class PdvPeriodXmlView(TaxExportApiView):
 
 
 def _parse_submit_common(data) -> tuple[UUID, object]:
+    identifier, submitted_at = _parse_submit_optional(data)
+    if identifier is None or submitted_at is None:
+        raise TaxBadRequest('eporezna_identifier i submitted_at su obavezni.')
+    return identifier, submitted_at
+
+
+def _parse_submit_optional(data) -> tuple[UUID | None, object | None]:
     raw_id = data.get('eporezna_identifier')
     raw_at = data.get('submitted_at')
-    if not raw_id or not raw_at:
-        raise TaxBadRequest('eporezna_identifier i submitted_at su obavezni.')
-    try:
-        identifier = UUID(str(raw_id))
-    except ValueError as exc:
-        raise TaxBadRequest('eporezna_identifier mora biti UUID.') from exc
-    submitted_at = parse_datetime(str(raw_at))
-    if submitted_at is None:
-        raise TaxBadRequest('submitted_at mora biti ISO datetime.')
+    identifier = None
+    submitted_at = None
+    if raw_id:
+        try:
+            identifier = UUID(str(raw_id))
+        except ValueError as exc:
+            raise TaxBadRequest('eporezna_identifier mora biti UUID.') from exc
+    if raw_at:
+        submitted_at = parse_datetime(str(raw_at))
+        if submitted_at is None:
+            raise TaxBadRequest('submitted_at mora biti ISO datetime.')
     return identifier, submitted_at
 
 
 class PdvPeriodSubmitView(TaxWriteApiView):
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     http_method_names = ['post', 'options']
 
     @extend_schema(
@@ -256,7 +296,7 @@ class PdvPeriodSubmitView(TaxWriteApiView):
     def post(self, request, period):
         vat_period = _period_or_404(_require_tenant(request), period)
         try:
-            identifier, submitted_at = _parse_submit_common(request.data)
+            identifier, submitted_at = _parse_submit_optional(request.data)
             raw_version = request.data.get('return_version')
             if raw_version is None:
                 raise TaxBadRequest('return_version je obavezan.')
@@ -267,6 +307,7 @@ class PdvPeriodSubmitView(TaxWriteApiView):
                 eporezna_identifier=identifier,
                 submitted_at=submitted_at,
                 return_version=return_version,
+                submitted_xml=request.FILES.get('submitted_xml'),
             )
         except TaxNotFound:
             raise Http404() from None

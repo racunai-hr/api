@@ -78,6 +78,8 @@ def adopt_legacy_projection(
     period: VATPeriod,
     candidate: VatProjectionCandidate,
     actor: AbstractBaseUser | None = None,
+    *,
+    allow_submitted_correction: bool = False,
 ) -> VATProjectionRun:
     """Replace non-manual legacy with engine rows in one atomic cutover.
 
@@ -88,7 +90,12 @@ def adopt_legacy_projection(
         with transaction.atomic():
             advisory_lock_tenant(period.tenant_id)
             lock_tenant_for_projection(period.tenant)
-            return _adopt_in_transaction(period, candidate, actor)
+            return _adopt_in_transaction(
+                period,
+                candidate,
+                actor,
+                allow_submitted_correction=allow_submitted_correction,
+            )
     except Exception as exc:
         if isinstance(exc, PostWriteFingerprintMismatch):
             _attach_failed_run(
@@ -109,6 +116,8 @@ def _adopt_in_transaction(
     period: VATPeriod,
     candidate: VatProjectionCandidate,
     actor: AbstractBaseUser | None,
+    *,
+    allow_submitted_correction: bool = False,
 ) -> VATProjectionRun:
     locked_period = (
         VATPeriod.all_objects.select_for_update()
@@ -116,7 +125,10 @@ def _adopt_in_transaction(
         .get(pk=period.pk)
     )
 
-    if locked_period.status != 'open':
+    writable = locked_period.status == 'open' or (
+        allow_submitted_correction and locked_period.status == 'submitted'
+    )
+    if not writable:
         return _audit_rejection(
             locked_period,
             candidate,

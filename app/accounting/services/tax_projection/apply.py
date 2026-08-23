@@ -56,11 +56,18 @@ def apply_vat_projection(
     period: VATPeriod,
     candidate: VatProjectionCandidate,
     actor: AbstractBaseUser | None = None,
+    *,
+    allow_submitted_correction: bool = False,
 ) -> VATProjectionRun:
     """Apply a READY candidate. Authoritative write gate is locked period.status == open."""
     try:
         with transaction.atomic():
-            return _apply_in_transaction(period, candidate, actor)
+            return _apply_in_transaction(
+                period,
+                candidate,
+                actor,
+                allow_submitted_correction=allow_submitted_correction,
+            )
     except Exception as exc:
         if isinstance(exc, PostWriteFingerprintMismatch):
             _attach_failed_run(
@@ -81,6 +88,8 @@ def _apply_in_transaction(
     period: VATPeriod,
     candidate: VatProjectionCandidate,
     actor: AbstractBaseUser | None,
+    *,
+    allow_submitted_correction: bool = False,
 ) -> VATProjectionRun:
     locked_period = (
         VATPeriod.all_objects.select_for_update()
@@ -88,7 +97,10 @@ def _apply_in_transaction(
         .get(pk=period.pk)
     )
 
-    if locked_period.status != 'open':
+    writable = locked_period.status == 'open' or (
+        allow_submitted_correction and locked_period.status == 'submitted'
+    )
+    if not writable:
         return _audit_rejection(
             locked_period,
             candidate,

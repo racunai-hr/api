@@ -8,6 +8,7 @@ from accounting.models import PDVSReturn, VATLedgerEntry, VATPeriod
 from accounting.services.submission.events import get_submission_events
 from accounting.services.submission.service import SubmissionService
 from accounting.services.tax_forms.pdv.canonical import payload_to_dict
+from accounting.services.tax_forms.pdv.correction import working_return
 from accounting.services.tax_forms.pdv.integrity import check_vat_return_integrity
 from accounting.services.tax_forms.pdv.build import build_pdv_payload
 from accounting.services.tax_forms.pdv_s.aggregate import aggregate_pdv_s_rows
@@ -46,16 +47,19 @@ def get_vat_period(tenant, raw_period: str) -> VATPeriod | None:
 def pdv_workspace_dto(period: VATPeriod) -> dict:
     has_ledger = VATLedgerEntry.all_objects.filter(vat_period=period).exists()
     payload = pdv_period_dto(period, has_ledger=has_ledger)
-    vat_return = period.current_return
+    vat_return = working_return(period)
     xml_integrity = None
     event_uuid = None
+    has_confirmation = False
     if vat_return is not None:
         xml_integrity = check_vat_return_integrity(vat_return).status
         event = SubmissionService.current_submission(vat_return)
         if event is not None:
             event_uuid = str(event.event_uuid)
+            has_confirmation = bool(event.confirmation_attachment)
     payload['xml_integrity'] = xml_integrity
     payload['event_uuid'] = event_uuid
+    payload['has_confirmation'] = has_confirmation
     return payload
 
 

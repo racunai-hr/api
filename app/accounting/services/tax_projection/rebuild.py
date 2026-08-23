@@ -102,8 +102,12 @@ def rebuild_vat_ledger(
     *,
     actor: AbstractBaseUser | None = None,
     replace: bool = True,
+    allow_submitted_correction: bool = False,
 ) -> RebuildResult:
-    """Single production writer entry. Lifecycle gate applies before switch branch."""
+    """Single production writer entry. Lifecycle gate applies before switch branch.
+
+    ``allow_submitted_correction`` is only for ``prepare_pdv_correction`` (ADR-0027).
+    """
     with transaction.atomic():
         advisory_lock_tenant(tenant.pk)
         lock_tenant_for_projection(tenant)
@@ -113,7 +117,13 @@ def rebuild_vat_ledger(
             .filter(tenant_id=tenant.pk, year=year, month=month)
             .first()
         )
-        if period is not None and period.status != 'open':
+        blocked = period is not None and period.status != 'open'
+        correction_ok = (
+            allow_submitted_correction
+            and period is not None
+            and period.status == 'submitted'
+        )
+        if blocked and not correction_ok:
             result = RebuildResult(
                 outcome=RebuildOutcome.NOT_WRITABLE,
                 period_id=period.pk,
@@ -157,7 +167,13 @@ def rebuild_vat_ledger(
         if switch == SwitchState.OFF:
             from accounting.services.vat import generate_vat_ledger
 
-            created, total = generate_vat_ledger(tenant, year, month, replace=replace)
+            created, total = generate_vat_ledger(
+                tenant,
+                year,
+                month,
+                replace=replace,
+                allow_submitted_correction=allow_submitted_correction,
+            )
             period = VATPeriod.all_objects.get(tenant=tenant, year=year, month=month)
             logger.info(
                 'vat_rebuild_legacy tenant=%s period_id=%s created=%s total=%s',
@@ -243,9 +259,19 @@ def rebuild_vat_ledger(
         use_adopt = period_needs_legacy_handoff(period)
         try:
             if use_adopt:
-                run = adopt_legacy_projection(period, candidate, actor)
+                run = adopt_legacy_projection(
+                    period,
+                    candidate,
+                    actor,
+                    allow_submitted_correction=allow_submitted_correction,
+                )
             else:
-                run = apply_vat_projection(period, candidate, actor)
+                run = apply_vat_projection(
+                    period,
+                    candidate,
+                    actor,
+                    allow_submitted_correction=allow_submitted_correction,
+                )
         except Exception as exc:
             logger.exception(
                 'vat_rebuild_apply_failed tenant=%s period_id=%s adopt=%s',

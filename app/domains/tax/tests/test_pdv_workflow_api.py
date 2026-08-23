@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -11,15 +12,45 @@ from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from lxml import etree
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from accounting.models import PDVSReturn, VATLedgerEntry, VATPeriod, VATReturn, VATReturnStatus
+from accounting.models import (
+    PDVSReturn,
+    SubmissionEvent,
+    VATLedgerEntry,
+    VATPeriod,
+    VATReturn,
+    VATReturnStatus,
+)
 from settings.models import CompanySettings, ResponsiblePerson, TaxOffice
 from tenants.models import Tenant, TenantMembership
 
 HOST = 'pdvwf.racunai.hr'
 OTHER_HOST = 'pdvwfother.racunai.hr'
+_APRIL_SIGNED_PDV = (
+    Path(__file__).resolve().parents[3]
+    / 'accounting'
+    / 'tests'
+    / 'fixtures'
+    / 'pdv'
+    / 'submitted_april_2026.xml'
+)
+_METADATA_NS = 'http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0'
+
+
+def _rewrite_signed_pdv_xml(*, oib: str, period_from: str, period_to: str) -> bytes:
+    xml = _APRIL_SIGNED_PDV.read_bytes()
+    xml = xml.replace(b'<OIB>36619131370</OIB>', f'<OIB>{oib}</OIB>'.encode())
+    xml = xml.replace(b'<DatumOd>2026-04-01</DatumOd>', f'<DatumOd>{period_from}</DatumOd>'.encode())
+    xml = xml.replace(b'<DatumDo>2026-04-30</DatumDo>', f'<DatumDo>{period_to}</DatumDo>'.encode())
+    return xml
+
+
+def _xml_document_uuid(xml_bytes: bytes) -> str:
+    identifier = etree.fromstring(xml_bytes).find(f'.//{{{_METADATA_NS}}}Identifikator')
+    return identifier.text.strip()
 
 
 @override_settings(
@@ -157,6 +188,8 @@ class PdvWorkflowApiTests(TestCase):
         self.assertNotIn('id', july)
         self.assertIn('xml_integrity', july)
         self.assertIn('event_uuid', july)
+        self.assertIn('has_confirmation', july)
+        self.assertFalse(july['has_confirmation'])
 
         july_s = client.get('/api/tax/pdv-s/periods/2026-07/').json()
         august_s = client.get('/api/tax/pdv-s/periods/2026-08/').json()
@@ -247,6 +280,72 @@ class PdvWorkflowApiTests(TestCase):
             format='multipart',
         )
         self.assertEqual(again.status_code, 409)
+
+    def test_pdv_submit_archives_signed_xml_without_using_document_uuid(self):
+        client = self._auth_client()
+        draft = client.post('/api/tax/pdv/periods/2026-08/draft/')
+        self.assertEqual(draft.status_code, 201)
+
+        xml_bytes = _rewrite_signed_pdv_xml(
+            oib='12345678901',
+            period_from='2026-08-01',
+            period_to='2026-08-31',
+        )
+        document_uuid = _xml_document_uuid(xml_bytes)
+
+        submitted = client.post(
+            '/api/tax/pdv/periods/2026-08/submit/',
+            {
+                'return_version': 1,
+                'submitted_xml': SimpleUploadedFile(
+                    'PDV_12345678901_20260801-20260831.xml',
+                    xml_bytes,
+                    content_type='application/xml',
+                ),
+            },
+            format='multipart',
+        )
+        self.assertEqual(submitted.status_code, 200, submitted.content)
+        data = submitted.json()
+        self.assertTrue(data['has_confirmation'])
+        self.assertNotEqual(data['external_identifier'], document_uuid)
+
+        event = SubmissionEvent.all_objects.get(event_uuid=data['event_uuid'])
+        self.assertNotEqual(str(event.external_identifier), document_uuid)
+        self.assertTrue(event.confirmation_attachment)
+
+        workspace = client.get('/api/tax/pdv/periods/2026-08/').json()
+        self.assertEqual(workspace['return_status'], 'submitted')
+        self.assertTrue(workspace['has_confirmation'])
+        self.assertEqual(workspace['event_uuid'], data['event_uuid'])
+
+    def test_pdv_submit_rejects_wrong_period_xml_without_marking_submitted(self):
+        client = self._auth_client()
+        draft = client.post('/api/tax/pdv/periods/2026-08/draft/')
+        self.assertEqual(draft.status_code, 201)
+
+        submitted = client.post(
+            '/api/tax/pdv/periods/2026-08/submit/',
+            {
+                'return_version': 1,
+                'submitted_xml': SimpleUploadedFile(
+                    'PDV_april.xml',
+                    _APRIL_SIGNED_PDV.read_bytes(),
+                    content_type='application/xml',
+                ),
+            },
+            format='multipart',
+        )
+        self.assertEqual(submitted.status_code, 409)
+        vat_return = VATReturn.all_objects.get(vat_period=self.aug, version=1)
+        self.assertEqual(vat_return.status, VATReturnStatus.GENERATED)
+        self.assertFalse(
+            SubmissionEvent.all_objects.filter(object_id=vat_return.pk).exists(),
+        )
+        workspace = client.get('/api/tax/pdv/periods/2026-08/').json()
+        self.assertEqual(workspace['return_status'], 'generated')
+        self.assertFalse(workspace['has_confirmation'])
+        self.assertIsNone(workspace['event_uuid'])
 
     def test_pdv_xml_out_of_sync_409(self):
         VATReturn.all_objects.create(

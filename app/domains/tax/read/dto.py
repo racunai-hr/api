@@ -6,7 +6,8 @@ import re
 from decimal import Decimal
 
 from accounting.models import VATPeriod
-from accounting.services.vat import aggregate_vat_period
+from accounting.services.tax_forms.pdv.aggregate import aggregate_vat_boxes, compute_vat_due
+from accounting.services.tax_forms.pdv.correction import correction_in_progress
 
 _PERIOD_RE = re.compile(r'^(\d{4})-(0[1-9]|1[0-2])$')
 
@@ -41,7 +42,8 @@ def pdv_s_submission_dto(event) -> dict:
 
 def pdv_period_dto(period: VATPeriod, *, has_ledger: bool) -> dict:
     vat_return = period.current_return
-    vat_due = aggregate_vat_period(period)['vat_due']
+    latest = period.latest_return
+    vat_due = compute_vat_due(aggregate_vat_boxes(period))
     submitted_at = period.submitted_at
     return {
         'period': period_key(period),
@@ -49,6 +51,9 @@ def pdv_period_dto(period: VATPeriod, *, has_ledger: bool) -> dict:
         'has_ledger': bool(has_ledger),
         'return_version': vat_return.version if vat_return is not None else None,
         'return_status': vat_return.status if vat_return is not None else None,
+        'latest_return_version': latest.version if latest is not None else None,
+        'latest_return_status': latest.status if latest is not None else None,
+        'correction_in_progress': correction_in_progress(period),
         'vat_due': money2(vat_due),
         'submitted_at': submitted_at.isoformat() if submitted_at is not None else None,
     }

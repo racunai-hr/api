@@ -52,4 +52,16 @@ def mark_vat_return_submitted(
         raise MarkVatReturnSubmittedError(str(exc)) from exc
 
     vat_return.refresh_from_db()
+    previous_submitted = (
+        VATReturn.all_objects.filter(
+            vat_period_id=vat_return.vat_period_id,
+            status=VATReturnStatus.SUBMITTED,
+        )
+        .exclude(pk=vat_return.pk)
+        .order_by('-version')
+    )
+    for previous in previous_submitted:
+        previous.superseded_by = vat_return
+        previous.status = VATReturnStatus.SUPERSEDED
+        previous.save(update_fields=['superseded_by', 'status'])
     return vat_return

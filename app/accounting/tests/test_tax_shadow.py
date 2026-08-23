@@ -65,10 +65,10 @@ class ShadowClassificationTests(TestCase):
             status='approved',
             category=self.category,
             supplier=self.supplier,
-            amount=Decimal('125.00'),
-            tax_amount=Decimal('25.00'),
+            amount=Decimal('13.94'),
+            tax_amount=Decimal('0.00'),
             expense_date=date(2026, 4, 12),
-            description='Generic pretporez',
+            description='Bank fee 0% VAT',
             created_by=self.user,
         )
         generate_vat_ledger(self.tenant, 2026, 4, replace=True)

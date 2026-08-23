@@ -13,6 +13,9 @@ class PdvPeriodSerializer(serializers.Serializer):
     has_ledger = serializers.BooleanField()
     return_version = serializers.IntegerField(allow_null=True)
     return_status = serializers.CharField(allow_null=True)
+    latest_return_version = serializers.IntegerField(allow_null=True)
+    latest_return_status = serializers.CharField(allow_null=True)
+    correction_in_progress = serializers.BooleanField()
     vat_due = money_field()
     submitted_at = serializers.CharField(allow_null=True)
 
@@ -25,6 +28,7 @@ class PdvPeriodListSerializer(serializers.Serializer):
 class PdvPeriodWorkspaceSerializer(PdvPeriodSerializer):
     xml_integrity = serializers.CharField(allow_null=True)
     event_uuid = serializers.UUIDField(allow_null=True)
+    has_confirmation = serializers.BooleanField()
 
 
 class PdvLedgerRebuildSerializer(serializers.Serializer):
@@ -48,9 +52,19 @@ class PdvDraftSerializer(serializers.Serializer):
 
 
 class PdvSubmitRequestSerializer(serializers.Serializer):
-    eporezna_identifier = serializers.UUIDField()
-    submitted_at = serializers.DateTimeField()
+    eporezna_identifier = serializers.UUIDField(
+        required=False,
+        help_text='Opcionalno. Portalni identifikator zaprimanja. Nikad XML Metapodaci/Identifikator.',
+    )
+    submitted_at = serializers.DateTimeField(
+        required=False,
+        help_text='Opcionalno. Vrijeme zaprimanja s portala. Uvoz XML-a koristi vrijeme importa.',
+    )
     return_version = serializers.IntegerField()
+    submitted_xml = serializers.FileField(
+        required=False,
+        help_text='Predani (potpisani) Obrazac PDV XML. Arhiva obrasca, nije potvrda zaprimanja.',
+    )
 
 
 class PdvSSubmitRequestSerializer(serializers.Serializer):

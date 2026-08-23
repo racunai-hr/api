@@ -24,6 +24,13 @@ from accounting.services.tax_forms.pdv.supply_procedure import ECOMMERCE_EXCLUDE
 from settings.models import CompanySettings, ResponsiblePerson
 
 _CATEGORY_TOTAL_EXCLUDE = frozenset({'200', '300'})
+_I_SECTION_CODES = tuple(str(code) for code in range(100, 111))
+_DERIVED_VALUE_SOURCES = frozenset(
+    {
+        BoxValueSource.TOTAL_I,
+        BoxValueSource.TOTAL_I_PLUS_II,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -112,8 +119,23 @@ def _build_computed_vat_due(_definition: VATBoxDefinition, ctx: _BuildContext) -
     return compute_vat_due(ctx.boxes)
 
 
+def _build_total_i(_definition: VATBoxDefinition, ctx: _BuildContext) -> Decimal:
+    total = Decimal('0.00')
+    for code in _I_SECTION_CODES:
+        total += ctx.boxes[code].base
+    return total.quantize(Decimal('0.01'))
+
+
+def _build_total_i_plus_ii(_definition: VATBoxDefinition, ctx: _BuildContext) -> Decimal:
+    return ctx.output_total.base
+
+
 def _build_boolean_no_output(_definition: VATBoxDefinition, ctx: _BuildContext) -> bool:
     return _no_output_activity(ctx.boxes)
+
+
+def _build_boolean_true(_definition: VATBoxDefinition, _ctx: _BuildContext) -> bool:
+    return True
 
 
 def _build_zero(definition: VATBoxDefinition, _ctx: _BuildContext) -> Decimal | bool:
@@ -133,7 +155,10 @@ _VALUE_SOURCE_HANDLERS: dict[
     BoxValueSource.AGGREGATE_BASE: _build_aggregate_base,
     BoxValueSource.AGGREGATE_VAT: _build_aggregate_vat,
     BoxValueSource.COMPUTED_VAT_DUE: _build_computed_vat_due,
+    BoxValueSource.TOTAL_I: _build_total_i,
+    BoxValueSource.TOTAL_I_PLUS_II: _build_total_i_plus_ii,
     BoxValueSource.BOOLEAN_NO_OUTPUT: _build_boolean_no_output,
+    BoxValueSource.BOOLEAN_TRUE: _build_boolean_true,
     BoxValueSource.ZERO: _build_zero,
 }
 
@@ -147,8 +172,18 @@ def map_boxes_to_pdv_fields(boxes: dict[str, BoxTotals]) -> dict[str, PdvFieldPa
     )
     fields: dict[str, PdvFieldPair | PdvMarginPair | Decimal | bool] = {}
     for definition in active_boxes():
+        if definition.value_source in _DERIVED_VALUE_SOURCES:
+            continue
         handler = _VALUE_SOURCE_HANDLERS[definition.value_source]
         fields[definition.code] = handler(definition, ctx)
+    # 111 then 000: derived after I. scalars and II. totals are filled (ADR-0027).
+    fields['111'] = sum(
+        (ctx.boxes[code].base for code in _I_SECTION_CODES),
+        Decimal('0.00'),
+    ).quantize(Decimal('0.01'))
+    i_total = fields['111']
+    ii_base = fields['200'].vrijednost
+    fields['000'] = (i_total + ii_base).quantize(Decimal('0.01'))
     return fields
 
 

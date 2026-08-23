@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
+
+from django.db import transaction
+from django.utils import timezone
 
 from accounting.models import PDVSReturn, SubmissionEvent, VATPeriod, VATReturn
 from accounting.services.submission.exceptions import (
@@ -12,6 +15,11 @@ from accounting.services.submission.exceptions import (
     DuplicateExternalIdentifierError,
 )
 from accounting.services.submission.service import SubmissionService
+from accounting.services.tax_forms.pdv.correction import (
+    PreparePdvCorrectionError,
+    prepare_pdv_correction,
+    working_return,
+)
 from accounting.services.tax_forms.pdv.integrity import (
     VatReturnOutOfSyncError,
     assert_vat_return_sync,
@@ -67,6 +75,8 @@ def rebuild_period_ledger(tenant, raw_period: str, *, actor) -> dict:
 
 
 def create_period_draft(period: VATPeriod) -> dict:
+    if period.status == 'submitted':
+        raise TaxConflict('PDV razdoblje je predano. Ispravak ide kroz Pripremi ispravak.')
     try:
         vat_return = create_vat_return_draft(period)
     except (PdvSchemaValidationError, ValueError) as exc:
@@ -80,8 +90,19 @@ def create_period_draft(period: VATPeriod) -> dict:
     }
 
 
+def prepare_period_correction(period: VATPeriod, *, actor) -> dict:
+    try:
+        payload = prepare_pdv_correction(period, actor=actor)
+    except PreparePdvCorrectionError as exc:
+        raise TaxConflict(exc.detail) from exc
+    return {
+        'period': period_key(period),
+        **payload,
+    }
+
+
 def pdv_unsigned_xml_bytes(period: VATPeriod) -> tuple[bytes, str]:
-    vat_return = period.current_return
+    vat_return = working_return(period)
     if vat_return is None:
         raise TaxNotFound()
     try:
@@ -97,28 +118,49 @@ def submit_pdv_period(
     period: VATPeriod,
     *,
     user,
-    eporezna_identifier: UUID,
-    submitted_at: datetime,
+    eporezna_identifier: UUID | None,
+    submitted_at: datetime | None,
     return_version: int,
+    submitted_xml=None,
 ) -> dict:
-    vat_return = period.current_return
+    vat_return = working_return(period)
     if vat_return is None:
         raise TaxNotFound()
     if vat_return.version != return_version:
         raise TaxConflict('return_version ne odgovara trenutnom PDV obrascu.')
+    if submitted_xml is None and (eporezna_identifier is None or submitted_at is None):
+        raise TaxBadRequest('eporezna_identifier i submitted_at su obavezni bez predanog XML-a.')
+    if submitted_xml is not None:
+        validation = SubmissionService.validate(submitted_xml, document=vat_return)
+        if validation.errors:
+            raise TaxConflict('; '.join(validation.errors))
+        submitted_xml.seek(0)
+    if eporezna_identifier is None:
+        eporezna_identifier = uuid4()
+    if submitted_at is None:
+        submitted_at = timezone.now()
     try:
-        vat_return = mark_vat_return_submitted(
-            vat_return,
-            submitted_at=submitted_at,
-            eporezna_identifier=eporezna_identifier,
-            submitted_by=user,
-            version_confirmed=True,
-        )
+        with transaction.atomic():
+            vat_return = mark_vat_return_submitted(
+                vat_return,
+                submitted_at=submitted_at,
+                eporezna_identifier=eporezna_identifier,
+                submitted_by=user,
+                version_confirmed=True,
+            )
+            event = SubmissionService.current_submission(vat_return)
+            if event is None:
+                raise TaxConflict('Predaja nije zabilježena.')
+            if submitted_xml is not None:
+                event = SubmissionService.attach_confirmation(
+                    event,
+                    submitted_xml,
+                    uploaded_by=user,
+                )
     except (MarkVatReturnSubmittedError, DuplicateExternalIdentifierError, CreateSubmissionEventError) as exc:
         raise TaxConflict(str(exc)) from exc
-    event = SubmissionService.current_submission(vat_return)
-    if event is None:
-        raise TaxConflict('Predaja nije zabilježena.')
+    except AttachConfirmationError as exc:
+        raise TaxConflict(str(exc)) from exc
     return _submission_dto(event)
 
 

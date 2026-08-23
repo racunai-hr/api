@@ -69,9 +69,14 @@ class VATBoxRegistryTests(SimpleTestCase):
                     BoxValueSource.AGGREGATE_BASE,
                     BoxValueSource.AGGREGATE_VAT,
                     BoxValueSource.COMPUTED_VAT_DUE,
+                    BoxValueSource.TOTAL_I,
+                    BoxValueSource.TOTAL_I_PLUS_II,
                 }:
                     self.assertEqual(definition.field_type, 'scalar')
-                elif definition.value_source == BoxValueSource.BOOLEAN_NO_OUTPUT:
+                elif definition.value_source in {
+                    BoxValueSource.BOOLEAN_NO_OUTPUT,
+                    BoxValueSource.BOOLEAN_TRUE,
+                }:
                     self.assertEqual(definition.field_type, 'bool')
                 elif definition.value_source == BoxValueSource.ZERO:
                     self.assertIn(definition.field_type, ('scalar', 'bool'))
@@ -88,10 +93,14 @@ class VATBoxRegistryTests(SimpleTestCase):
     def test_registry_value_sources_are_explicit(self):
         allowed = set(BoxValueSource)
         special_codes = {
+            '000': BoxValueSource.TOTAL_I_PLUS_II,
+            '101': BoxValueSource.AGGREGATE_BASE,
+            '103': BoxValueSource.AGGREGATE_BASE,
+            '111': BoxValueSource.TOTAL_I,
             '200': BoxValueSource.CATEGORY_TOTAL_OUTPUT,
             '300': BoxValueSource.CATEGORY_TOTAL_INPUT,
             '400': BoxValueSource.COMPUTED_VAT_DUE,
-            '660': BoxValueSource.BOOLEAN_NO_OUTPUT,
+            '660': BoxValueSource.BOOLEAN_TRUE,
             '701': BoxValueSource.MARGIN_PAIR,
             '702': BoxValueSource.MARGIN_PAIR,
             '703': BoxValueSource.MARGIN_PAIR,

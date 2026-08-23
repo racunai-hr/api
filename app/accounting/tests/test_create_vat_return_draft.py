@@ -106,6 +106,12 @@ class CreateVatReturnDraftTests(PdvCheckpointApril2026Tests):
         submitted.status = VATReturnStatus.SUBMITTED
         submitted.save(update_fields=['status'])
         self.assertEqual(self.period.current_return, submitted)
+        self.assertEqual(self.period.latest_return, submitted)
+
+        working = create_vat_return_draft(self.period)
+        self.assertEqual(self.period.current_return, submitted)
+        self.assertEqual(self.period.latest_return, working)
+        self.assertEqual(working.version, submitted.version + 1)
 
     @patch('accounting.services.tax_forms.pdv.vat_returns.validate_pdv_obrazac_xml')
     def test_invalid_xml_raises_and_creates_no_record(self, mock_validate):

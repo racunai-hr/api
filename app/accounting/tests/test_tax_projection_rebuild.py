@@ -126,15 +126,15 @@ class ProjectionRebuildTests(TestCase):
         )
         return invoice
 
-    def _generic_expense(self):
+    def _generic_expense(self, *, amount=Decimal('125.00'), tax=Decimal('25.00')):
         return Expense.all_objects.create(
             tenant=self.tenant,
             expense_number='EXP-303',
             status='approved',
             category=self.category,
             supplier=self.supplier,
-            amount=Decimal('125.00'),
-            tax_amount=Decimal('25.00'),
+            amount=amount,
+            tax_amount=tax,
             currency='EUR',
             expense_date=date(2026, 4, 8),
             description='Generic pretporez',
@@ -166,7 +166,7 @@ class ProjectionRebuildTests(TestCase):
         self.assertEqual(result.outcome, RebuildOutcome.APPLIED)
 
     def test_switch_on_generic_303_rejects_without_apply_or_legacy(self):
-        self._generic_expense()
+        self._generic_expense(amount=Decimal('13.94'), tax=Decimal('0.00'))
         self._set_switch('on')
         period = self._period()
         before = list(
@@ -185,6 +185,18 @@ class ProjectionRebuildTests(TestCase):
             VATLedgerEntry.all_objects.filter(vat_period=period).values_list('pk', 'origin')
         )
         self.assertEqual(before, after)
+
+    def test_switch_on_domestic_25_applies_303(self):
+        self._generic_expense()
+        self._set_switch('on')
+        with patch('accounting.services.vat.generate_vat_ledger') as legacy:
+            result = rebuild_vat_ledger(self.tenant, 2026, 4, actor=self.user, replace=True)
+        legacy.assert_not_called()
+        self.assertEqual(result.outcome, RebuildOutcome.APPLIED)
+        period = self._period()
+        self.assertTrue(
+            VATLedgerEntry.all_objects.filter(vat_period=period, vat_box='303').exists()
+        )
 
     def test_invalid_switch_no_write(self):
         self._sent_invoice()
@@ -255,7 +267,7 @@ class ProjectionRebuildTests(TestCase):
         self.assertEqual(read_projection_write_switch(self.tenant), SwitchState.OFF)
 
     def test_verify_pdv_fails_fast_on_rejected_rebuild(self):
-        self._generic_expense()
+        self._generic_expense(amount=Decimal('13.94'), tax=Decimal('0.00'))
         self._set_switch('true')
         self._period()
         with self.assertRaises(CommandError) as cm:

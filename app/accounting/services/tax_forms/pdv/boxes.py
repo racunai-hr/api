@@ -21,7 +21,10 @@ class BoxValueSource(StrEnum):
     AGGREGATE_BASE = 'aggregate_base'
     AGGREGATE_VAT = 'aggregate_vat'
     COMPUTED_VAT_DUE = 'computed_vat_due'
+    TOTAL_I = 'total_i'
+    TOTAL_I_PLUS_II = 'total_i_plus_ii'
     BOOLEAN_NO_OUTPUT = 'boolean_no_output'
+    BOOLEAN_TRUE = 'boolean_true'
     ZERO = 'zero'
 
 
@@ -38,6 +41,8 @@ _SCALAR_ONLY_VALUE_SOURCES = frozenset(
         BoxValueSource.AGGREGATE_BASE,
         BoxValueSource.AGGREGATE_VAT,
         BoxValueSource.COMPUTED_VAT_DUE,
+        BoxValueSource.TOTAL_I,
+        BoxValueSource.TOTAL_I_PLUS_II,
     }
 )
 
@@ -84,15 +89,21 @@ def _box(
 
 
 VAT_BOX_REGISTRY: tuple[VATBoxDefinition, ...] = (
-    _box('000', 'Ukupni promet u razdoblju oporezivanja', field_type='scalar',
-        value_source=BoxValueSource.ZERO, category='other'),
+    _box(
+        '000',
+        'Ukupni promet u razdoblju oporezivanja',
+        field_type='scalar',
+        value_source=BoxValueSource.TOTAL_I_PLUS_II,
+        category='other',
+        mapping_rule='111 (I.ukupno) + 200.vrijednost (II.ukupno); ePorezna Podatak000',
+    ),
     _box('100', 'Isporuke u RH po stopi 0% (osim izvoza)', field_type='scalar',
         value_source=BoxValueSource.ZERO, category='other'),
     _box(
         '101',
         'Isporuke dobara unutar EU',
         field_type='scalar',
-        value_source=BoxValueSource.ZERO,
+        value_source=BoxValueSource.AGGREGATE_BASE,
         category='other',
         implemented=True,
         mapping_rule='Invoice EU outbound goods, 0% PDV, I-RA izlazni',
@@ -103,7 +114,7 @@ VAT_BOX_REGISTRY: tuple[VATBoxDefinition, ...] = (
         '103',
         'Obavljene usluge unutar EU',
         field_type='scalar',
-        value_source=BoxValueSource.ZERO,
+        value_source=BoxValueSource.AGGREGATE_BASE,
         category='other',
         implemented=True,
         mapping_rule='Invoice EU outbound services (datum usluge), 0% PDV, I-RA izlazni',
@@ -122,8 +133,14 @@ VAT_BOX_REGISTRY: tuple[VATBoxDefinition, ...] = (
         value_source=BoxValueSource.ZERO, category='other'),
     _box('110', 'Ostale isporuke', field_type='scalar',
         value_source=BoxValueSource.ZERO, category='other'),
-    _box('111', 'Ukupno oslobođeno i neoporezivo', field_type='scalar',
-        value_source=BoxValueSource.ZERO, category='other'),
+    _box(
+        '111',
+        'Ukupno oslobođeno i neoporezivo',
+        field_type='scalar',
+        value_source=BoxValueSource.TOTAL_I,
+        category='other',
+        mapping_rule='Zbroj skalara 100–110 (I.ukupno); ePorezna Podatak111',
+    ),
     _box('200', 'Oporezive isporuke — ukupno', field_type='pair',
         value_source=BoxValueSource.CATEGORY_TOTAL_OUTPUT, category='output'),
     _box(
@@ -352,8 +369,14 @@ VAT_BOX_REGISTRY: tuple[VATBoxDefinition, ...] = (
         value_source=BoxValueSource.ZERO, category='other'),
     _box('650', 'Obavljene isporuke — prijenos obveze', field_type='scalar',
         value_source=BoxValueSource.ZERO, category='other'),
-    _box('660', 'Nema prometa u razdoblju', field_type='bool',
-        value_source=BoxValueSource.BOOLEAN_NO_OUTPUT, category='other'),
+    _box(
+        '660',
+        'Nema prometa u razdoblju',
+        field_type='bool',
+        value_source=BoxValueSource.BOOLEAN_TRUE,
+        category='other',
+        mapping_rule='ePorezna v11 predani XML ima 660=true i uz promet (05/2026); import false→true',
+    ),
     _box('701', 'Marža — rabljena dobra', field_type='pair',
         value_source=BoxValueSource.MARGIN_PAIR, category='other'),
     _box('702', 'Marža — umjetnička djela', field_type='pair',
@@ -395,7 +418,7 @@ def _validate_value_source(definition: VATBoxDefinition) -> None:
         raise ValueError(
             f'Box {code}: value_source {value_source} requires field_type=scalar, got {field_type}'
         )
-    if value_source == BoxValueSource.BOOLEAN_NO_OUTPUT and field_type != 'bool':
+    if value_source in {BoxValueSource.BOOLEAN_NO_OUTPUT, BoxValueSource.BOOLEAN_TRUE} and field_type != 'bool':
         raise ValueError(
             f'Box {code}: value_source {value_source} requires field_type=bool, got {field_type}'
         )
@@ -405,16 +428,22 @@ def _validate_value_source(definition: VATBoxDefinition) -> None:
         )
     if value_source == BoxValueSource.COMPUTED_VAT_DUE and code != '400':
         raise ValueError(f'Box {code}: computed_vat_due is only valid for box 400')
+    if value_source == BoxValueSource.TOTAL_I and code != '111':
+        raise ValueError(f'Box {code}: total_i is only valid for box 111')
+    if value_source == BoxValueSource.TOTAL_I_PLUS_II and code != '000':
+        raise ValueError(f'Box {code}: total_i_plus_ii is only valid for box 000')
     if value_source == BoxValueSource.BOOLEAN_NO_OUTPUT and code != '660':
         raise ValueError(f'Box {code}: boolean_no_output is only valid for box 660')
+    if value_source == BoxValueSource.BOOLEAN_TRUE and code != '660':
+        raise ValueError(f'Box {code}: boolean_true is only valid for box 660')
     if value_source == BoxValueSource.CATEGORY_TOTAL_OUTPUT and code != '200':
         raise ValueError(f'Box {code}: cat_total_out is only valid for box 200')
     if value_source == BoxValueSource.CATEGORY_TOTAL_INPUT and code != '300':
         raise ValueError(f'Box {code}: cat_total_in is only valid for box 300')
     if value_source == BoxValueSource.MARGIN_PAIR and code not in {'701', '702', '703', '704'}:
         raise ValueError(f'Box {code}: margin_pair is only valid for boxes 701–704')
-    if value_source == BoxValueSource.AGGREGATE_BASE and code not in {'610', '612', '614'}:
-        raise ValueError(f'Box {code}: aggregate_base is only valid for boxes 610, 612, 614')
+    if value_source == BoxValueSource.AGGREGATE_BASE and code not in {'101', '103', '610', '612', '614'}:
+        raise ValueError(f'Box {code}: aggregate_base is only valid for boxes 101, 103, 610, 612, 614')
     if value_source == BoxValueSource.AGGREGATE_VAT and code not in {'611', '613', '615'}:
         raise ValueError(f'Box {code}: aggregate_vat is only valid for boxes 611, 613, 615')
 

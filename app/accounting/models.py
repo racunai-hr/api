@@ -450,6 +450,10 @@ class VATPeriod(TenantMixin, models.Model):
             return submitted
         return self.returns.order_by('-version').first()
 
+    @property
+    def latest_return(self):
+        return self.returns.order_by('-version').first()
+
 
 def vat_return_upload_to(instance, filename: str) -> str:
     period = instance.vat_period
