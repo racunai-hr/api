@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db.models import DecimalField, Q, Sum, Value
+from django.db.models import DecimalField, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404
 
-from accounting.models import DepreciationSchedule, FixedAsset
+from accounting.models import DepreciationSchedule, FixedAsset, FixedAssetJournalLink, JournalEntryLine
+from accounting.reporting.query import entry_audit_kind
 from domains.assets.read.dto import (
+    CAPITALIZATION_ROLES,
+    DISPLAY_ROLE_ACTIVATION,
+    DISPLAY_ROLE_DEPRECIATION,
+    DISPLAY_ROLE_DISPOSAL,
+    DISPLAY_ROLE_PURCHASE,
+    asset_journal_entry_dto,
+    capitalization_reconciliation_dto,
     depreciation_schedule_item_dtos,
     fixed_asset_detail_dto,
     fixed_asset_list_item_dto,
@@ -79,3 +87,85 @@ def list_depreciation_schedule(tenant, asset_id: int) -> dict:
         .order_by('year', 'month', 'pk')
     )
     return {'results': depreciation_schedule_item_dtos(asset, rows)}
+
+
+def _is_net_posted(entry) -> bool:
+    return entry.status == 'posted' and entry.reversed_entry_id is None
+
+
+def list_asset_journal_entries(tenant, asset_id: int) -> dict:
+    asset = (
+        FixedAsset.all_objects.filter(tenant=tenant, pk=asset_id)
+        .select_related(
+            'purchase_journal_entry',
+            'activation_journal_entry',
+            'disposal_journal_entry',
+            'construction_account',
+        )
+        .prefetch_related(
+            Prefetch(
+                'journal_links',
+                queryset=FixedAssetJournalLink.all_objects.select_related('journal_entry'),
+            ),
+            Prefetch(
+                'depreciation_schedules',
+                queryset=DepreciationSchedule.all_objects.select_related('journal_entry'),
+            ),
+        )
+        .first()
+    )
+    if asset is None:
+        raise Http404()
+
+    composed: list[tuple] = []
+    if asset.purchase_journal_entry_id:
+        composed.append((asset.purchase_journal_entry, DISPLAY_ROLE_PURCHASE))
+    if asset.activation_journal_entry_id:
+        composed.append((asset.activation_journal_entry, DISPLAY_ROLE_ACTIVATION))
+    if asset.disposal_journal_entry_id:
+        composed.append((asset.disposal_journal_entry, DISPLAY_ROLE_DISPOSAL))
+    for link in asset.journal_links.all():
+        composed.append((link.journal_entry, link.role))
+    for schedule in asset.depreciation_schedules.all():
+        if schedule.journal_entry_id:
+            composed.append((schedule.journal_entry, DISPLAY_ROLE_DEPRECIATION))
+
+    je_ids = [entry.pk for entry, _role in composed]
+    totals: dict[int, Decimal] = {pk: Decimal('0.00') for pk in je_ids}
+    construction: dict[int, Decimal] = {pk: Decimal('0.00') for pk in je_ids}
+    construction_id = asset.construction_account_id
+    if je_ids:
+        for journal_entry_id, account_id, debit, credit in JournalEntryLine.objects.filter(
+            journal_entry_id__in=je_ids,
+        ).values_list('journal_entry_id', 'account_id', 'debit_amount', 'credit_amount'):
+            totals[journal_entry_id] += Decimal(debit)
+            if account_id == construction_id:
+                construction[journal_entry_id] += Decimal(debit) - Decimal(credit)
+
+    composed.sort(key=lambda item: (item[0].entry_date, item[0].entry_number, item[0].pk))
+
+    results = []
+    capitalized_net = Decimal('0.00')
+    for entry, role in composed:
+        if role in CAPITALIZATION_ROLES:
+            amount = construction[entry.pk] if _is_net_posted(entry) else Decimal('0.00')
+            capitalized_net += amount
+        else:
+            amount = None
+        results.append(
+            asset_journal_entry_dto(
+                entry=entry,
+                role=role,
+                total_amount=totals[entry.pk],
+                capitalized_amount=amount,
+                audit_kind=entry_audit_kind(entry),
+            )
+        )
+
+    return {
+        'results': results,
+        'reconciliation': capitalization_reconciliation_dto(
+            capitalized_net=capitalized_net,
+            acquisition_cost=asset.acquisition_cost,
+        ),
+    }

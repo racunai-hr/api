@@ -3,6 +3,7 @@ from django.urls import path
 from domains.assets.api.views import (
     FixedAssetDetailView,
     FixedAssetDepreciationScheduleView,
+    FixedAssetJournalEntriesView,
     FixedAssetListView,
 )
 
@@ -17,5 +18,10 @@ urlpatterns = [
         'fixed-assets/<int:pk>/depreciation-schedule/',
         FixedAssetDepreciationScheduleView.as_view(),
         name='assets-fixed-asset-depreciation-schedule',
+    ),
+    path(
+        'fixed-assets/<int:pk>/journal-entries/',
+        FixedAssetJournalEntriesView.as_view(),
+        name='assets-fixed-asset-journal-entries',
     ),
 ]

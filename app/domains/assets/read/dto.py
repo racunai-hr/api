@@ -37,6 +37,32 @@ SCHEDULE_ITEM_KEYS = (
     'journal_entry_id',
 )
 
+ASSET_JOURNAL_ENTRY_KEYS = (
+    'journal_entry_id',
+    'entry_number',
+    'entry_date',
+    'description',
+    'status',
+    'audit_kind',
+    'role',
+    'total_amount',
+    'capitalized_amount',
+)
+
+CAPITALIZATION_RECONCILIATION_KEYS = (
+    'capitalized_net',
+    'acquisition_cost',
+    'difference',
+    'balanced',
+)
+
+DISPLAY_ROLE_PURCHASE = 'purchase'
+DISPLAY_ROLE_ACTIVATION = 'activation'
+DISPLAY_ROLE_DISPOSAL = 'disposal'
+DISPLAY_ROLE_DEPRECIATION = 'depreciation'
+
+CAPITALIZATION_ROLES = frozenset({DISPLAY_ROLE_PURCHASE, 'dependent_cost'})
+
 
 def money(value: Decimal | None) -> str:
     if value is None:
@@ -114,3 +140,38 @@ def depreciation_schedule_item_dtos(
             }
         )
     return items
+
+
+def asset_journal_entry_dto(
+    *,
+    entry,
+    role: str,
+    total_amount: Decimal,
+    capitalized_amount: Decimal | None,
+    audit_kind: str,
+) -> dict:
+    return {
+        'journal_entry_id': entry.pk,
+        'entry_number': entry.entry_number,
+        'entry_date': _iso_date(entry.entry_date),
+        'description': entry.description or '',
+        'status': entry.status,
+        'audit_kind': audit_kind,
+        'role': role,
+        'total_amount': money(total_amount),
+        'capitalized_amount': money(capitalized_amount) if capitalized_amount is not None else None,
+    }
+
+
+def capitalization_reconciliation_dto(
+    *,
+    capitalized_net: Decimal,
+    acquisition_cost: Decimal,
+) -> dict:
+    difference = capitalized_net - acquisition_cost
+    return {
+        'capitalized_net': money(capitalized_net),
+        'acquisition_cost': money(acquisition_cost),
+        'difference': money(difference),
+        'balanced': difference == Decimal('0.00'),
+    }

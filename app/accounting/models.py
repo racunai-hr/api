@@ -1326,6 +1326,112 @@ class DepreciationSchedule(TenantMixin, models.Model):
         return f'{self.fixed_asset} — {self.month:02d}/{self.year}: {self.amount}'
 
 
+class AssetJournalLinkRole(models.TextChoices):
+    DEPENDENT_COST = 'dependent_cost', 'Ovisni trošak'
+    PAYMENT = 'payment', 'Plaćanje'
+    OTHER = 'other', 'Ostalo'
+
+
+class FixedAssetJournalLink(TenantMixin, models.Model):
+    """Eksplicitna veza imovine i temeljnice izvan lifecycle FK-ova.
+
+    Purchase / activation / disposal ostaju na FixedAsset FK-ovima;
+    amortizacija na DepreciationSchedule.journal_entry. Storno je
+    lifecycle stanje temeljnice, ne poslovna uloga veze.
+    """
+
+    fixed_asset = models.ForeignKey(
+        FixedAsset,
+        on_delete=models.CASCADE,
+        related_name='journal_links',
+        verbose_name='Osnovno sredstvo',
+    )
+    journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.PROTECT,
+        related_name='fixed_asset_links',
+        verbose_name='Temeljnica',
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=AssetJournalLinkRole.choices,
+        verbose_name='Uloga',
+    )
+    note = models.CharField(max_length=200, blank=True, verbose_name='Napomena')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+
+    class Meta:
+        verbose_name = 'Veza imovine i temeljnice'
+        verbose_name_plural = 'Veze imovine i temeljnica'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['fixed_asset', 'journal_entry'],
+                name='unique_fixed_asset_journal_link',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.fixed_asset} ↔ {self.journal_entry} ({self.role})'
+
+    def clean(self):
+        asset = self.fixed_asset if self.fixed_asset_id else None
+        entry = self.journal_entry if self.journal_entry_id else None
+        if asset is None or entry is None:
+            return
+
+        if not self.tenant_id:
+            self.tenant_id = asset.tenant_id
+
+        if asset.tenant_id != self.tenant_id:
+            raise ValidationError({'fixed_asset': 'Sredstvo mora pripadati istom tenantu.'})
+        if entry.tenant_id != self.tenant_id:
+            raise ValidationError({'journal_entry': 'Temeljnica mora pripadati istom tenantu.'})
+        if asset.tenant_id != entry.tenant_id:
+            raise ValidationError({'journal_entry': 'Temeljnica mora pripadati istom tenantu kao sredstvo.'})
+
+        if entry.status not in ('posted', 'reversed'):
+            raise ValidationError(
+                {'journal_entry': 'Temeljnica mora biti knjižena ili stornirana.'},
+            )
+
+        lifecycle = {
+            asset.purchase_journal_entry_id: 'nabave',
+            asset.activation_journal_entry_id: 'aktivacije',
+            asset.disposal_journal_entry_id: 'otpisa',
+        }
+        label = lifecycle.get(entry.pk)
+        if label:
+            raise ValidationError(
+                {
+                    'journal_entry': (
+                        f'Temeljnica {label} već je vezana preko kartice sredstva.'
+                    ),
+                },
+            )
+
+        if DepreciationSchedule.all_objects.filter(
+            fixed_asset=asset,
+            journal_entry=entry,
+        ).exists():
+            raise ValidationError(
+                {'journal_entry': 'Temeljnica amortizacije već je vezana preko plana.'},
+            )
+
+        duplicates = FixedAssetJournalLink.all_objects.filter(
+            fixed_asset=asset,
+            journal_entry=entry,
+        )
+        if self.pk:
+            duplicates = duplicates.exclude(pk=self.pk)
+        if duplicates.exists():
+            raise ValidationError({'journal_entry': 'Veza na ovu temeljnicu već postoji.'})
+
+    def save(self, *args, **kwargs):
+        if self.fixed_asset_id and not self.tenant_id:
+            self.tenant_id = self.fixed_asset.tenant_id
+        super().save(*args, **kwargs)
+
+
 class SubledgerItem(TenantMixin, models.Model):
     """Otvorena stavka saldakonta (potraživanje / obveza prema partneru)."""
 

@@ -66,6 +66,7 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('get', '/api/assets/fixed-assets/'),
         ('get', '/api/assets/fixed-assets/{id}/'),
         ('get', '/api/assets/fixed-assets/{id}/depreciation-schedule/'),
+        ('get', '/api/assets/fixed-assets/{id}/journal-entries/'),
         ('post', '/api/purchasing/invoices/import/'),
         ('get', '/api/purchasing/invoices/import/{id}/'),
         ('post', '/api/purchasing/invoices/import/{id}/retry/'),
@@ -152,6 +153,10 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     'assets-fixed-asset-depreciation-schedule': (
         'get',
         '/api/assets/fixed-assets/{id}/depreciation-schedule/',
+    ),
+    'assets-fixed-asset-journal-entries': (
+        'get',
+        '/api/assets/fixed-assets/{id}/journal-entries/',
     ),
     'purchasing-invoice-import-create': ('post', '/api/purchasing/invoices/import/'),
     'purchasing-invoice-import-detail': ('get', '/api/purchasing/invoices/import/{id}/'),

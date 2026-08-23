@@ -127,6 +127,7 @@ class OpenApiContractTests(SimpleTestCase):
             '/api/assets/fixed-assets/',
             '/api/assets/fixed-assets/{id}/',
             '/api/assets/fixed-assets/{id}/depreciation-schedule/',
+            '/api/assets/fixed-assets/{id}/journal-entries/',
         )
         list_param_names = {'status', 'origin', 'search', 'page'}
         for path in expected:

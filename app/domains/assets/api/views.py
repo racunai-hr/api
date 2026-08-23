@@ -14,6 +14,7 @@ from domains.assets.api.authentication import AssetsJWTAuthentication
 from domains.assets.api.permissions import TenantAssetsReadPermission
 from domains.assets.api.schema import (
     FIXED_ASSET_LIST_PARAMS,
+    AssetJournalEntryListSerializer,
     DepreciationScheduleListSerializer,
     FixedAssetDetailSerializer,
     PaginatedFixedAssetsSerializer,
@@ -21,6 +22,7 @@ from domains.assets.api.schema import (
 from domains.assets.read.filters import parse_fixed_asset_filters
 from domains.assets.read.service import (
     get_fixed_asset,
+    list_asset_journal_entries,
     list_depreciation_schedule,
     list_fixed_assets,
 )
@@ -91,3 +93,17 @@ class FixedAssetDepreciationScheduleView(_AssetsReadApiView):
     )
     def get(self, request, pk: int):
         return Response(list_depreciation_schedule(_require_tenant(request), pk))
+
+
+class FixedAssetJournalEntriesView(_AssetsReadApiView):
+    @extend_schema(
+        tags=['assets'],
+        operation_id='assets_fixed_assets_journal_entries',
+        responses={
+            200: AssetJournalEntryListSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, pk: int):
+        return Response(list_asset_journal_entries(_require_tenant(request), pk))

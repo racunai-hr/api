@@ -52,6 +52,30 @@ class DepreciationScheduleListSerializer(serializers.Serializer):
     results = DepreciationScheduleItemSerializer(many=True)
 
 
+class AssetJournalEntrySerializer(serializers.Serializer):
+    journal_entry_id = serializers.IntegerField()
+    entry_number = serializers.CharField()
+    entry_date = serializers.DateField(allow_null=True)
+    description = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    audit_kind = serializers.CharField()
+    role = serializers.CharField()
+    total_amount = money_field()
+    capitalized_amount = money_field(allow_null=True)
+
+
+class CapitalizationReconciliationSerializer(serializers.Serializer):
+    capitalized_net = money_field()
+    acquisition_cost = money_field()
+    difference = money_field()
+    balanced = serializers.BooleanField()
+
+
+class AssetJournalEntryListSerializer(serializers.Serializer):
+    results = AssetJournalEntrySerializer(many=True)
+    reconciliation = CapitalizationReconciliationSerializer()
+
+
 FIXED_ASSET_LIST_PARAMS = [
     OpenApiParameter(
         'status',

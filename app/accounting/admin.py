@@ -32,6 +32,7 @@ from .models import (
     ChartOfAccounts,
     FiscalPeriod,
     FixedAsset,
+    FixedAssetJournalLink,
     JournalEntry,
     JournalEntryLine,
     PDVSReturn,
@@ -62,6 +63,12 @@ class JournalEntryLineInline(admin.TabularInline):
         return '-'
 
 
+class FixedAssetJournalLinkInline(admin.TabularInline):
+    model = FixedAssetJournalLink
+    extra = 0
+    autocomplete_fields = ('journal_entry',)
+
+
 @admin.register(FixedAsset)
 class FixedAssetAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
@@ -72,6 +79,7 @@ class FixedAssetAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_filter = ('status', 'origin', 'purchase_date')
     search_fields = ('name', 'vin', 'inventory_number', 'registration_plate')
     actions = ['activate_fixed_assets']
+    inlines = [FixedAssetJournalLinkInline]
     list_select_related = (
         'purchase_journal_entry',
         'activation_journal_entry',

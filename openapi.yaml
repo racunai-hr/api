@@ -143,6 +143,43 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/assets/fixed-assets/{id}/journal-entries/:
+    get:
+      operationId: assets_fixed_assets_journal_entries
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - assets
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetJournalEntryList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/auth/me/:
     get:
       operationId: auth_me_retrieve
@@ -4157,6 +4194,54 @@ components:
       - gross
       - net
       - vat
+    AssetJournalEntry:
+      type: object
+      properties:
+        journal_entry_id:
+          type: integer
+        entry_number:
+          type: string
+        entry_date:
+          type: string
+          format: date
+          nullable: true
+        description:
+          type: string
+        status:
+          type: string
+        audit_kind:
+          type: string
+        role:
+          type: string
+        total_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        capitalized_amount:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - audit_kind
+      - capitalized_amount
+      - description
+      - entry_date
+      - entry_number
+      - journal_entry_id
+      - role
+      - status
+      - total_amount
+    AssetJournalEntryList:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetJournalEntry'
+        reconciliation:
+          $ref: '#/components/schemas/CapitalizationReconciliation'
+      required:
+      - reconciliation
+      - results
     Attachment:
       type: object
       properties:
@@ -4328,6 +4413,25 @@ components:
       - statement_count
       - suggested_transaction_count
       - unmatched_transaction_count
+    CapitalizationReconciliation:
+      type: object
+      properties:
+        capitalized_net:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        acquisition_cost:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        difference:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        balanced:
+          type: boolean
+      required:
+      - acquisition_cost
+      - balanced
+      - capitalized_net
+      - difference
     ChartOfAccountsList:
       type: object
       properties:
