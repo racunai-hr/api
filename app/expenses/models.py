@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import F, Q
 
 from tenants.mixins import TenantMixin
 
@@ -179,6 +180,19 @@ class ExpensePostingProfile(models.TextChoices):
 
     OPEX = 'opex', 'Operativni trošak'
     ASSET_PURCHASE = 'asset_purchase', 'Nabava dugotrajne imovine'
+
+
+class VehicleLineKind(models.TextChoices):
+    """Činjenica s isprave za stavku vozila. Nije PDV/ZPD tretman."""
+
+    TECHNICAL_INSPECTION_SERVICE = 'technical_inspection_service', 'Tehnički pregled'
+    REGISTRATION_ADMIN_SERVICE = 'registration_admin_service', 'Administracija registracije'
+    ROAD_FEE_ANNUAL = 'road_fee_annual', 'Godišnja naknada za ceste'
+    ENVIRONMENTAL_FEE = 'environmental_fee', 'Naknada za okoliš'
+    ADMINISTRATIVE_FEE = 'administrative_fee', 'Upravna pristojba'
+    MOTOR_VEHICLE_TAX = 'motor_vehicle_tax', 'Porez na cestovna motorna vozila'
+    INSURANCE_COMPULSORY = 'insurance_compulsory', 'Obvezno osiguranje'
+    UNCLASSIFIED = 'unclassified', 'Neklasificirano'
 
 
 class Expense(TenantMixin, models.Model):
@@ -379,6 +393,101 @@ class Expense(TenantMixin, models.Model):
             and meta.get('from_profile') == ExpensePostingProfile.OPEX
             and meta.get('to_profile') == ExpensePostingProfile.ASSET_PURCHASE
         )
+
+
+class ExpenseLine(TenantMixin, models.Model):
+    """Stavka ulaznog dokumenta. Činjenice s isprave; ne utječe na AP/JE header tok."""
+
+    expense = models.ForeignKey(
+        Expense,
+        on_delete=models.CASCADE,
+        related_name='lines',
+        verbose_name='Trošak',
+    )
+    position = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        verbose_name='Redoslijed',
+    )
+    description = models.TextField(verbose_name='Opis stavke')
+    net_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Osnovica',
+    )
+    vat_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Iznos PDV-a',
+    )
+    gross_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Iznos s PDV-om',
+    )
+    vehicle_line_kind = models.CharField(
+        max_length=64,
+        choices=VehicleLineKind.choices,
+        null=True,
+        blank=True,
+        verbose_name='Vrsta stavke vozila',
+        help_text='Činjenica s isprave. NULL = nije provedeno ili nije primjenjivo; unclassified = pokušano, nije prepoznato.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Datum stvaranja')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Datum ažuriranja')
+
+    class Meta:
+        verbose_name = 'Stavka troška'
+        verbose_name_plural = 'Stavke troška'
+        ordering = ['position']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['expense', 'position'],
+                name='unique_expense_line_position_per_expense',
+            ),
+            models.CheckConstraint(
+                check=~Q(vehicle_line_kind=''),
+                name='expense_line_kind_not_empty_string',
+            ),
+            models.CheckConstraint(
+                check=~Q(description=''),
+                name='expense_line_description_not_empty',
+            ),
+            models.CheckConstraint(
+                check=Q(position__gte=1),
+                name='expense_line_position_gte_1',
+            ),
+            models.CheckConstraint(
+                check=Q(net_amount__gte=0) & Q(vat_amount__gte=0) & Q(gross_amount__gte=0),
+                name='expense_line_amounts_non_negative',
+            ),
+            models.CheckConstraint(
+                check=Q(gross_amount=F('net_amount') + F('vat_amount')),
+                name='expense_line_gross_equals_net_plus_vat',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.position}. {self.description}'
+
+    def clean(self):
+        super().clean()
+        if not self.expense_id:
+            return
+        expense_tenant_id = self.expense.tenant_id
+        if self.tenant_id and self.tenant_id != expense_tenant_id:
+            raise ValidationError({
+                'tenant': 'Tenant stavke mora biti isti kao tenant troška.',
+            })
+
+    def save(self, *args, **kwargs):
+        if self.vehicle_line_kind == '':
+            self.vehicle_line_kind = None
+        if self.expense_id:
+            self.tenant_id = self.expense.tenant_id
+        super().save(*args, **kwargs)
 
 
 class ExpenseAttachment(TenantMixin, models.Model):
