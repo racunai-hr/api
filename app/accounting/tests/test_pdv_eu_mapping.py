@@ -11,6 +11,7 @@ from accounting.services.tax_forms.pdv.mapping import (
     invoice_eu_outbound_box,
     invoice_rate_to_box,
     is_eu_customer,
+    is_eu_goods_acquisition,
     is_eu_outbound_invoice_line,
     is_eu_supplier,
     journal_line_to_box,
@@ -27,9 +28,10 @@ from accounting.services.tax_forms.pdv.mapping import (
 
 
 class _Supplier:
-    def __init__(self, *, country: str = '', tax_number: str = ''):
+    def __init__(self, *, country: str = '', tax_number: str = '', vat_id: str = ''):
         self.country = country
         self.tax_number = tax_number
+        self.vat_id = vat_id
 
 
 class PdvEuMappingTests(SimpleTestCase):
@@ -75,8 +77,56 @@ class PdvEuMappingTests(SimpleTestCase):
 
     def test_is_eu_supplier(self):
         self.assertTrue(is_eu_supplier(_Supplier(country='Germany', tax_number='DE229674882')))
+        self.assertTrue(
+            is_eu_supplier(_Supplier(country='Njemačka', tax_number='', vat_id='DE355497142'))
+        )
+        self.assertTrue(is_eu_supplier(_Supplier(country='Hrvatska', tax_number='DE229674882')))
         self.assertFalse(is_eu_supplier(_Supplier(country='Croatia', tax_number='12345678901')))
         self.assertFalse(is_eu_supplier(_Supplier(country='Germany', tax_number='36619131370')))
+        self.assertFalse(
+            is_eu_supplier(
+                _Supplier(country='Švicarska', tax_number='CHE-431.728.269', vat_id='CHE-431.728.269')
+            )
+        )
+
+    def test_is_eu_goods_acquisition(self):
+        sam = _Supplier(country='Njemačka', tax_number='', vat_id='DE355497142')
+        self.assertTrue(
+            is_eu_goods_acquisition(
+                sam,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('33000.00'),
+                description='Audi A8 Lang 50 TDI WAUZZZF86RN003268',
+                supply_kind='unknown',
+            )
+        )
+        self.assertTrue(
+            is_eu_goods_acquisition(
+                sam,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('33000.00'),
+                description='',
+                supply_kind='goods',
+            )
+        )
+        self.assertFalse(
+            is_eu_goods_acquisition(
+                sam,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('33000.00'),
+                description='EU usluga bez VIN-a',
+                supply_kind='unknown',
+            )
+        )
+        self.assertFalse(
+            is_eu_goods_acquisition(
+                _Supplier(country='Švicarska', vat_id='CHE-431.728.269'),
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('300.00'),
+                description='Prepaid WAUZZZF86RN003268',
+                supply_kind='unknown',
+            )
+        )
 
     def test_is_eu_customer_alias(self):
         self.assertTrue(is_eu_customer(_Supplier(country='Germany', tax_number='DE123456789')))

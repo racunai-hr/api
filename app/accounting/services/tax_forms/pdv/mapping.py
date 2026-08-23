@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Callable
@@ -9,7 +10,7 @@ from typing import Callable
 from accounting.models import VATEntryCategory, VATLedgerEntry
 from accounting.services.tax_forms.pdv.boxes import implemented_boxes
 
-PDV_MAPPING_VERSION = 7
+PDV_MAPPING_VERSION = 11
 
 _OUTPUT_RRIF_BY_RATE: dict[Decimal, str] = {
     Decimal('5.00'): '240010',
@@ -33,6 +34,14 @@ _EU_VAT_NUMBER_PREFIXES = frozenset(
     }
 )
 
+_HR_COUNTRY_NAMES = frozenset({'croatia', 'hrvatska', 'hr'})
+_CH_COUNTRY_NAMES = frozenset({'switzerland', 'švicarska', 'svicarska', 'schweiz', 'suisse', 'ch'})
+_CVH_STP_NAME_RE = re.compile(r'\b(?:cvh|stp)\b', re.IGNORECASE)
+_BANK_NAME_RE = re.compile(r'\b(?:banka|bank)\b', re.IGNORECASE)
+_INSURANCE_NAME_RE = re.compile(r'\bosiguranje\b', re.IGNORECASE)
+_TELECOM_NAME_RE = re.compile(r'\btelecom', re.IGNORECASE)
+_VIN_RE = re.compile(r'(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])')
+
 _EU_MEMBER_COUNTRY_NAMES = frozenset(
     {
         'austria', 'belgium', 'bulgaria', 'cyprus', 'czech republic', 'czechia',
@@ -40,6 +49,7 @@ _EU_MEMBER_COUNTRY_NAMES = frozenset(
         'ireland', 'italy', 'latvia', 'lithuania', 'luxembourg', 'malta',
         'netherlands', 'poland', 'portugal', 'romania', 'slovakia', 'slovenia',
         'spain', 'sweden',
+        'deutschland', 'njemačka', 'njemacka',
     }
 )
 
@@ -317,27 +327,166 @@ def normalize_vat_rate(rate: Decimal | int | float | str) -> Decimal:
     return Decimal(str(rate)).quantize(Decimal('0.01'))
 
 
+def _compact_vat_identifier(value: str) -> str:
+    return (value or '').strip().replace(' ', '').replace('.', '').replace('-', '').upper()
+
+
+def _vat_id_prefix(value: str) -> str:
+    compact = _compact_vat_identifier(value)
+    if len(compact) >= 2 and compact[:2].isalpha():
+        return compact[:2]
+    return ''
+
+
+def _has_vin(text: str) -> bool:
+    if not text:
+        return False
+    return bool(_VIN_RE.search(text.upper()))
+
+
 def is_eu_supplier(supplier) -> bool:
-    """True when supplier is in EU (not Croatia), using country name or VAT ID prefix."""
+    """True when supplier is in EU (not Croatia), using country name or VAT ID prefix.
+
+    Live partners often store the EU VAT ID on `vat_id` / `vat_number` while
+    `tax_number` is empty and `country` is a Croatian exonym (e.g. Njemačka).
+    """
     if supplier is None:
         return False
 
-    tax_number = (getattr(supplier, 'tax_number', '') or '').strip().replace(' ', '')
+    tax_number = _compact_vat_identifier(getattr(supplier, 'tax_number', '') or '')
     if len(tax_number) == 11 and tax_number.isdigit():
         return False
 
-    country = (getattr(supplier, 'country', '') or '').strip().lower()
-    if country in {'croatia', 'hrvatska', 'hr'}:
-        return False
-
-    if len(tax_number) >= 2 and tax_number[:2].isalpha():
-        prefix = tax_number[:2].upper()
+    vat_id = _compact_vat_identifier(
+        getattr(supplier, 'vat_id', '') or getattr(supplier, 'vat_number', '') or ''
+    )
+    for candidate in (tax_number, vat_id):
+        prefix = _vat_id_prefix(candidate)
         if prefix == 'HR':
             return False
         if prefix in _EU_VAT_NUMBER_PREFIXES:
             return True
 
+    country = (getattr(supplier, 'country', '') or '').strip().lower()
+    if country in _HR_COUNTRY_NAMES:
+        return False
     return country in _EU_MEMBER_COUNTRY_NAMES
+
+
+def is_eu_goods_acquisition(
+    supplier,
+    *,
+    vat_amount: Decimal,
+    base_amount: Decimal,
+    description: str = '',
+    supply_kind: str = '',
+) -> bool:
+    """Intra-community goods acquisition (PDV II.7 / III.7) — not a foreign-expense fallback.
+
+    Requires an EU supplier, zero charged VAT, positive net, and a goods signal:
+    explicit `supply_kind='goods'` or a VIN in the description. Swiss / other
+    third-country 0% expenses do not qualify.
+    """
+    if not is_eu_supplier(supplier):
+        return False
+    if Decimal(vat_amount or 0) != 0:
+        return False
+    if Decimal(base_amount or 0) <= 0:
+        return False
+    if (supply_kind or '').strip().lower() == 'goods':
+        return True
+    return _has_vin(description)
+
+
+def is_hr_supplier(supplier) -> bool:
+    """True when supplier is Croatian (OIB or HR country / VAT prefix)."""
+    if supplier is None:
+        return False
+    tax_number = (getattr(supplier, 'tax_number', '') or '').strip().replace(' ', '')
+    if len(tax_number) == 11 and tax_number.isdigit():
+        return True
+    country = (getattr(supplier, 'country', '') or '').strip().lower()
+    if country in _HR_COUNTRY_NAMES:
+        return True
+    if len(tax_number) >= 2 and tax_number[:2].upper() == 'HR':
+        return True
+    vat_id = (getattr(supplier, 'vat_id', '') or getattr(supplier, 'vat_number', '') or '').strip()
+    return len(vat_id) >= 2 and vat_id[:2].upper() == 'HR'
+
+
+def is_cvh_stp_supplier(supplier) -> bool:
+    """True when the partner name identifies a CVH / STP inspection station."""
+    if supplier is None or not is_hr_supplier(supplier):
+        return False
+    name = getattr(supplier, 'name', '') or ''
+    return bool(_CVH_STP_NAME_RE.search(name))
+
+
+def is_hr_bank_supplier(supplier) -> bool:
+    if supplier is None or not is_hr_supplier(supplier):
+        return False
+    name = getattr(supplier, 'name', '') or ''
+    return bool(_BANK_NAME_RE.search(name))
+
+
+def is_hr_insurance_supplier(supplier) -> bool:
+    if supplier is None or not is_hr_supplier(supplier):
+        return False
+    name = getattr(supplier, 'name', '') or ''
+    return bool(_INSURANCE_NAME_RE.search(name))
+
+
+def is_ch_supplier(supplier) -> bool:
+    """True when supplier is Swiss (country / country_code / CHE UID) and not HR/EU."""
+    if supplier is None or is_hr_supplier(supplier) or is_eu_supplier(supplier):
+        return False
+    country = (getattr(supplier, 'country', '') or '').strip().lower()
+    if country in _CH_COUNTRY_NAMES:
+        return True
+    country_code = (getattr(supplier, 'country_code', '') or '').strip().upper()
+    if country_code == 'CH':
+        return True
+    for raw in (
+        getattr(supplier, 'tax_number', '') or '',
+        getattr(supplier, 'vat_id', '') or '',
+        getattr(supplier, 'vat_number', '') or '',
+    ):
+        if _compact_vat_identifier(raw).startswith('CHE'):
+            return True
+    return False
+
+
+def is_ch_telecom_supplier(supplier) -> bool:
+    """Swiss telecom identity (e.g. Telecom26 AG). Not a generic third-country fallback."""
+    if not is_ch_supplier(supplier):
+        return False
+    name = getattr(supplier, 'name', '') or ''
+    return bool(_TELECOM_NAME_RE.search(name))
+
+
+def cvh_mixed_25_amounts(
+    *,
+    base_amount: Decimal,
+    vat_amount: Decimal,
+) -> tuple[Decimal, Decimal] | None:
+    """Reconstruct 25% pretporez from header tax when the rest of net is 0%.
+
+    Uses net `base_amount` (gross − tax). Not a generic unknown-rate dump:
+    callers must also prove CVH/STP identity.
+    """
+    base = Decimal(base_amount or 0)
+    vat = Decimal(vat_amount or 0)
+    if vat <= 0 or base <= 0:
+        return None
+    rate_25 = Decimal('25.00')
+    taxable_base = pretporez_base_from_vat(vat, rate_25)
+    if taxable_base <= 0 or taxable_base > base:
+        return None
+    if rc_vat_from_base(taxable_base, rate_25) != vat:
+        return None
+    if taxable_base == base:
+        return None
+    return taxable_base, vat
 
 
 def is_eu_customer(customer) -> bool:
@@ -381,6 +530,13 @@ def invoice_rate_to_box(rate: Decimal | int | float | str) -> str | None:
         return '202'
     if normalized == Decimal('25.00'):
         return '203'
+    return None
+
+
+def expense_rate_to_box(rate: Decimal | int | float | str) -> str | None:
+    """Domestic pretporez boxes. 301/302 are not implemented — only 25% → 303."""
+    if normalize_vat_rate(rate) == Decimal('25.00'):
+        return '303'
     return None
 
 
@@ -504,3 +660,45 @@ def rc_output_box_for_input(input_box: str) -> str | None:
 
 def rc_vat_from_base(base_amount: Decimal, rate: Decimal) -> Decimal:
     return eu_goods_vat_from_base(base_amount, rate)
+
+
+def derived_expense_vat_rate(*, base_amount: Decimal, vat_amount: Decimal) -> Decimal | None:
+    """Implied VAT rate from expense net/tax. None when net is not positive."""
+    base = Decimal(base_amount or 0)
+    vat = Decimal(vat_amount or 0)
+    if base <= 0:
+        return None
+    return (vat * Decimal('100') / base).quantize(Decimal('0.01'))
+
+
+def expense_matches_domestic_25(
+    *,
+    base_amount: Decimal,
+    vat_amount: Decimal,
+    vat_rate: Decimal | None = None,
+) -> bool:
+    """True when amounts are domestic 25% pretporez, including 1-cent invoice rounding.
+
+    Does not dump unknown or mixed header rates into 303.
+    """
+    base = Decimal(base_amount or 0)
+    vat = Decimal(vat_amount or 0)
+    if vat <= 0:
+        return False
+    rate_25 = Decimal('25.00')
+    if base > 0:
+        forward = rc_vat_from_base(base, rate_25)
+        if forward == vat:
+            return True
+        # Invoice 25% can land 0.01 away from banker's ROUND_HALF_EVEN
+        # (e.g. 40.50 × 0.25 = 10.125 → 10.12, račun 10.13).
+        if abs(forward - vat) == Decimal('0.01'):
+            return True
+        if pretporez_base_from_vat(vat, rate_25) == base:
+            return True
+    rate = vat_rate
+    if rate is None and base > 0:
+        rate = derived_expense_vat_rate(base_amount=base, vat_amount=vat)
+    if rate is None:
+        return False
+    return normalize_vat_rate(rate) == rate_25

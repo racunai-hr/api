@@ -119,18 +119,352 @@ class ClassifyInvoiceTests(SimpleTestCase):
 
 
 class ClassifyExpenseTests(SimpleTestCase):
-    def test_generic_303_becomes_review(self):
+    def test_zero_vat_expense_stays_review(self):
         result = classify(
             _input(
                 source_kind='expense',
                 direction=Direction.INPUT,
                 lifecycle_status='approved',
                 vat_rate=None,
+                vat_amount=Decimal('0.00'),
             )
         )
         self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
         self.assertEqual(result.rule_code, 'EXPENSE_GENERIC_303_REMOVED')
         self.assertEqual(result.rows, ())
+
+    def test_mixed_rate_expense_stays_review(self):
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                vat_rate=None,
+                base_amount=Decimal('223.87'),
+                vat_amount=Decimal('7.49'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
+        self.assertEqual(result.rule_code, 'EXPENSE_GENERIC_303_REMOVED')
+
+    def test_cvh_mixed_rate_classifies_reconstructed_303(self):
+        partner = PartnerSnapshot(
+            name='CVH STP "VODICE"',
+            country='Hrvatska',
+            tax_number='73294314024',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                base_amount=Decimal('223.87'),
+                vat_amount=Decimal('7.49'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rule_code, 'EXP_CVH_MIXED_25_303')
+        self.assertEqual(result.rows[0].box, '303')
+        self.assertEqual(result.rows[0].base_amount, Decimal('29.96'))
+        self.assertEqual(result.rows[0].tax_amount, Decimal('7.49'))
+
+    def test_cvh_mixed_small_ticket_classifies_303(self):
+        partner = PartnerSnapshot(
+            name='CVH STP "AUTOMEHANIKA"',
+            country='Hrvatska',
+            tax_number='52233171260',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                base_amount=Decimal('7.95'),
+                vat_amount=Decimal('0.66'),
+            )
+        )
+        self.assertEqual(result.rows[0].base_amount, Decimal('2.64'))
+        self.assertEqual(result.rows[0].tax_amount, Decimal('0.66'))
+
+    def test_hr_bank_zero_vat_is_not_tax_relevant(self):
+        partner = PartnerSnapshot(
+            name='OTP banka d.d.',
+            country='Hrvatska',
+            tax_number='52508873833',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('13.94'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'EXP_DOMESTIC_BANK_NO_VAT')
+        self.assertEqual(result.rows, ())
+
+    def test_hr_insurance_zero_vat_is_not_tax_relevant(self):
+        partner = PartnerSnapshot(
+            name='Generali osiguranje d.d.',
+            country='Hrvatska',
+            tax_number='10840749604',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('13.22'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'EXP_DOMESTIC_INSURANCE_NO_VAT')
+
+    def test_third_country_zero_vat_ch_telecom_is_not_tax_relevant(self):
+        partner = PartnerSnapshot(
+            name='Telecom26 AG',
+            country='Švicarska',
+            tax_number='CHE-431.728.269',
+            vat_id='CHE-431.728.269',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('300.00'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'EXP_CH_TELECOM_NO_VAT')
+        self.assertEqual(result.rows, ())
+
+    def test_third_country_non_telecom_zero_vat_stays_review(self):
+        partner = PartnerSnapshot(
+            name='Alpine Hotel AG',
+            country='Švicarska',
+            tax_number='CHE-111.222.333',
+            vat_id='CHE-111.222.333',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('480.00'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
+        self.assertEqual(result.rule_code, 'EXPENSE_GENERIC_303_REMOVED')
+
+    def test_eu_goods_acquisition_with_vin_classifies_207_307(self):
+        partner = PartnerSnapshot(
+            name='SaM Automobile',
+            country='Njemačka',
+            tax_number='',
+            vat_id='DE355497142',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('33000.00'),
+                supply_kind='unknown',
+                has_linked_journal_entry=True,
+                description='Audi A8 Lang 50 TDI WAUZZZF86RN003268',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rule_code, 'EXP_EU_GOODS_207_307')
+        self.assertEqual([row.box for row in result.rows], ['207', '207', '307'])
+        self.assertEqual(result.rows[0].base_amount, Decimal('33000.00'))
+        self.assertEqual(result.rows[0].tax_amount, Decimal('0.00'))
+        self.assertEqual(result.rows[1].base_amount, Decimal('0.00'))
+        self.assertEqual(result.rows[1].tax_amount, Decimal('8250.00'))
+        self.assertEqual(result.rows[2].base_amount, Decimal('33000.00'))
+        self.assertEqual(result.rows[2].tax_amount, Decimal('8250.00'))
+
+    def test_eu_zero_vat_without_goods_signal_keeps_journal_skip(self):
+        partner = PartnerSnapshot(
+            name='DE GmbH',
+            country='Germany',
+            tax_number='DE123456789',
+            vat_id='DE123456789',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        skipped = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('1000.00'),
+                supply_kind='unknown',
+                has_linked_journal_entry=True,
+                description='EU usluga',
+            )
+        )
+        self.assertEqual(skipped.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(skipped.rule_code, 'eu_expense_posted_via_journal')
+
+        placeholder = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('1000.00'),
+                supply_kind='unknown',
+                has_linked_journal_entry=False,
+                description='EU usluga',
+            )
+        )
+        self.assertEqual(placeholder.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(placeholder.rule_code, 'EXP_EU_614')
+        self.assertEqual(placeholder.rows[0].box, '614')
+
+    def test_eu_goods_supply_kind_classifies_207_307_without_vin(self):
+        partner = PartnerSnapshot(
+            name='DE GmbH',
+            country='Germany',
+            tax_number='DE123456789',
+            vat_id='DE123456789',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('8000.00'),
+                supply_kind='goods',
+                has_linked_journal_entry=True,
+                description='EU nabava dobara',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rule_code, 'EXP_EU_GOODS_207_307')
+        self.assertEqual(result.rows[2].box, '307')
+        self.assertEqual(result.rows[1].tax_amount, Decimal('2000.00'))
+
+    def test_third_country_vin_does_not_become_eu_goods(self):
+        partner = PartnerSnapshot(
+            name='Telecom26 AG',
+            country='Švicarska',
+            tax_number='CHE-431.728.269',
+            vat_id='CHE-431.728.269',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('300.00'),
+                supply_kind='unknown',
+                description='Prepaid WAUZZZF86RN003268',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'EXP_CH_TELECOM_NO_VAT')
+        self.assertEqual(result.rows, ())
+
+    def test_domestic_25_classifies_303(self):
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                vat_rate=None,
+                base_amount=Decimal('66.36'),
+                vat_amount=Decimal('16.59'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rule_code, 'EXP_DOMESTIC_25_303')
+        self.assertEqual(result.rows[0].box, '303')
+        self.assertEqual(result.rows[0].tax_amount, Decimal('16.59'))
+
+    def test_domestic_25_cent_rounding_classifies_303(self):
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                vat_rate=None,
+                base_amount=Decimal('15.99'),
+                vat_amount=Decimal('4.00'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rows[0].box, '303')
+
+    def test_domestic_25_half_even_one_cent_classifies_303(self):
+        partner = PartnerSnapshot(
+            name='CVH STP "VODICE"',
+            country='Hrvatska',
+            tax_number='73294314024',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                base_amount=Decimal('40.50'),
+                vat_amount=Decimal('10.13'),
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rule_code, 'EXP_DOMESTIC_25_303')
+        self.assertEqual(result.rows[0].box, '303')
+        self.assertEqual(result.rows[0].base_amount, Decimal('40.50'))
+        self.assertEqual(result.rows[0].tax_amount, Decimal('10.13'))
 
     def test_ioss_308(self):
         result = classify(

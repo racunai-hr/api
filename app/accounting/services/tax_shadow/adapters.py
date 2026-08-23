@@ -8,7 +8,7 @@ from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 
 from accounting.models import JournalEntry, JournalEntryLine, VATLedgerEntry, VATPeriod
-from accounting.services.tax_forms.pdv.mapping import partner_eu_vat_id
+from accounting.services.tax_forms.pdv.mapping import derived_expense_vat_rate, partner_eu_vat_id
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
 from accounting.services.tax_shadow.reversal_relevance import assess_reversal_relevance
 from domains.tax.classification.contracts import (
@@ -131,6 +131,7 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
         source_object_id=expense.pk,
     ).exists()
     net = Decimal(expense.amount or 0) - Decimal(expense.tax_amount or 0)
+    vat_amount = Decimal(expense.tax_amount or 0)
     procedure = getattr(expense, 'vat_procedure', VatSupplyProcedure.STANDARD) or VatSupplyProcedure.STANDARD
     return _finalize(
         TaxDocumentInput(
@@ -145,8 +146,8 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
             supply_date=None,
             partner=_partner_snapshot(expense.supplier, provenance=PartnerProvenance.CURRENT_PARTNER),
             base_amount=net,
-            vat_rate=None,
-            vat_amount=Decimal(expense.tax_amount or 0),
+            vat_rate=derived_expense_vat_rate(base_amount=net, vat_amount=vat_amount),
+            vat_amount=vat_amount,
             currency=expense.currency or 'EUR',
             jurisdiction='',
             customer_type='B2B',
