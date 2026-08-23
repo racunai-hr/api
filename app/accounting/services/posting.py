@@ -68,7 +68,7 @@ DEFAULT_POSTING_RULES = [
         'amount_field': 'tax_amount',
         'priority': 20,
         'use_analytic': True,
-        'condition': {'min_tax': '0.01', 'posting_profile': ['opex']},
+        'condition': {'min_tax': '0.01'},
     },
     {
         'name': 'Odobren trošak — nabava imovine / dobavljač',
@@ -309,11 +309,13 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
             return False
     elif (
         rule.document_type == 'expense_approved'
+        and rule.amount_field == 'net_amount'
         and source is not None
         and hasattr(source, 'posting_profile')
     ):
-        # Legacy unscoped expense_approved rules (condition={}) behave as opex-only so
-        # they do not also fire for asset_purchase alongside the explicit asset rule.
+        # Unscoped net rules (typically 4120) stay opex-only so they do not
+        # also fire for asset_purchase alongside the explicit 0373 net rule.
+        # Tax / pretporez rules (amount_field=tax_amount) stay profile-agnostic.
         from expenses.models import ExpensePostingProfile
         source_profile = getattr(source, 'posting_profile', None) or ExpensePostingProfile.OPEX
         if source_profile != ExpensePostingProfile.OPEX:

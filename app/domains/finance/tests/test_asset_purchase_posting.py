@@ -91,15 +91,36 @@ class AssetPurchasePostingProfileTests(TestCase):
                 )
         raise AssertionError('No debit line found')
 
+    def _debit_totals(self, entry: JournalEntry) -> dict[str, Decimal]:
+        totals: dict[str, Decimal] = {}
+        for line in entry.lines.select_related('account'):
+            if line.debit_amount <= 0:
+                continue
+            base = line.account.account_code.split('-', 1)[0]
+            totals[base] = totals.get(base, Decimal('0.00')) + line.debit_amount
+        return totals
+
+    def _credit_totals(self, entry: JournalEntry) -> dict[str, Decimal]:
+        totals: dict[str, Decimal] = {}
+        for line in entry.lines.select_related('account'):
+            if line.credit_amount <= 0:
+                continue
+            base = line.account.account_code.split('-', 1)[0]
+            totals[base] = totals.get(base, Decimal('0.00')) + line.credit_amount
+        return totals
+
     def test_asset_purchase_posts_0373_to_2201_and_opens_subledger(self):
         expense = self._create_expense(category=self.asset_category)
         entry = post_document(self.tenant, expense, 'expense_approved', self.user)
         self.assertIsNotNone(entry)
 
-        debit, credit, amount = self._net_pair(self._entry(expense, 'expense_approved'))
+        entry = self._entry(expense, 'expense_approved')
+        debit, credit, amount = self._net_pair(entry)
         self.assertEqual(debit, '0373')
         self.assertEqual(credit, '2201')
         self.assertEqual(amount, Decimal('8000.00'))
+        self.assertEqual(self._debit_totals(entry), {'0373': Decimal('8000.00')})
+        self.assertEqual(self._credit_totals(entry), {'2201': Decimal('8000.00')})
 
         item = SubledgerItem.all_objects.get(
             tenant=self.tenant,
@@ -142,10 +163,13 @@ class AssetPurchasePostingProfileTests(TestCase):
             amount=Decimal('100.00'),
         )
         post_document(self.tenant, expense, 'expense_approved', self.user)
-        debit, credit, amount = self._net_pair(self._entry(expense, 'expense_approved'))
+        entry = self._entry(expense, 'expense_approved')
+        debit, credit, amount = self._net_pair(entry)
         self.assertEqual(debit, '4120')
         self.assertEqual(credit, '2201')
         self.assertEqual(amount, Decimal('100.00'))
+        self.assertEqual(self._debit_totals(entry), {'4120': Decimal('100.00')})
+        self.assertEqual(self._credit_totals(entry), {'2201': Decimal('100.00')})
 
     def test_category_0373_alone_does_not_imply_asset_purchase_rule(self):
         """Category default 0373 without asset_purchase profile still matches opex rules.
@@ -184,3 +208,67 @@ class AssetPurchasePostingProfileTests(TestCase):
         self.assertEqual(debit, '0373')
         self.assertEqual(credit, '2201')
         self.assertEqual(amount, Decimal('8000.00'))
+        self.assertEqual(self._debit_totals(self._entry(expense, 'expense_approved')), {
+            '0373': Decimal('8000.00'),
+        })
+
+    def test_gate_a_opex_with_vat_posts_4120_and_1400_to_2201_gross(self):
+        expense = self._create_expense(
+            expense_number='T-OPEX-VAT',
+            posting_profile=ExpensePostingProfile.OPEX,
+            category=self.opex_category,
+            amount=Decimal('82.95'),
+            tax_amount=Decimal('16.59'),
+        )
+        post_document(self.tenant, expense, 'expense_approved', self.user)
+        entry = self._entry(expense, 'expense_approved')
+        self.assertEqual(self._debit_totals(entry), {
+            '4120': Decimal('66.36'),
+            '1400': Decimal('16.59'),
+        })
+        self.assertEqual(self._credit_totals(entry), {'2201': Decimal('82.95')})
+        self.assertNotIn('0373', self._debit_totals(entry))
+
+    def test_gate_a_asset_purchase_with_vat_posts_0373_and_1400_to_2201_gross(self):
+        expense = self._create_expense(
+            expense_number='T-ASSET-VAT',
+            posting_profile=ExpensePostingProfile.ASSET_PURCHASE,
+            category=self.opex_category,
+            amount=Decimal('82.95'),
+            tax_amount=Decimal('16.59'),
+        )
+        post_document(self.tenant, expense, 'expense_approved', self.user)
+        entry = self._entry(expense, 'expense_approved')
+        self.assertEqual(self._debit_totals(entry), {
+            '0373': Decimal('66.36'),
+            '1400': Decimal('16.59'),
+        })
+        self.assertEqual(self._credit_totals(entry), {'2201': Decimal('82.95')})
+        self.assertNotIn('4120', self._debit_totals(entry))
+
+    def test_gate_a_opex_zero_vat_has_no_1400_line(self):
+        expense = self._create_expense(
+            expense_number='T-OPEX-0VAT',
+            posting_profile=ExpensePostingProfile.OPEX,
+            category=self.opex_category,
+            amount=Decimal('100.00'),
+            tax_amount=Decimal('0.00'),
+        )
+        post_document(self.tenant, expense, 'expense_approved', self.user)
+        entry = self._entry(expense, 'expense_approved')
+        self.assertEqual(self._debit_totals(entry), {'4120': Decimal('100.00')})
+        self.assertEqual(self._credit_totals(entry), {'2201': Decimal('100.00')})
+
+    def test_gate_a_asset_purchase_zero_vat_has_no_1400_line(self):
+        expense = self._create_expense(
+            expense_number='T-ASSET-0VAT',
+            posting_profile=ExpensePostingProfile.ASSET_PURCHASE,
+            category=self.opex_category,
+            amount=Decimal('8000.00'),
+            tax_amount=Decimal('0.00'),
+        )
+        post_document(self.tenant, expense, 'expense_approved', self.user)
+        entry = self._entry(expense, 'expense_approved')
+        self.assertEqual(self._debit_totals(entry), {'0373': Decimal('8000.00')})
+        self.assertEqual(self._credit_totals(entry), {'2201': Decimal('8000.00')})
+        self.assertNotIn('4120', self._debit_totals(entry))
