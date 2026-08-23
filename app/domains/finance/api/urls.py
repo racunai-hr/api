@@ -8,9 +8,13 @@ from domains.finance.api.views import (
     DepositReturnView,
     DepositReverseView,
     ExpenseApproveView,
+    ExpenseDraftPatchView,
+    ExpensePostingPreviewView,
+    ChartOfAccountsListView,
     JournalEntryDetailView,
     JournalEntryListView,
     PartnerFinancialSummaryView,
+    PartnerStatementView,
     PartnerSubledgerView,
     PrivateFundsClaimCreateView,
     PrivateFundsClaimDetailView,
@@ -34,9 +38,29 @@ urlpatterns = [
         name='finance-partner-financial-summary',
     ),
     path(
+        'finance/partners/<int:pk>/statement/',
+        PartnerStatementView.as_view(),
+        name='finance-partner-statement',
+    ),
+    path(
         'finance/partners/<int:pk>/subledger/',
         PartnerSubledgerView.as_view(),
         name='finance-partner-subledger',
+    ),
+    path(
+        'finance/chart-of-accounts/',
+        ChartOfAccountsListView.as_view(),
+        name='finance-chart-of-accounts',
+    ),
+    path(
+        'finance/expenses/<int:pk>/',
+        ExpenseDraftPatchView.as_view(),
+        name='finance-expense-detail',
+    ),
+    path(
+        'finance/expenses/<int:pk>/posting-preview/',
+        ExpensePostingPreviewView.as_view(),
+        name='finance-expense-posting-preview',
     ),
     path(
         'finance/expenses/<int:pk>/approve/',

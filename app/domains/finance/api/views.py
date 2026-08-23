@@ -15,16 +15,22 @@ from domains.finance.api.authentication import FinanceJWTAuthentication
 from domains.finance.api.permissions import TenantFinanceReadPermission, TenantFinanceWritePermission
 from domains.finance.api.schema import (
     JOURNAL_ENTRY_LIST_PARAMS,
+    PARTNER_STATEMENT_PARAMS,
     PARTNER_SUBLEDGER_PARAMS,
+    CHART_OF_ACCOUNTS_PARAMS,
+    ChartOfAccountsListSerializer,
     CreateDepositSerializer,
     CreatePrivateFundsClaimSerializer,
     DepositConflictSerializer,
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
+    ExpenseDraftPatchSerializer,
+    ExpensePostingPreviewSerializer,
     JournalEntryDetailSerializer,
     PaginatedJournalEntriesSerializer,
     PartnerFinancialSummarySerializer,
+    PartnerStatementSerializer,
     PartnerSubledgerListSerializer,
     PrivateFundsClaimSerializer,
     ReturnDepositSerializer,
@@ -32,6 +38,7 @@ from domains.finance.api.schema import (
 from domains.finance.read.filters import parse_journal_entry_filters
 from domains.finance.read.service import get_journal_entry, list_journal_entries
 from domains.finance.services.aging import partner_financial_summary, partner_subledger_items
+from domains.finance.services.statement import partner_statement
 from domains.finance.services.deposits import (
     DepositBadRequest,
     DepositConflict,
@@ -47,7 +54,11 @@ from domains.finance.services.expenses import (
     ExpenseApproveBadRequest,
     ExpenseApproveConflict,
     approve_expense_for_posting,
+    posting_preview,
+    update_draft_expense_posting,
 )
+from domains.finance.services.chart_accounts import list_postable_accounts
+from domains.finance.services.account_resolver import ExpenseAccountResolutionError
 from domains.finance.services.private_funds import (
     PrivateFundsBadRequest,
     PrivateFundsConflict,
@@ -83,6 +94,12 @@ def _conflict(exc: DepositConflict):
 
 def _bad_request(exc: DepositBadRequest):
     return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _resolution_error(exc: ExpenseAccountResolutionError):
+    if getattr(exc, 'message_dict', None):
+        return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class _FinanceReadApiView(APIView):
@@ -171,6 +188,22 @@ class PartnerSubledgerView(_FinanceReadApiView):
         _require_partner(tenant, pk)
         include_closed = _query_flag_true(request.query_params.get('include_closed'))
         return Response(partner_subledger_items(tenant, pk, include_closed=include_closed))
+
+
+class PartnerStatementView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_partner_statement',
+        parameters=PARTNER_STATEMENT_PARAMS,
+        responses={200: PartnerStatementSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        tenant = _require_tenant(request)
+        _require_partner(tenant, pk)
+        raw_year = request.query_params.get('year')
+        year = int(raw_year) if raw_year not in (None, '') else None
+        direction = request.query_params.get('direction') or 'all'
+        return Response(partner_statement(tenant, pk, year=year, direction=direction))
 
 
 class DepositListCreateView(APIView):
@@ -386,6 +419,85 @@ class ExpenseApproveView(_FinanceWriteApiView):
                 {'code': exc.code, 'detail': exc.detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class ChartOfAccountsListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_chart_of_accounts_list',
+        parameters=CHART_OF_ACCOUNTS_PARAMS,
+        responses={200: ChartOfAccountsListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        return Response(
+            list_postable_accounts(
+                tenant=_require_tenant(request),
+                search=request.query_params.get('search') or '',
+            )
+        )
+
+
+class ExpensePostingPreviewView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_expenses_posting_preview',
+        responses={
+            200: ExpensePostingPreviewSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, pk: int):
+        try:
+            return Response(posting_preview(tenant=_require_tenant(request), expense_id=pk))
+        except ExpenseAccountResolutionError as exc:
+            return _resolution_error(exc)
+
+
+class ExpenseDraftPatchView(_FinanceWriteApiView):
+    http_method_names = ['patch', 'head', 'options']
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_expenses_draft_patch',
+        request=ExpenseDraftPatchSerializer,
+        responses={
+            200: ExpenseApproveResponseSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: DepositConflictSerializer,
+        },
+    )
+    def patch(self, request, pk: int):
+        ser = ExpenseDraftPatchSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        kwargs = {}
+        if 'category_id' in ser.validated_data:
+            kwargs['category_id'] = ser.validated_data['category_id']
+        if 'expense_account_id' in ser.validated_data:
+            kwargs['expense_account_id'] = ser.validated_data['expense_account_id']
+        try:
+            return Response(
+                update_draft_expense_posting(
+                    tenant=_require_tenant(request),
+                    expense_id=pk,
+                    **kwargs,
+                )
+            )
+        except ExpenseApproveConflict as exc:
+            return Response(
+                {'code': exc.code, 'detail': exc.detail},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except ExpenseApproveBadRequest as exc:
+            return Response(
+                {'code': exc.code, 'detail': exc.detail},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ExpenseAccountResolutionError as exc:
+            return _resolution_error(exc)
 
 
 def _pf_conflict(exc: PrivateFundsConflict):

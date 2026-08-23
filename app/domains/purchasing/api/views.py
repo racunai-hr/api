@@ -20,11 +20,19 @@ from domains.purchasing.api.schema import (
     CreatePartnerFromImportSerializer,
     EracunRejectionRequestSerializer,
     EracunRejectionResponseSerializer,
+    ExpenseCategoryListSerializer,
+    ExpenseCategoryPatchSerializer,
+    ExpenseCategorySerializer,
     IncomingInvoiceImportSerializer,
     PurchasingConflictSerializer,
 )
 from domains.purchasing.services.confirm import confirm_invoice_import
+from domains.purchasing.services.expense_categories import (
+    list_expense_categories,
+    update_expense_category_default_account,
+)
 from domains.purchasing.services.exceptions import PurchasingBadRequest, PurchasingConflict
+from domains.finance.services.account_resolver import ExpenseAccountResolutionError
 from domains.purchasing.services.invoice_import import (
     apply_partner_updates,
     create_partner_from_import,
@@ -222,17 +230,23 @@ class InvoiceImportConfirmView(_PurchasingApiView):
         },
     )
     def post(self, request, pk: int):
+        ser = ConfirmInvoiceImportSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
         try:
             return Response(
                 confirm_invoice_import(
                     tenant=_require_tenant(request),
                     import_id=pk,
                     actor=request.user,
-                    data=request.data,
+                    data=ser.validated_data,
                 )
             )
         except PurchasingConflict as exc:
             return _conflict(exc)
+        except ExpenseAccountResolutionError as exc:
+            if getattr(exc, 'message_dict', None):
+                return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except DjangoValidationError as exc:
             return Response({'detail': _error_detail(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
@@ -261,6 +275,49 @@ def _require_idempotency_key(request) -> str:
     if not key:
         raise ValidationError({'Idempotency-Key': 'Header Idempotency-Key je obavezan.'})
     return key
+
+
+class ExpenseCategoryListView(_PurchasingApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_expense_categories_list',
+        responses={200: ExpenseCategoryListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        return Response(list_expense_categories(tenant=_require_tenant(request)))
+
+
+class ExpenseCategoryDetailView(_PurchasingApiView):
+    http_method_names = ['patch', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_expense_categories_partial_update',
+        request=ExpenseCategoryPatchSerializer,
+        responses={
+            200: ExpenseCategorySerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def patch(self, request, pk: int):
+        ser = ExpenseCategoryPatchSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                update_expense_category_default_account(
+                    tenant=_require_tenant(request),
+                    category_id=pk,
+                    default_account_id=ser.validated_data['default_account_id'],
+                )
+            )
+        except ExpenseAccountResolutionError as exc:
+            if getattr(exc, 'message_dict', None):
+                return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ExpenseEracunRejectionView(_PurchasingApiView):

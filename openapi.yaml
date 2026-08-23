@@ -563,6 +563,10 @@ paths:
           type: integer
         description: Page size (default 20, max 100)
       - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
         name: statement
         schema:
           type: integer
@@ -1298,6 +1302,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/CodeDetail'
           description: Attachment content unavailable
+  /api/finance/chart-of-accounts/:
+    get:
+      operationId: finance_chart_of_accounts_list
+      parameters:
+      - in: query
+        name: postable
+        schema:
+          type: integer
+        description: v1 vraća samo knjiživa konta; 1 je zadano.
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Filter po šifri ili nazivu konta.
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChartOfAccountsList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/deposits/:
     get:
       operationId: finance_deposits_list
@@ -1636,6 +1682,66 @@ paths:
               schema:
                 $ref: '#/components/schemas/DepositConflict'
           description: ''
+  /api/finance/expenses/{id}/:
+    patch:
+      operationId: finance_expenses_draft_patch
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseDraftPatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseDraftPatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseDraftPatchRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseApproveResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositConflict'
+          description: ''
   /api/finance/expenses/{id}/approve/:
     post:
       operationId: finance_expenses_approve
@@ -1685,6 +1791,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/DepositConflict'
           description: ''
+  /api/finance/expenses/{id}/posting-preview/:
+    get:
+      operationId: finance_expenses_posting_preview
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpensePostingPreview'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/journal-entries/:
     get:
       operationId: finance_journal_entries_list
@@ -1812,6 +1961,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PartnerFinancialSummary'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/partners/{id}/statement/:
+    get:
+      operationId: finance_partner_statement
+      parameters:
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - all
+          - payable
+          - receivable
+        description: Filter rows by AR/AP direction (default all).
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: year
+        schema:
+          type: integer
+        description: Calendar year. Defaults to current year if available, else latest.
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerStatement'
           description: ''
         '401':
           content:
@@ -2628,6 +2828,91 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/expense-categories/:
+    get:
+      operationId: purchasing_expense_categories_list
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseCategoryList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/expense-categories/{id}/:
+    patch:
+      operationId: purchasing_expense_categories_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseCategoryPatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseCategoryPatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseCategoryPatchRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseCategory'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/purchasing/expenses/{id}/eracun-rejection/:
     post:
       operationId: purchasing_expenses_eracun_rejection
@@ -3312,6 +3597,55 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv/periods/{period}/correction/:
+    post:
+      operationId: tax_pdv_period_correction
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvDraft'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
   /api/tax/pdv/periods/{period}/draft/:
     post:
       operationId: tax_pdv_period_draft
@@ -3355,6 +3689,12 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
   /api/tax/pdv/periods/{period}/ledger/:
     post:
       operationId: tax_pdv_period_ledger
@@ -3411,13 +3751,13 @@ paths:
       - tax
       requestBody:
         content:
-          application/json:
+          multipart/form-data:
             schema:
               $ref: '#/components/schemas/PdvSubmitRequestRequest'
           application/x-www-form-urlencoded:
             schema:
               $ref: '#/components/schemas/PdvSubmitRequestRequest'
-          multipart/form-data:
+          application/json:
             schema:
               $ref: '#/components/schemas/PdvSubmitRequestRequest'
         required: true
@@ -3567,6 +3907,22 @@ paths:
           description: Konflikt (idempotency / match target taken)
 components:
   schemas:
+    AccountRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+      required:
+      - active
+      - code
+      - id
+      - name
     AccountingBlock:
       type: object
       properties:
@@ -3835,6 +4191,18 @@ components:
       - statement_count
       - suggested_transaction_count
       - unmatched_transaction_count
+    ChartOfAccountsList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountRef'
+      required:
+      - count
+      - results
     ClaimTypeEnum:
       enum:
       - supplier_payment
@@ -3885,6 +4253,14 @@ components:
         iban:
           type: string
         duplicate_override:
+          type: boolean
+        category_id:
+          type: integer
+          nullable: true
+        expense_account_id:
+          type: integer
+          nullable: true
+        remember_category_for_partner:
           type: boolean
     ConfirmationResult:
       type: object
@@ -4701,6 +5077,14 @@ components:
         supplier_id:
           type: integer
           nullable: true
+        category_id:
+          type: integer
+          nullable: true
+        expense_account_id:
+          type: integer
+          nullable: true
+        expense_account_source:
+          type: string
         settlement_method:
           type: string
         approved_by_id:
@@ -4709,14 +5093,104 @@ components:
       required:
       - amount
       - approved_by_id
+      - category_id
       - currency
       - due_date
+      - expense_account_id
+      - expense_account_source
       - expense_date
       - expense_number
       - id
       - settlement_method
       - status
       - supplier_id
+    ExpenseCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_active:
+          type: boolean
+        default_account:
+          allOf:
+          - $ref: '#/components/schemas/ExpenseCategoryAccountRef'
+          nullable: true
+      required:
+      - default_account
+      - id
+      - is_active
+      - name
+    ExpenseCategoryAccountRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+      required:
+      - active
+      - code
+      - id
+      - name
+    ExpenseCategoryList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseCategory'
+      required:
+      - count
+      - results
+    ExpenseCategoryRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    ExpensePostingPreview:
+      type: object
+      properties:
+        category:
+          allOf:
+          - $ref: '#/components/schemas/ExpenseCategoryRef'
+          nullable: true
+        expense_account:
+          allOf:
+          - $ref: '#/components/schemas/AccountRef'
+          nullable: true
+        account_source:
+          type: string
+          nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+        can_approve:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostingPlanLine'
+      required:
+      - account_source
+      - can_approve
+      - category
+      - expense_account
+      - lines
+      - warnings
     ExportLimitError:
       type: object
       properties:
@@ -5869,6 +6343,98 @@ components:
       - name
       - partner_id
       - tax_number
+    PartnerStatement:
+      type: object
+      properties:
+        partner_id:
+          type: integer
+        year:
+          type: integer
+        available_years:
+          type: array
+          items:
+            type: integer
+        currency:
+          type: string
+        direction:
+          type: string
+        opening_balance:
+          $ref: '#/components/schemas/PartnerStatementAmounts'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerStatementRow'
+        closing_balance:
+          $ref: '#/components/schemas/PartnerStatementAmounts'
+      required:
+      - available_years
+      - closing_balance
+      - currency
+      - direction
+      - opening_balance
+      - partner_id
+      - rows
+      - year
+    PartnerStatementAmounts:
+      type: object
+      properties:
+        debit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        credit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - balance
+      - credit
+      - debit
+    PartnerStatementRow:
+      type: object
+      properties:
+        kind:
+          type: string
+        date:
+          type: string
+        debit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        credit:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        balance:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        label:
+          type: string
+        direction:
+          type: string
+        source_type:
+          type: string
+        source_id:
+          type: integer
+        source_label:
+          type: string
+        document_type_label:
+          type: string
+        closing_kind:
+          type: string
+        subledger_item_id:
+          type: integer
+        allocation_id:
+          type: integer
+        journal_entry_id:
+          type: integer
+        entry_number:
+          type: string
+      required:
+      - balance
+      - credit
+      - date
+      - debit
+      - kind
     PartnerSubledgerItem:
       type: object
       properties:
@@ -6028,6 +6594,20 @@ components:
           type: boolean
         is_active:
           type: boolean
+    PatchedExpenseCategoryPatchRequest:
+      type: object
+      properties:
+        default_account_id:
+          type: integer
+          nullable: true
+    PatchedExpenseDraftPatchRequest:
+      type: object
+      properties:
+        category_id:
+          type: integer
+        expense_account_id:
+          type: integer
+          nullable: true
     PatchedPartnerBankAccountWriteRequest:
       type: object
       properties:
@@ -6242,6 +6822,14 @@ components:
         return_status:
           type: string
           nullable: true
+        latest_return_version:
+          type: integer
+          nullable: true
+        latest_return_status:
+          type: string
+          nullable: true
+        correction_in_progress:
+          type: boolean
         vat_due:
           type: string
           description: Decimal as string, e.g. "1100.00"
@@ -6249,7 +6837,10 @@ components:
           type: string
           nullable: true
       required:
+      - correction_in_progress
       - has_ledger
+      - latest_return_status
+      - latest_return_version
       - period
       - period_status
       - return_status
@@ -6284,6 +6875,14 @@ components:
         return_status:
           type: string
           nullable: true
+        latest_return_version:
+          type: integer
+          nullable: true
+        latest_return_status:
+          type: string
+          nullable: true
+        correction_in_progress:
+          type: boolean
         vat_due:
           type: string
           description: Decimal as string, e.g. "1100.00"
@@ -6297,9 +6896,15 @@ components:
           type: string
           format: uuid
           nullable: true
+        has_confirmation:
+          type: boolean
       required:
+      - correction_in_progress
       - event_uuid
+      - has_confirmation
       - has_ledger
+      - latest_return_status
+      - latest_return_version
       - period
       - period_status
       - return_status
@@ -6412,15 +7017,21 @@ components:
         eporezna_identifier:
           type: string
           format: uuid
+          description: Opcionalno. Portalni identifikator zaprimanja. Nikad XML Metapodaci/Identifikator.
         submitted_at:
           type: string
           format: date-time
+          description: Opcionalno. Vrijeme zaprimanja s portala. Uvoz XML-a koristi
+            vrijeme importa.
         return_version:
           type: integer
+        submitted_xml:
+          type: string
+          format: binary
+          description: Predani (potpisani) Obrazac PDV XML. Arhiva obrasca, nije potvrda
+            zaprimanja.
       required:
-      - eporezna_identifier
       - return_version
-      - submitted_at
     PeriodReturn:
       type: object
       properties:
@@ -6469,6 +7080,26 @@ components:
       - fiscal_locked
       - fiscal_period
       - state
+    PostingPlanLine:
+      type: object
+      properties:
+        amount_field:
+          type: string
+        description:
+          type: string
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        debit:
+          $ref: '#/components/schemas/AccountRef'
+        credit:
+          $ref: '#/components/schemas/AccountRef'
+      required:
+      - amount
+      - amount_field
+      - credit
+      - debit
+      - description
     PrivateFundsClaim:
       type: object
       properties:

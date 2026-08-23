@@ -85,6 +85,14 @@ class ExpenseSource(models.TextChoices):
     EMAIL = 'email', 'E-mail'
 
 
+class ExpenseAccountSource(models.TextChoices):
+    MANUAL_OVERRIDE = 'manual_override', 'Ručna korekcija'
+    CATEGORY_DEFAULT = 'category_default', 'Zadano konto vrste troška'
+    PARTNER_DEFAULT = 'partner_default', 'Zadana vrsta partnera'
+    PARTNER_HISTORY = 'partner_history', 'Povijest partnera'
+    POSTING_RULE_FALLBACK = 'posting_rule_fallback', 'Pravilo knjiženja'
+
+
 class PaymentMethod(models.TextChoices):
     CARD = 'card', 'Kartica'
     CASH = 'cash', 'Gotovina'
@@ -145,6 +153,13 @@ class ExpensePayer(TenantMixin, models.Model):
         return self.name
 
 
+class ExpensePostingProfile(models.TextChoices):
+    """Eksplicitna poslovna/posting klasifikacija troška (ne izvoditi iz konta)."""
+
+    OPEX = 'opex', 'Operativni trošak'
+    ASSET_PURCHASE = 'asset_purchase', 'Nabava dugotrajne imovine'
+
+
 class Expense(TenantMixin, models.Model):
     STATUS_CHOICES = [
         ('draft', 'Nacrt'),
@@ -173,6 +188,13 @@ class Expense(TenantMixin, models.Model):
         blank=True,
         verbose_name='Način podmirenja',
     )
+    posting_profile = models.CharField(
+        max_length=32,
+        choices=ExpensePostingProfile.choices,
+        default=ExpensePostingProfile.OPEX,
+        verbose_name='Posting profil',
+        help_text='Poslovna vrsta dokumenta koja određuje način knjiženja (npr. opex, asset_purchase).',
+    )
     paid_by = models.ForeignKey(
         ExpensePayer,
         on_delete=models.SET_NULL,
@@ -191,6 +213,20 @@ class Expense(TenantMixin, models.Model):
     
     category = models.ForeignKey(ExpenseCategory, on_delete=models.CASCADE, 
                                related_name='expenses', verbose_name="Kategorija")
+    expense_account = models.ForeignKey(
+        'accounting.ChartOfAccounts',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expense_account_overrides',
+        verbose_name='Rashodno konto (override)',
+    )
+    expense_account_source = models.CharField(
+        max_length=32,
+        choices=ExpenseAccountSource.choices,
+        default=ExpenseAccountSource.CATEGORY_DEFAULT,
+        verbose_name='Izvor rashodnog konta',
+    )
     supplier = models.ForeignKey(
         'partners.Partner',
         on_delete=models.CASCADE,
@@ -244,8 +280,17 @@ class Expense(TenantMixin, models.Model):
             raise ValidationError({
                 'paid_by': 'Platitelj je obavezan za privatno podmirenje plaćenog troška.',
             })
+        if self.category_id and self.category.tenant_id != self.tenant_id:
+            raise ValidationError({'category': 'Vrsta troška ne pripada istom tenantu.'})
+        if self.expense_account_id:
+            account = self.expense_account
+            if account.tenant_id != self.tenant_id:
+                raise ValidationError({'expense_account': 'Konto ne pripada istom tenantu.'})
+            if not account.is_active or not account.is_postable:
+                raise ValidationError({'expense_account': 'Konto mora biti aktivno i knjiživo.'})
 
     def save(self, *args, **kwargs):
+        self._reject_locked_accounting_input_changes(kwargs.get('update_fields'))
         private_methods = {SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH}
         if self.settlement_method in private_methods and self.status == 'paid':
             if self.reimbursement_status == ReimbursementStatus.NOT_REQUIRED:
@@ -253,6 +298,42 @@ class Expense(TenantMixin, models.Model):
         elif self.settlement_method not in private_methods:
             self.reimbursement_status = ReimbursementStatus.NOT_REQUIRED
         super().save(*args, **kwargs)
+
+    def _reject_locked_accounting_input_changes(self, update_fields) -> None:
+        if not self.pk:
+            return
+        previous = (
+            type(self).all_objects.filter(pk=self.pk)
+            .values('status', 'category_id', 'expense_account_id', 'expense_account_source', 'posting_profile')
+            .first()
+        )
+        if previous is None or previous['status'] == 'draft':
+            return
+        tracked = {
+            'category_id': 'category',
+            'expense_account_id': 'expense_account',
+            'expense_account_source': 'expense_account_source',
+            'posting_profile': 'posting_profile',
+        }
+        if update_fields is not None:
+            update_names = set(update_fields)
+            relevant = [
+                field for field, name in tracked.items()
+                if field in update_names or name in update_names
+            ]
+            if not relevant:
+                return
+        changed = {}
+        if previous['category_id'] != self.category_id:
+            changed['category'] = 'Vrsta troška se ne može mijenjati nakon odobrenja.'
+        if previous['expense_account_id'] != self.expense_account_id:
+            changed['expense_account'] = 'Rashodno konto se ne može mijenjati nakon odobrenja.'
+        if previous['expense_account_source'] != self.expense_account_source:
+            changed['expense_account_source'] = 'Izvor konta se ne može mijenjati nakon odobrenja.'
+        if previous['posting_profile'] != self.posting_profile:
+            changed['posting_profile'] = 'Posting profil se ne može mijenjati nakon odobrenja.'
+        if changed:
+            raise ValidationError(changed)
 
 
 class ExpenseAttachment(TenantMixin, models.Model):

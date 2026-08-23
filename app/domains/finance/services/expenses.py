@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from django.db import transaction
+from decimal import Decimal
 
-from accounting.services.posting import post_document
-from expenses.models import Expense, SettlementMethod
+from django.db import transaction
+from django.http import Http404
+
+from accounting.services.posting import build_document_posting_plan, post_document
+from domains.finance.services.account_resolver import (
+    load_postable_account,
+    load_tenant_category,
+)
+from expenses.models import Expense, ExpenseAccountSource, SettlementMethod
 
 # Sentinel: omit ``settlement_method`` → keep legacy fill-in (blank → business_account).
 _USE_EXISTING_SETTLEMENT_DEFAULT = object()
+_OMIT = object()
 
 
 class ExpenseApproveBadRequest(Exception):
@@ -25,6 +33,21 @@ class ExpenseApproveConflict(Exception):
         self.detail = detail
 
 
+def _money(value) -> str:
+    return f'{Decimal(value):.2f}'
+
+
+def _account_ref(account) -> dict | None:
+    if account is None:
+        return None
+    return {
+        'id': account.pk,
+        'code': account.account_code,
+        'name': account.account_name,
+        'active': account.is_active,
+    }
+
+
 def expense_dto(expense: Expense) -> dict:
     return {
         'id': expense.pk,
@@ -35,9 +58,104 @@ def expense_dto(expense: Expense) -> dict:
         'expense_date': expense.expense_date.isoformat() if expense.expense_date else None,
         'due_date': expense.due_date.isoformat() if expense.due_date else None,
         'supplier_id': expense.supplier_id,
+        'category_id': expense.category_id,
+        'expense_account_id': expense.expense_account_id,
+        'expense_account_source': expense.expense_account_source,
         'settlement_method': expense.settlement_method or '',
         'approved_by_id': expense.approved_by_id,
     }
+
+
+def serialize_document_posting_plan(expense: Expense, plan) -> dict:
+    """Map ``build_document_posting_plan`` (+ expense identity) to a preview DTO.
+
+    Does not resolve accounts. ``plan`` is the only source of GL lines.
+    """
+    category = getattr(expense, 'category', None)
+    resolved_account = plan.expense_account if plan is not None else expense.expense_account
+    lines = []
+    if plan is not None:
+        for line in plan.lines:
+            lines.append({
+                'amount_field': line.amount_field,
+                'description': line.description,
+                'amount': _money(line.amount),
+                'debit': _account_ref(line.debit_account),
+                'credit': _account_ref(line.credit_account),
+            })
+    return {
+        'category': (
+            {'id': category.pk, 'name': category.name} if category is not None else None
+        ),
+        'expense_account': _account_ref(resolved_account),
+        'account_source': plan.account_source if plan is not None else expense.expense_account_source,
+        'warnings': list(plan.warnings) if plan is not None else [],
+        'can_approve': (
+            expense.status == 'draft'
+            and expense.supplier_id is not None
+            and plan is not None
+        ),
+        'lines': lines,
+    }
+
+
+def posting_preview(*, tenant, expense_id: int) -> dict:
+    expense = (
+        Expense.all_objects.filter(tenant=tenant, pk=expense_id)
+        .select_related('category', 'category__default_account', 'expense_account', 'supplier')
+        .first()
+    )
+    if expense is None:
+        raise Http404()
+    plan = build_document_posting_plan(tenant, expense, 'expense_approved')
+    return serialize_document_posting_plan(expense, plan)
+
+
+@transaction.atomic
+def update_draft_expense_posting(
+    *,
+    tenant,
+    expense_id: int,
+    category_id=_OMIT,
+    expense_account_id=_OMIT,
+) -> dict:
+    expense = (
+        Expense.all_objects.select_for_update(of=('self',))
+        .filter(tenant=tenant, pk=expense_id)
+        .select_related('category', 'expense_account')
+        .first()
+    )
+    if expense is None:
+        raise Http404()
+    if expense.status != 'draft':
+        raise ExpenseApproveConflict(
+            'not_draft',
+            'Vrsta troška i konto mogu se mijenjati samo dok je nalog u nacrtu.',
+        )
+    if category_id is _OMIT and expense_account_id is _OMIT:
+        raise ExpenseApproveBadRequest('empty_patch', 'Potrebna je category_id ili expense_account_id.')
+
+    if category_id is not _OMIT:
+        expense.category = load_tenant_category(tenant, category_id)
+        if expense.expense_account_id is None:
+            expense.expense_account_source = ExpenseAccountSource.CATEGORY_DEFAULT
+
+    if expense_account_id is not _OMIT:
+        if expense_account_id is None:
+            expense.expense_account = None
+            expense.expense_account_source = ExpenseAccountSource.CATEGORY_DEFAULT
+        else:
+            expense.expense_account = load_postable_account(tenant, expense_account_id)
+            expense.expense_account_source = ExpenseAccountSource.MANUAL_OVERRIDE
+
+    expense.save(update_fields=[
+        'category',
+        'expense_account',
+        'expense_account_source',
+        'updated_at',
+    ])
+    expense.refresh_from_db()
+    return expense_dto(expense)
 
 
 @transaction.atomic

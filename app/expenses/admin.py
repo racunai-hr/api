@@ -124,11 +124,11 @@ class ExpensePayerAdmin(TenantAdminMixin, admin.ModelAdmin):
 class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
         'expense_number', 'status', 'paid_by', 'settlement_method', 'reimbursement_status',
-        'amount', 'currency', 'supplier', 'category', 'expense_date',
+        'amount', 'currency', 'supplier', 'category', 'posting_profile', 'expense_date',
     )
     list_filter = (
         'status', 'paid_by', 'settlement_method', 'reimbursement_status',
-        'source', 'payment_method', 'category', 'currency', 'expense_date',
+        'source', 'payment_method', 'category', 'posting_profile', 'currency', 'expense_date',
     )
     search_fields = ('expense_number', 'description', 'supplier__name', 'receipt_number')
     date_hierarchy = 'expense_date'
@@ -147,7 +147,10 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     fieldsets = (
         ('Osnovni podaci', {
-            'fields': ('expense_number', 'status', 'source', 'category', 'supplier')
+            'fields': (
+                'expense_number', 'status', 'source', 'category', 'posting_profile', 'supplier',
+                'expense_account', 'expense_account_source',
+            )
         }),
         ('Plaćanje dobavljaču', {
             'fields': ('payment_method',),

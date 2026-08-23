@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
@@ -57,6 +58,7 @@ DEFAULT_POSTING_RULES = [
         'amount_field': 'net_amount',
         'priority': 10,
         'use_analytic': True,
+        'condition': {'posting_profile': ['opex']},
     },
     {
         'name': 'Odobren trošak — pretporez',
@@ -66,7 +68,17 @@ DEFAULT_POSTING_RULES = [
         'amount_field': 'tax_amount',
         'priority': 20,
         'use_analytic': True,
-        'condition': {'min_tax': '0.01'},
+        'condition': {'min_tax': '0.01', 'posting_profile': ['opex']},
+    },
+    {
+        'name': 'Odobren trošak — nabava imovine / dobavljač',
+        'document_type': 'expense_approved',
+        'debit_account_code': '0373',
+        'credit_account_code': '2201',
+        'amount_field': 'net_amount',
+        'priority': 10,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['asset_purchase']},
     },
     {
         'name': 'Plaćen trošak — dobavljač / platitelj (privatno)',
@@ -102,9 +114,14 @@ DEFAULT_POSTING_RULES = [
 
 
 def ensure_default_posting_rules(tenant) -> int:
+    """Seed missing canonical PostingRule rows only.
+
+    Idempotent create-only: existing tenant rules (any matching name) are never
+    overwritten. Returns the number of newly created rules.
+    """
     created = 0
     for rule in DEFAULT_POSTING_RULES:
-        _, was_created = PostingRule.all_objects.update_or_create(
+        _, was_created = PostingRule.all_objects.get_or_create(
             tenant=tenant,
             document_type=rule['document_type'],
             name=rule['name'],
@@ -127,6 +144,103 @@ def ensure_default_posting_rules(tenant) -> int:
             rule.save(update_fields=['is_active'])
 
     return created
+
+
+@dataclass(frozen=True)
+class PostingPlanLine:
+    debit_account: ChartOfAccounts
+    credit_account: ChartOfAccounts
+    amount: Decimal
+    description: str
+    debit_analytic: object | None
+    credit_analytic: object | None
+    amount_field: str
+
+
+@dataclass(frozen=True)
+class DocumentPostingPlan:
+    document_type: str
+    lines: tuple[PostingPlanLine, ...]
+    warnings: tuple[str, ...]
+    expense_account: ChartOfAccounts | None = None
+    account_source: str | None = None
+
+
+def _active_posting_rules(tenant, document_type: str):
+    rules = PostingRule.all_objects.filter(
+        tenant=tenant,
+        document_type=document_type,
+        is_active=True,
+    ).order_by('priority')
+    if not rules.exists():
+        ensure_default_posting_rules(tenant)
+        rules = PostingRule.all_objects.filter(
+            tenant=tenant,
+            document_type=document_type,
+            is_active=True,
+        ).order_by('priority')
+    return rules
+
+
+def build_document_posting_plan(tenant, source, document_type: str) -> DocumentPostingPlan | None:
+    """Build the GL plan without persisting JournalEntry.
+
+    Preview and ``post_document`` must call this same function.
+    """
+    from domains.finance.services.account_resolver import (
+        is_expense_net_amount_rule,
+        resolve_expense_account,
+    )
+
+    rules = _active_posting_rules(tenant, document_type)
+    lines: list[PostingPlanLine] = []
+    warnings: list[str] = []
+    expense_account = None
+    account_source = None
+
+    for rule in rules:
+        amount = _get_amount(source, rule.amount_field)
+        if amount <= Decimal('0'):
+            continue
+        if not _rule_matches(rule, amount, source):
+            continue
+
+        debit_code, credit_code, debit_analytic, credit_analytic = _resolve_debit_credit_codes(
+            rule, source, tenant, document_type,
+        )
+
+        if is_expense_net_amount_rule(document_type, rule):
+            resolved = resolve_expense_account(source, rule)
+            debit_account = resolved.account
+            expense_account = resolved.account
+            account_source = resolved.source
+            if resolved.warning:
+                warnings.append(resolved.warning)
+        else:
+            debit_account = resolve_account(tenant, debit_code)
+
+        credit_account = resolve_account(tenant, credit_code)
+        lines.append(
+            PostingPlanLine(
+                debit_account=debit_account,
+                credit_account=credit_account,
+                amount=amount,
+                description=rule.name,
+                debit_analytic=debit_analytic,
+                credit_analytic=credit_analytic,
+                amount_field=rule.amount_field,
+            )
+        )
+
+    if not lines:
+        return None
+    return DocumentPostingPlan(
+        document_type=document_type,
+        lines=tuple(lines),
+        warnings=tuple(warnings),
+        expense_account=expense_account,
+        account_source=account_source,
+    )
 
 
 def get_or_create_fiscal_period(tenant, entry_date) -> FiscalPeriod | None:
@@ -177,6 +291,16 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
         settlement_method = getattr(source, 'settlement_method', '') or ''
         allowed = settlement_methods if isinstance(settlement_methods, list) else [settlement_methods]
         if settlement_method not in allowed:
+            return False
+
+    posting_profiles = condition.get('posting_profile')
+    if posting_profiles is not None:
+        from expenses.models import ExpensePostingProfile
+        source_profile = getattr(source, 'posting_profile', None) or ExpensePostingProfile.OPEX
+        allowed_profiles = (
+            posting_profiles if isinstance(posting_profiles, list) else [posting_profiles]
+        )
+        if source_profile not in allowed_profiles:
             return False
 
     return True
@@ -389,54 +513,8 @@ def post_document(
 
     lock_open_vat_period_for_source_mutation(tenant, entry_date)
 
-    rules = PostingRule.all_objects.filter(
-        tenant=tenant,
-        document_type=document_type,
-        is_active=True,
-    ).order_by('priority')
-
-    if not rules.exists():
-        ensure_default_posting_rules(tenant)
-        rules = PostingRule.all_objects.filter(
-            tenant=tenant,
-            document_type=document_type,
-            is_active=True,
-        ).order_by('priority')
-
-    lines_data = []
-
-    for rule in rules:
-        amount = _get_amount(source, rule.amount_field)
-        if amount <= Decimal('0'):
-            continue
-        if not _rule_matches(rule, amount, source):
-            continue
-
-        debit_code, credit_code, debit_analytic, credit_analytic = _resolve_debit_credit_codes(
-            rule, source, tenant, document_type,
-        )
-
-        if document_type == 'expense_approved' and rule.debit_account_code == '4120':
-            category = getattr(source, 'category', None)
-            if category and getattr(category, 'default_account_id', None):
-                debit_account = category.default_account
-            else:
-                debit_account = resolve_account(tenant, debit_code)
-        else:
-            debit_account = resolve_account(tenant, debit_code)
-
-        credit_account = resolve_account(tenant, credit_code)
-
-        lines_data.append({
-            'debit_account': debit_account,
-            'credit_account': credit_account,
-            'amount': amount,
-            'description': rule.name,
-            'debit_analytic': debit_analytic,
-            'credit_analytic': credit_analytic,
-        })
-
-    if not lines_data:
+    plan = build_document_posting_plan(tenant, source, document_type)
+    if plan is None:
         return None
 
     desc = description or f"{marker} {source}"
@@ -454,22 +532,22 @@ def post_document(
         created_by=user,
     )
 
-    for line in lines_data:
+    for line in plan.lines:
         JournalEntryLine.objects.create(
             journal_entry=entry,
-            account=line['debit_account'],
-            analytic_account=line['debit_analytic'],
-            description=line['description'],
-            debit_amount=line['amount'],
+            account=line.debit_account,
+            analytic_account=line.debit_analytic,
+            description=line.description,
+            debit_amount=line.amount,
             credit_amount=Decimal('0'),
         )
         JournalEntryLine.objects.create(
             journal_entry=entry,
-            account=line['credit_account'],
-            analytic_account=line['credit_analytic'],
-            description=line['description'],
+            account=line.credit_account,
+            analytic_account=line.credit_analytic,
+            description=line.description,
             debit_amount=Decimal('0'),
-            credit_amount=line['amount'],
+            credit_amount=line.amount,
         )
 
     if auto_post:

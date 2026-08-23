@@ -107,6 +107,9 @@ class ConfirmInvoiceImportSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     iban = serializers.CharField(required=False, allow_blank=True)
     duplicate_override = serializers.BooleanField(required=False)
+    category_id = serializers.IntegerField(required=False, allow_null=True)
+    expense_account_id = serializers.IntegerField(required=False, allow_null=True)
+    remember_category_for_partner = serializers.BooleanField(required=False)
 
 
 class EracunRejectionRequestSerializer(serializers.Serializer):
@@ -136,3 +139,26 @@ class EracunRejectionResponseSerializer(serializers.Serializer):
     status = serializers.CharField()
     e_reporting = EracunRejectionEReportingSerializer()
     lifecycle = EracunRejectionLifecycleSerializer()
+
+
+class ExpenseCategoryAccountRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    active = serializers.BooleanField()
+
+
+class ExpenseCategorySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    is_active = serializers.BooleanField()
+    default_account = ExpenseCategoryAccountRefSerializer(allow_null=True)
+
+
+class ExpenseCategoryListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = ExpenseCategorySerializer(many=True)
+
+
+class ExpenseCategoryPatchSerializer(serializers.Serializer):
+    default_account_id = serializers.IntegerField(allow_null=True)

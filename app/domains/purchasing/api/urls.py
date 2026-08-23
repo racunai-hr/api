@@ -1,6 +1,8 @@
 from django.urls import path
 
 from domains.purchasing.api.views import (
+    ExpenseCategoryDetailView,
+    ExpenseCategoryListView,
     ExpenseEracunRejectionView,
     InvoiceImportApplyPartnerUpdatesView,
     InvoiceImportConfirmView,
@@ -46,6 +48,16 @@ urlpatterns = [
         'purchasing/invoices/import/<int:pk>/discard/',
         InvoiceImportDiscardView.as_view(),
         name='purchasing-invoice-import-discard',
+    ),
+    path(
+        'purchasing/expense-categories/',
+        ExpenseCategoryListView.as_view(),
+        name='purchasing-expense-category-list',
+    ),
+    path(
+        'purchasing/expense-categories/<int:pk>/',
+        ExpenseCategoryDetailView.as_view(),
+        name='purchasing-expense-category-detail',
     ),
     path(
         'purchasing/expenses/<int:pk>/eracun-rejection/',

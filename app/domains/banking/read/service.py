@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import Http404
 
 from banking.models import BankImportRun, BankStatement, BankSyncRun, BankTransaction
@@ -156,6 +156,14 @@ def list_transactions(tenant, filters: TransactionListFilters) -> dict:
             qs = qs.filter(transaction_date__gte=filters.date_from)
         if filters.date_to:
             qs = qs.filter(transaction_date__lte=filters.date_to)
+        if filters.search:
+            term = filters.search
+            qs = qs.filter(
+                Q(description__icontains=term)
+                | Q(counterparty_name__icontains=term)
+                | Q(reference__icontains=term)
+                | Q(external_id__icontains=term)
+            )
         total, page_rows = _paginate(qs, filters.page, filters.page_size)
         return _list_envelope(
             as_of=as_of,

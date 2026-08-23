@@ -117,6 +117,9 @@ class ExpenseApproveResponseSerializer(serializers.Serializer):
     expense_date = serializers.CharField(allow_null=True)
     due_date = serializers.CharField(allow_null=True)
     supplier_id = serializers.IntegerField(allow_null=True)
+    category_id = serializers.IntegerField(allow_null=True)
+    expense_account_id = serializers.IntegerField(allow_null=True)
+    expense_account_source = serializers.CharField(allow_blank=True)
     settlement_method = serializers.CharField(allow_blank=True)
     approved_by_id = serializers.IntegerField(allow_null=True)
 
@@ -217,3 +220,115 @@ JOURNAL_ENTRY_LIST_PARAMS = [
         description='Page size (default 20, max 100)',
     ),
 ]
+
+
+class PartnerStatementAmountsSerializer(serializers.Serializer):
+    debit = money_field()
+    credit = money_field()
+    balance = money_field()
+
+
+class PartnerStatementRowSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    date = serializers.CharField()
+    debit = money_field()
+    credit = money_field()
+    balance = money_field()
+    label = serializers.CharField(required=False)
+    direction = serializers.CharField(required=False)
+    source_type = serializers.CharField(required=False)
+    source_id = serializers.IntegerField(required=False)
+    source_label = serializers.CharField(required=False)
+    document_type_label = serializers.CharField(required=False)
+    closing_kind = serializers.CharField(required=False)
+    subledger_item_id = serializers.IntegerField(required=False)
+    allocation_id = serializers.IntegerField(required=False)
+    journal_entry_id = serializers.IntegerField(required=False)
+    entry_number = serializers.CharField(required=False)
+
+
+class PartnerStatementSerializer(serializers.Serializer):
+    partner_id = serializers.IntegerField()
+    year = serializers.IntegerField()
+    available_years = serializers.ListField(child=serializers.IntegerField())
+    currency = serializers.CharField()
+    direction = serializers.CharField()
+    opening_balance = PartnerStatementAmountsSerializer()
+    rows = PartnerStatementRowSerializer(many=True)
+    closing_balance = PartnerStatementAmountsSerializer()
+
+
+PARTNER_STATEMENT_PARAMS = [
+    OpenApiParameter(
+        name='year',
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description='Calendar year. Defaults to current year if available, else latest.',
+    ),
+    OpenApiParameter(
+        name='direction',
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        enum=['all', 'receivable', 'payable'],
+        description='Filter rows by AR/AP direction (default all).',
+    ),
+]
+
+
+class AccountRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    active = serializers.BooleanField()
+
+
+class ChartOfAccountsListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = AccountRefSerializer(many=True)
+
+
+CHART_OF_ACCOUNTS_PARAMS = [
+    OpenApiParameter(
+        name='postable',
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description='v1 vraća samo knjiživa konta; 1 je zadano.',
+    ),
+    OpenApiParameter(
+        name='search',
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description='Filter po šifri ili nazivu konta.',
+    ),
+]
+
+
+class ExpenseCategoryRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class PostingPlanLineSerializer(serializers.Serializer):
+    amount_field = serializers.CharField()
+    description = serializers.CharField()
+    amount = money_field()
+    debit = AccountRefSerializer()
+    credit = AccountRefSerializer()
+
+
+class ExpensePostingPreviewSerializer(serializers.Serializer):
+    category = ExpenseCategoryRefSerializer(allow_null=True)
+    expense_account = AccountRefSerializer(allow_null=True)
+    account_source = serializers.CharField(allow_null=True)
+    warnings = serializers.ListField(child=serializers.CharField())
+    can_approve = serializers.BooleanField()
+    lines = PostingPlanLineSerializer(many=True)
+
+
+class ExpenseDraftPatchSerializer(serializers.Serializer):
+    category_id = serializers.IntegerField(required=False)
+    expense_account_id = serializers.IntegerField(required=False, allow_null=True)

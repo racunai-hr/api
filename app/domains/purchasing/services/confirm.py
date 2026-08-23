@@ -15,10 +15,10 @@ from domains.purchasing.services.exceptions import (
     PartnerRequired,
 )
 from domains.purchasing.services.invoice_import import _apply_business_duplicate, _hard_duplicate
+from domains.finance.services.posting_suggestions import resolve_confirm_posting_inputs
 from expenses.models import (
     Expense,
     ExpenseAttachment,
-    ExpenseCategory,
     ExpenseImportMetadata,
     ExpenseSource,
     IncomingInvoiceImport,
@@ -27,18 +27,12 @@ from expenses.services.numbering import assign_expense_number
 from partners.models import Partner
 
 
-def _default_category(tenant) -> ExpenseCategory:
-    category, _ = ExpenseCategory.all_objects.get_or_create(
-        tenant=tenant,
-        name='Ostalo',
-        defaults={'description': 'Ostali troškovi'},
-    )
-    return category
-
-
 def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None = None) -> dict:
     payload = dict(data or {})
     override = bool(payload.pop('duplicate_override', False))
+    category_id = payload.pop('category_id', None)
+    expense_account_id = payload.pop('expense_account_id', None)
+    remember = bool(payload.pop('remember_category_for_partner', False))
 
     with transaction.atomic():
         run = (
@@ -82,12 +76,22 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             partner.partner_type = 'both'
             partner.save(update_fields=['partner_type'])
 
+        category, expense_account, account_source = resolve_confirm_posting_inputs(
+            tenant=tenant,
+            partner=partner,
+            category_id=category_id,
+            expense_account_id=expense_account_id,
+            remember_category_for_partner=remember,
+        )
+
         expense = Expense.all_objects.create(
             tenant=tenant,
             expense_number=assign_expense_number(tenant, year=values['issue_date'].year),
             source=ExpenseSource.OCR,
             status='draft',
-            category=_default_category(tenant),
+            category=category,
+            expense_account=expense_account,
+            expense_account_source=account_source,
             supplier=partner,
             amount=values['amount'],
             tax_amount=values['tax_amount'] or 0,

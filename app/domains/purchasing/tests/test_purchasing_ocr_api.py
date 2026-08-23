@@ -184,6 +184,8 @@ class PurchasingOcrApiTests(TestCase):
         self.assertEqual(expense.status, 'draft')
         self.assertEqual(expense.source, 'ocr')
         self.assertEqual(expense.amount, Decimal('125.00'))
+        self.assertEqual(expense.category.name, 'Ostalo')
+        self.assertIsNone(expense.expense_account_id)
         ct = ContentType.objects.get_for_model(Expense)
         self.assertFalse(
             JournalEntry.all_objects.filter(
@@ -212,6 +214,39 @@ class PurchasingOcrApiTests(TestCase):
         self.assertEqual(again.status_code, 200)
         self.assertEqual(again.data['confirmed_expense_id'], expense.pk)
         self.assertEqual(Expense.all_objects.filter(tenant=self.tenant, source='ocr').count(), 1)
+
+    def test_confirm_with_category_remembers_kind_not_account(self):
+        response = self._create_import(key='confirm-cat')
+        import_id = response.data['id']
+        created = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/create-partner/',
+            {
+                'name': 'INA d.d.',
+                'tax_number': '27759560625',
+                'address': 'Avenija Veceslava Holjevca 10',
+                'city': 'Zagreb',
+                'postal_code': '10000',
+                'country': 'Hrvatska',
+                'iban': 'HR1210010051863000160',
+            },
+            format='json',
+        )
+        self.assertEqual(created.status_code, 200)
+        telekom = ExpenseCategory.all_objects.create(tenant=self.tenant, name='Telekomunikacije')
+        confirmed = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/confirm/',
+            {
+                'category_id': telekom.pk,
+                'remember_category_for_partner': True,
+            },
+            format='json',
+        )
+        self.assertEqual(confirmed.status_code, 200)
+        expense = Expense.all_objects.get(pk=confirmed.data['confirmed_expense_id'])
+        self.assertEqual(expense.category_id, telekom.pk)
+        self.assertIsNone(expense.expense_account_id)
+        partner = Partner.all_objects.get(tenant=self.tenant, tax_number='27759560625')
+        self.assertEqual(partner.default_expense_category_id, telekom.pk)
 
     def test_create_partner_rejects_unknown_country_without_auto_hr(self):
         response = self._create_import(key='country-bad')

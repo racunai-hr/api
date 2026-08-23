@@ -261,6 +261,7 @@ TRANSACTION_PARAMS = [
     ),
     OpenApiParameter('date_from', OpenApiTypes.DATE, OpenApiParameter.QUERY),
     OpenApiParameter('date_to', OpenApiTypes.DATE, OpenApiParameter.QUERY),
+    OpenApiParameter('search', OpenApiTypes.STR, OpenApiParameter.QUERY),
     PAGE,
     PAGE_SIZE,
 ]
