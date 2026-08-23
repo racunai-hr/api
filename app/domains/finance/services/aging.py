@@ -48,6 +48,19 @@ def _open_subledger_items_qs(tenant, *, direction: str | None = None, partner_id
     return qs.order_by('partner__name', 'due_date', 'id')
 
 
+def _closed_subledger_items_qs(tenant, partner_id: int):
+    """Closed SubledgerItem rows for one partner (history)."""
+    return (
+        SubledgerItem.all_objects.filter(
+            tenant=tenant,
+            partner_id=partner_id,
+            status='closed',
+        )
+        .select_related('partner', 'source_content_type')
+        .order_by('-due_date', '-id')
+    )
+
+
 def _subledger_source_label(item: SubledgerItem) -> str:
     source = item.source
     if source is None:
@@ -61,6 +74,26 @@ def _subledger_source_label(item: SubledgerItem) -> str:
 
 def _money_str(value: Decimal) -> str:
     return f'{value:.2f}'
+
+
+def _serialize_subledger_row(item: SubledgerItem, *, as_of_date: date) -> dict:
+    days_overdue = (as_of_date - item.due_date).days if item.due_date else 0
+    return {
+        'item_id': item.pk,
+        'partner_id': item.partner_id,
+        'partner_name': item.partner.name,
+        'direction': item.direction,
+        'direction_label': item.get_direction_display(),
+        'source_type': item.source_content_type.model,
+        'source_id': item.source_object_id,
+        'source_label': _subledger_source_label(item),
+        'original_amount': _money_str(item.original_amount),
+        'open_amount': _money_str(item.open_amount),
+        'due_date': item.due_date.isoformat() if item.due_date else None,
+        'days_overdue': days_overdue,
+        'aging_bucket': aging_bucket_for_days(days_overdue),
+        'status': item.status,
+    }
 
 
 def subledger_open_items(
@@ -101,11 +134,24 @@ def partner_subledger_items(
     partner_id: int,
     *,
     as_of_date: date | None = None,
+    include_closed: bool = False,
 ) -> dict:
-    """Open subledger rows for one partner (ADR-0022 Finance ownership)."""
+    """Partner subledger: open rows always; closed history optional.
+
+    API contract:
+    - ``closed_count`` is always computed (COUNT of closed SubledgerItem).
+    - ``closed_results`` is ``[]`` unless ``include_closed=True``.
+    """
     if as_of_date is None:
         as_of_date = timezone.localdate()
     rows = subledger_open_items(tenant, partner_id=partner_id, as_of_date=as_of_date)
+    closed_qs = _closed_subledger_items_qs(tenant, partner_id)
+    closed_count = closed_qs.count()
+    closed_results: list[dict] = []
+    if include_closed:
+        closed_results = [
+            _serialize_subledger_row(item, as_of_date=as_of_date) for item in closed_qs
+        ]
     return {
         'as_of_date': as_of_date.isoformat(),
         'partner_id': partner_id,
@@ -119,6 +165,8 @@ def partner_subledger_items(
             }
             for row in rows
         ],
+        'closed_count': closed_count,
+        'closed_results': closed_results,
     }
 
 
@@ -130,6 +178,11 @@ def partner_financial_summary(
     currency: str = 'EUR',
 ) -> dict:
     """AR/AP open + overdue strip for partner card (ADR-0022 §10.1).
+
+    Canonical PartnerFinancialSummary (phase 1): receivables/payables open and
+    overdue from SubledgerItem only. Prepaid/prepayment balances are out of
+    scope until Finance can attribute them to Partner via structured links
+    (not journal reference text).
 
     SubledgerItem has no per-row currency; amounts are treated as the tenant
     accounting currency (default EUR). No FX conversion.

@@ -43,6 +43,22 @@ class PartnerSubledgerListSerializer(serializers.Serializer):
     partner_id = serializers.IntegerField()
     count = serializers.IntegerField()
     results = PartnerSubledgerItemSerializer(many=True)
+    closed_count = serializers.IntegerField()
+    closed_results = PartnerSubledgerItemSerializer(many=True)
+
+
+PARTNER_SUBLEDGER_PARAMS = [
+    OpenApiParameter(
+        name='include_closed',
+        type=OpenApiTypes.BOOL,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description=(
+            'When true, populate closed_results with closed SubledgerItem rows. '
+            'closed_count is always returned.'
+        ),
+    ),
+]
 
 
 class DepositSerializer(serializers.Serializer):

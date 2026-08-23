@@ -120,9 +120,58 @@ class FinancePartnerApiTests(TestCase):
         response = client.get(f'/api/finance/partners/{self.partner.pk}/subledger/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['count'], 2)
+        self.assertEqual(response.data['closed_count'], 0)
+        self.assertEqual(response.data['closed_results'], [])
         empty = client.get(f'/api/finance/partners/{self.other.pk}/subledger/')
         self.assertEqual(empty.status_code, 200)
         self.assertEqual(empty.data['count'], 0)
+        self.assertEqual(empty.data['closed_count'], 0)
+        self.assertEqual(empty.data['closed_results'], [])
+
+    def test_subledger_include_closed(self):
+        ct = ContentType.objects.get_for_model(JournalEntry)
+        today = date.today()
+        je = JournalEntry.all_objects.filter(tenant=self.tenant).first()
+        SubledgerItem.all_objects.create(
+            tenant=self.tenant,
+            partner=self.partner,
+            direction='payable',
+            source_content_type=ct,
+            source_object_id=je.pk + 20_000,
+            journal_entry=je,
+            original_amount=Decimal('250.00'),
+            open_amount=Decimal('0.00'),
+            due_date=today - timedelta(days=30),
+            status='closed',
+        )
+        client = self._client(self.owner)
+
+        default = client.get(f'/api/finance/partners/{self.partner.pk}/subledger/')
+        self.assertEqual(default.status_code, 200)
+        self.assertEqual(default.data['count'], 2)
+        self.assertEqual(default.data['closed_count'], 1)
+        self.assertEqual(default.data['closed_results'], [])
+
+        with_closed = client.get(
+            f'/api/finance/partners/{self.partner.pk}/subledger/',
+            {'include_closed': 'true'},
+        )
+        self.assertEqual(with_closed.status_code, 200)
+        self.assertEqual(with_closed.data['count'], 2)
+        self.assertEqual(with_closed.data['closed_count'], 1)
+        self.assertEqual(len(with_closed.data['closed_results']), 1)
+        closed_row = with_closed.data['closed_results'][0]
+        self.assertEqual(closed_row['status'], 'closed')
+        self.assertEqual(closed_row['open_amount'], '0.00')
+        self.assertEqual(closed_row['original_amount'], '250.00')
+
+        other = client.get(
+            f'/api/finance/partners/{self.other.pk}/subledger/',
+            {'include_closed': 'true'},
+        )
+        self.assertEqual(other.status_code, 200)
+        self.assertEqual(other.data['closed_count'], 0)
+        self.assertEqual(other.data['closed_results'], [])
 
     def test_missing_partner_404(self):
         client = self._client(self.owner)

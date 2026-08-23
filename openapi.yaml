@@ -1839,6 +1839,12 @@ paths:
         schema:
           type: integer
         required: true
+      - in: query
+        name: include_closed
+        schema:
+          type: boolean
+        description: When true, populate closed_results with closed SubledgerItem
+          rows. closed_count is always returned.
       tags:
       - finance
       security:
@@ -5925,8 +5931,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PartnerSubledgerItem'
+        closed_count:
+          type: integer
+          description: Count of closed SubledgerItem rows for this partner (always computed)
+        closed_results:
+          type: array
+          description: Closed rows; empty unless include_closed=true
+          items:
+            $ref: '#/components/schemas/PartnerSubledgerItem'
       required:
       - as_of_date
+      - closed_count
+      - closed_results
       - count
       - partner_id
       - results

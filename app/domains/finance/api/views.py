@@ -15,6 +15,7 @@ from domains.finance.api.authentication import FinanceJWTAuthentication
 from domains.finance.api.permissions import TenantFinanceReadPermission, TenantFinanceWritePermission
 from domains.finance.api.schema import (
     JOURNAL_ENTRY_LIST_PARAMS,
+    PARTNER_SUBLEDGER_PARAMS,
     CreateDepositSerializer,
     CreatePrivateFundsClaimSerializer,
     DepositConflictSerializer,
@@ -152,16 +153,24 @@ class PartnerFinancialSummaryView(_FinanceReadApiView):
         return Response(partner_financial_summary(tenant, pk))
 
 
+def _query_flag_true(value) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 class PartnerSubledgerView(_FinanceReadApiView):
     @extend_schema(
         tags=['finance'],
         operation_id='finance_partner_subledger',
+        parameters=PARTNER_SUBLEDGER_PARAMS,
         responses={200: PartnerSubledgerListSerializer, 401: ERROR_401, 404: ERROR_404},
     )
     def get(self, request, pk: int):
         tenant = _require_tenant(request)
         _require_partner(tenant, pk)
-        return Response(partner_subledger_items(tenant, pk))
+        include_closed = _query_flag_true(request.query_params.get('include_closed'))
+        return Response(partner_subledger_items(tenant, pk, include_closed=include_closed))
 
 
 class DepositListCreateView(APIView):
