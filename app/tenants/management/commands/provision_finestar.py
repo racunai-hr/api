@@ -30,13 +30,40 @@ TAX_RATES = [
     ('Oslobođeno', '0.00', False),
 ]
 
-EXPENSE_CATEGORIES = [
-    ('Hosting i infrastruktura', '4120'),
-    ('Software licence', '4120'),
-    ('Telekomunikacije', '4120'),
-    ('Uredski materijal', '4120'),
-    ('Ostalo', '4120'),
+# Provision-only RRiF mapping (not runtime sentinels). 4120 stays the opex
+# PostingRule fallback; it is not a dump for every FineStar category.
+# Codes must be postable leaves in RRiF-RP2025 (4199 is a parent → 41996).
+FINE_STAR_EXPENSE_CATEGORIES = [
+    ('Hosting i infrastruktura', '41493'),  # Usluge web sjedišta (hosting)
+    ('Software licence', '41491'),          # Usluga najma softvera
+    ('Telekomunikacije', '4100'),           # Troškovi telefona, interneta i sl.
+    ('Uredski materijal', '4010'),          # Uredski materijal
+    ('Bankovne usluge / platni promet', '4650'),  # Troškovi platnog prometa
+    ('Ostalo', '41996'),                    # Troškovi ostalih usluga
 ]
+EXPENSE_CATEGORIES = FINE_STAR_EXPENSE_CATEGORIES
+
+
+def apply_finestar_expense_categories(tenant) -> list[tuple[str, str | None]]:
+    applied: list[tuple[str, str | None]] = []
+    for cat_name, account_code in FINE_STAR_EXPENSE_CATEGORIES:
+        account = ChartOfAccounts.all_objects.filter(
+            tenant=tenant,
+            account_code=account_code,
+            is_active=True,
+            is_postable=True,
+        ).first()
+        ExpenseCategory.all_objects.update_or_create(
+            tenant=tenant,
+            name=cat_name,
+            defaults={
+                'default_account': account,
+                'is_active': True,
+            },
+        )
+        applied.append((cat_name, account.account_code if account is not None else None))
+    return applied
+
 
 RESPONSIBLE_PERSON = {
     'title': 'director',
@@ -110,19 +137,11 @@ class Command(BaseCommand):
 
         call_command('setup_accounting', tenant=slug)
 
-        for cat_name, account_code in EXPENSE_CATEGORIES:
-            account = ChartOfAccounts.all_objects.filter(
-                tenant=tenant,
-                account_code=account_code,
-            ).first()
-            ExpenseCategory.all_objects.update_or_create(
-                tenant=tenant,
-                name=cat_name,
-                defaults={
-                    'default_account': account,
-                    'is_active': True,
-                },
-            )
+        for cat_name, account_code in apply_finestar_expense_categories(tenant):
+            if account_code is None:
+                self.stdout.write(self.style.WARNING(
+                    f'Kategorija {cat_name}: RRiF konto nije knjiživo na tenantu'
+                ))
 
         self.stdout.write(
             'DIRECT konfiguracija: provjerite Admin → DIRECT eRačun konfiguracije '
