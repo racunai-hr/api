@@ -43,6 +43,41 @@ FINE_STAR_EXPENSE_CATEGORIES = [
 ]
 EXPENSE_CATEGORIES = FINE_STAR_EXPENSE_CATEGORIES
 
+# Classification-only. Seed identity is `code`; default_account stays NULL.
+# Do not map RRiF here — posting lifecycle is unchanged.
+FINE_STAR_VEHICLE_EXPENSE_CATEGORIES = [
+    ('vehicle_fuel', 'Gorivo'),
+    ('vehicle_service', 'Servis i održavanje'),
+    ('vehicle_repairs', 'Popravci'),
+    ('vehicle_parts', 'Rezervni dijelovi'),
+    ('vehicle_tires', 'Gume'),
+    ('vehicle_insurance_compulsory', 'Obvezno auto osiguranje'),
+    ('vehicle_insurance_casco', 'Kasko osiguranje'),
+    ('vehicle_registration', 'Registracija vozila'),
+    ('vehicle_technical_inspection', 'Tehnički pregled'),
+    ('vehicle_road_fees', 'Cestarine'),
+    ('vehicle_parking', 'Parking'),
+    ('vehicle_washing', 'Pranje i čišćenje'),
+    ('vehicle_rental', 'Najam/leasing vozila'),
+    ('vehicle_interest', 'Kamate i financijski troškovi vozila'),
+    ('vehicle_other', 'Ostali troškovi vozila'),
+]
+
+
+def apply_finestar_vehicle_expense_categories(tenant) -> list[str]:
+    applied: list[str] = []
+    for code, name in FINE_STAR_VEHICLE_EXPENSE_CATEGORIES:
+        ExpenseCategory.all_objects.update_or_create(
+            tenant=tenant,
+            code=code,
+            defaults={
+                'name': name,
+                'is_active': True,
+            },
+        )
+        applied.append(code)
+    return applied
+
 
 def apply_finestar_expense_categories(tenant) -> list[tuple[str, str | None]]:
     applied: list[tuple[str, str | None]] = []
@@ -62,6 +97,7 @@ def apply_finestar_expense_categories(tenant) -> list[tuple[str, str | None]]:
             },
         )
         applied.append((cat_name, account.account_code if account is not None else None))
+    apply_finestar_vehicle_expense_categories(tenant)
     return applied
 
 

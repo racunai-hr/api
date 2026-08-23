@@ -23,6 +23,7 @@ def category_dto(category: ExpenseCategory) -> dict:
     return {
         'id': category.pk,
         'name': category.name,
+        'code': category.code,
         'is_active': category.is_active,
         'default_account': _account_ref(category.default_account),
     }

@@ -109,6 +109,9 @@ class ExpensePostingApiTests(TestCase):
         self.assertEqual(listed.status_code, 200)
         names = {row['name'] for row in listed.data['results']}
         self.assertEqual(names, {'Ostalo', 'Telekomunikacije'})
+        by_name = {row['name']: row for row in listed.data['results']}
+        self.assertIsNone(by_name['Ostalo']['code'])
+        self.assertIsNone(by_name['Telekomunikacije']['code'])
         patched = self.client.patch(
             f'/api/purchasing/expense-categories/{self.ostalo.pk}/',
             {'default_account_id': self.account_4123.pk},
@@ -118,6 +121,28 @@ class ExpensePostingApiTests(TestCase):
         self.assertEqual(patched.data['default_account']['code'], '4123')
         self.ostalo.refresh_from_db()
         self.assertEqual(self.ostalo.default_account_id, self.account_4123.pk)
+
+    def test_expense_categories_expose_code_read_only(self):
+        category = ExpenseCategory.all_objects.create(
+            tenant=self.tenant,
+            name='Obvezno auto osiguranje',
+            code='vehicle_insurance_compulsory',
+        )
+        listed = self.client.get('/api/purchasing/expense-categories/')
+        self.assertEqual(listed.status_code, 200)
+        by_id = {row['id']: row for row in listed.data['results']}
+        self.assertEqual(by_id[category.pk]['code'], 'vehicle_insurance_compulsory')
+        self.assertEqual(by_id[self.ostalo.pk]['code'], None)
+        patched = self.client.patch(
+            f'/api/purchasing/expense-categories/{category.pk}/',
+            {'code': 'hacked', 'default_account_id': None},
+            format='json',
+        )
+        self.assertEqual(patched.status_code, 200)
+        self.assertEqual(patched.data['code'], 'vehicle_insurance_compulsory')
+        category.refresh_from_db()
+        self.assertEqual(category.code, 'vehicle_insurance_compulsory')
+        self.assertIsNone(category.default_account_id)
 
     def test_preview_serializes_builder_plan_only(self):
         expense = self._expense(category=self.telekom)

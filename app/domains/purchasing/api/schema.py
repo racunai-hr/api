@@ -151,6 +151,7 @@ class ExpenseCategoryAccountRefSerializer(serializers.Serializer):
 class ExpenseCategorySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
+    code = serializers.CharField(allow_null=True)
     is_active = serializers.BooleanField()
     default_account = ExpenseCategoryAccountRefSerializer(allow_null=True)
 

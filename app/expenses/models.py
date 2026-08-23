@@ -30,6 +30,13 @@ def expense_attachment_upload_to(instance, filename):
 
 class ExpenseCategory(TenantMixin, models.Model):
     name = models.CharField(max_length=100, verbose_name="Naziv kategorije")
+    code = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        verbose_name="Šifra kategorije",
+        help_text="Stabilni strojni identitet vrste troška. Bez koda je NULL, ne prazan string.",
+    )
     description = models.TextField(blank=True, verbose_name="Opis")
     default_account = models.ForeignKey(
         'accounting.ChartOfAccounts',
@@ -48,7 +55,21 @@ class ExpenseCategory(TenantMixin, models.Model):
         ordering = ['name']
         constraints = [
             models.UniqueConstraint(fields=['tenant', 'name'], name='unique_expense_category_per_tenant'),
+            models.UniqueConstraint(
+                fields=['tenant', 'code'],
+                condition=models.Q(code__isnull=False),
+                name='unique_expense_category_code_per_tenant',
+            ),
+            models.CheckConstraint(
+                check=~models.Q(code=''),
+                name='expense_category_code_not_empty_string',
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.code == '':
+            self.code = None
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

@@ -37,9 +37,9 @@ from .services.import_service import import_expense_rows
 
 @admin.register(ExpenseCategory)
 class ExpenseCategoryAdmin(TenantAdminMixin, admin.ModelAdmin):
-    list_display = ('name', 'default_account', 'is_active', 'created_at')
+    list_display = ('name', 'code', 'default_account', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'code', 'description')
 
 
 class ExpenseAttachmentInline(admin.TabularInline):

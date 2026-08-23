@@ -5111,6 +5111,9 @@ components:
           type: integer
         name:
           type: string
+        code:
+          type: string
+          nullable: true
         is_active:
           type: boolean
         default_account:
@@ -5118,6 +5121,7 @@ components:
           - $ref: '#/components/schemas/ExpenseCategoryAccountRef'
           nullable: true
       required:
+      - code
       - default_account
       - id
       - is_active

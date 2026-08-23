@@ -105,7 +105,10 @@ class FineStarExpensePostingFlowTests(TestCase):
     def test_seeded_categories_use_distinct_postable_rrif_accounts(self):
         mapped = {
             cat.name: cat.default_account.account_code
-            for cat in ExpenseCategory.all_objects.filter(tenant=self.tenant)
+            for cat in ExpenseCategory.all_objects.filter(
+                tenant=self.tenant,
+                name__in=self.expected,
+            )
         }
         self.assertEqual(mapped, self.expected)
         self.assertNotEqual(set(mapped.values()), {'4120'})
