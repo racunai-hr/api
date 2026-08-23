@@ -120,6 +120,38 @@ class OpenApiContractTests(SimpleTestCase):
                         f'{method.upper()} {path} missing bearerAuth security (got {security!r})',
                     )
 
+    def test_assets_read_operations_in_generated_schema(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        paths = schema.get('paths') or {}
+        expected = (
+            '/api/assets/fixed-assets/',
+            '/api/assets/fixed-assets/{id}/',
+            '/api/assets/fixed-assets/{id}/depreciation-schedule/',
+        )
+        list_param_names = {'status', 'origin', 'search', 'page'}
+        for path in expected:
+            operations = paths.get(path) or {}
+            op = operations.get('get')
+            self.assertIsInstance(op, dict, f'GET {path} missing from generated schema')
+            self.assertIn('assets', op.get('tags') or [])
+            self.assertIn('200', op.get('responses') or {})
+            security = op.get('security')
+            self.assertTrue(
+                security and any('bearerAuth' in item for item in security),
+                f'GET {path} missing bearerAuth (got {security!r})',
+            )
+            self.assertNotIn('403', op.get('responses') or {})
+            if path == '/api/assets/fixed-assets/':
+                names = {
+                    param.get('name')
+                    for param in (op.get('parameters') or [])
+                    if isinstance(param, dict)
+                }
+                self.assertTrue(
+                    list_param_names <= names,
+                    f'List params missing {list_param_names - names}',
+                )
+
     def test_banking_documents_and_tax_do_not_advertise_403(self):
         schema = SchemaGenerator().get_schema(request=None, public=True)
         for path, operations in (schema.get('paths') or {}).items():

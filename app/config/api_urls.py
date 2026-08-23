@@ -18,6 +18,7 @@ urlpatterns = [
     path('', include('domains.banking.api.urls')),
     path('', include('domains.partners.api.urls')),
     path('', include('domains.finance.api.urls')),
+    path('assets/', include('domains.assets.api.urls')),
     path('', include('domains.purchasing.api.urls')),
     path('', include('domains.tax.api.urls')),
     path('auth/token/', AuthTokenObtainPairView.as_view(), name='token_obtain_pair'),

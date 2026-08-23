@@ -32,6 +32,10 @@ class FinanceJWTAuthenticationExtension(_BearerJWTScheme):
     target_class = 'domains.finance.api.authentication.FinanceJWTAuthentication'
 
 
+class AssetsJWTAuthenticationExtension(_BearerJWTScheme):
+    target_class = 'domains.assets.api.authentication.AssetsJWTAuthentication'
+
+
 class PurchasingJWTAuthenticationExtension(_BearerJWTScheme):
     target_class = 'domains.purchasing.api.authentication.PurchasingJWTAuthentication'
 

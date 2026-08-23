@@ -3,9 +3,146 @@ info:
   title: računAI API
   version: 1.0.0
   description: Tenant JWT REST ugovor za auth, documents, banking, partners, finance,
-    purchasing i tax. Fiscal/intermediary i AS4 nisu dio ove sheme. openapi.yaml je
-    generirani artefakt — ne uređivati ručno.
+    assets, purchasing i tax. Fiscal/intermediary i AS4 nisu dio ove sheme. openapi.yaml
+    je generirani artefakt — ne uređivati ručno.
 paths:
+  /api/assets/fixed-assets/:
+    get:
+      operationId: assets_fixed_assets_list
+      parameters:
+      - in: query
+        name: origin
+        schema:
+          type: string
+          enum:
+          - opening_balance
+          - purchase
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number (min 1, default 1)
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Filter by name, VIN, or inventory number
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - active
+          - disposed
+          - in_preparation
+      tags:
+      - assets
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFixedAssets'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/assets/fixed-assets/{id}/:
+    get:
+      operationId: assets_fixed_assets_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - assets
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAssetDetail'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/assets/fixed-assets/{id}/depreciation-schedule/:
+    get:
+      operationId: assets_fixed_assets_depreciation_schedule
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - assets
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepreciationScheduleList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/auth/me/:
     get:
       operationId: auth_me_retrieve
@@ -4598,6 +4735,47 @@ components:
       required:
       - count
       - results
+    DepreciationScheduleItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        year:
+          type: integer
+        month:
+          type: integer
+        depreciation_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        accumulated_depreciation:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        book_value_after:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        posted:
+          type: boolean
+        journal_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - accumulated_depreciation
+      - book_value_after
+      - depreciation_amount
+      - id
+      - journal_entry_id
+      - month
+      - posted
+      - year
+    DepreciationScheduleList:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepreciationScheduleItem'
+      required:
+      - results
     DirectionEnum:
       enum:
       - incoming
@@ -5259,6 +5437,102 @@ components:
       required:
       - jir
       - zki
+    FixedAssetDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        inventory_number:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        origin:
+          type: string
+        purchase_date:
+          type: string
+          format: date
+          nullable: true
+        activation_date:
+          type: string
+          format: date
+          nullable: true
+        acquisition_cost:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        accumulated_depreciation:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        current_book_value:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        vin:
+          type: string
+        useful_life_months:
+          type: integer
+          nullable: true
+        depreciation_method:
+          type: string
+        activation_journal_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - accumulated_depreciation
+      - acquisition_cost
+      - activation_date
+      - activation_journal_entry_id
+      - current_book_value
+      - depreciation_method
+      - id
+      - inventory_number
+      - name
+      - origin
+      - purchase_date
+      - status
+      - useful_life_months
+      - vin
+    FixedAssetListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        inventory_number:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        origin:
+          type: string
+        purchase_date:
+          type: string
+          format: date
+          nullable: true
+        activation_date:
+          type: string
+          format: date
+          nullable: true
+        acquisition_cost:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        accumulated_depreciation:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        current_book_value:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - accumulated_depreciation
+      - acquisition_cost
+      - activation_date
+      - current_book_value
+      - id
+      - inventory_number
+      - name
+      - origin
+      - purchase_date
+      - status
     ImportRunCreateResponse:
       type: object
       properties:
@@ -5962,6 +6236,24 @@ components:
       - page_size
       - results
       - summary
+    PaginatedFixedAssets:
+      type: object
+      properties:
+        count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixedAssetListItem'
+      required:
+      - count
+      - page
+      - page_size
+      - results
     PaginatedJournalEntries:
       type: object
       properties:
@@ -8021,6 +8313,8 @@ tags:
   description: Partner MDM API (ADR-0022)
 - name: finance
   description: Finance partner projections (ADR-0022)
+- name: assets
+  description: Assets — dugotrajna imovina i amortizacija (ADR-0010)
 - name: purchasing
   description: Purchasing OCR ulaznih računa
 - name: tax
