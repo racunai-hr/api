@@ -116,27 +116,32 @@ DEFAULT_POSTING_RULES = [
 def ensure_default_posting_rules(tenant) -> int:
     """Seed missing canonical PostingRule rows only.
 
-    Idempotent create-only: existing tenant rules (any matching name) are never
-    overwritten. Returns the number of newly created rules.
+    Idempotent create-only: if a rule with the same tenant/document_type/name
+    already exists (one or many), it is left untouched. Returns the number of
+    newly created rules.
     """
     created = 0
     for rule in DEFAULT_POSTING_RULES:
-        _, was_created = PostingRule.all_objects.get_or_create(
+        exists = PostingRule.all_objects.filter(
             tenant=tenant,
             document_type=rule['document_type'],
             name=rule['name'],
-            defaults={
-                'debit_account_code': rule['debit_account_code'],
-                'credit_account_code': rule['credit_account_code'],
-                'amount_field': rule['amount_field'],
-                'priority': rule['priority'],
-                'use_analytic': rule.get('use_analytic', False),
-                'condition': rule.get('condition', {}),
-                'is_active': True,
-            },
+        ).exists()
+        if exists:
+            continue
+        PostingRule.all_objects.create(
+            tenant=tenant,
+            document_type=rule['document_type'],
+            name=rule['name'],
+            debit_account_code=rule['debit_account_code'],
+            credit_account_code=rule['credit_account_code'],
+            amount_field=rule['amount_field'],
+            priority=rule['priority'],
+            use_analytic=rule.get('use_analytic', False),
+            condition=rule.get('condition', {}),
+            is_active=True,
         )
-        if was_created:
-            created += 1
+        created += 1
 
     for rule in PostingRule.all_objects.filter(tenant=tenant, document_type='expense_paid', is_active=True):
         if 'settlement_method' not in (rule.condition or {}):
