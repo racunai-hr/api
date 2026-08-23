@@ -9,8 +9,10 @@ from domains.tax.vehicle.contracts import (
     BenefitInKind,
     CitExceptionMode,
     CitTreatment,
+    EvidenceType,
     LineRuleKind,
     ReasonCode,
+    SupplierVatStatus,
     TaxEvaluationContext,
     TaxEvaluationResult,
     VatExceptionMode,
@@ -115,8 +117,29 @@ def _vat_hard_expected(context: TaxEvaluationContext, rule: AxisRule) -> _VatAxi
     )
 
 
+def input_vat_evidence_sufficient(context: TaxEvaluationContext) -> bool:
+    """True when document facts are enough to continue P3, not a legal pretporez right."""
+    document = context.document
+    return (
+        document.evidence_type == EvidenceType.INVOICE
+        and document.supplier_vat_status == SupplierVatStatus.REGISTERED
+        and context.line.vat_amount > 0
+    )
+
+
+def _input_vat_evidence_contradiction(context: TaxEvaluationContext) -> bool:
+    document = context.document
+    return (
+        document.evidence_type == EvidenceType.INVOICE
+        and document.supplier_vat_status == SupplierVatStatus.EXEMPT
+        and context.line.vat_amount > 0
+    )
+
+
 def _vat_candidate(context: TaxEvaluationContext) -> _VatAxis:
-    if context.line.vat_amount <= 0:
+    if _input_vat_evidence_contradiction(context):
+        return _vat_review(ReasonCode.VAT_EVIDENCE_CONTRADICTION)
+    if not input_vat_evidence_sufficient(context):
         return _vat_review(ReasonCode.VAT_EVIDENCE_INSUFFICIENT)
     vehicle = context.vehicle
     if vehicle.vehicle_class is None:

@@ -12,8 +12,10 @@ from domains.tax.vehicle.contracts import (
     CitExceptionMode,
     CitTreatment,
     DocumentFacts,
+    EvidenceType,
     LineFacts,
     ReasonCode,
+    SupplierVatStatus,
     TaxEvaluationContext,
     VatExceptionMode,
     VatTreatment,
@@ -21,7 +23,7 @@ from domains.tax.vehicle.contracts import (
     VehicleFacts,
     VehicleLineKind,
 )
-from domains.tax.vehicle.evaluator import HALF, ONE, ZERO, evaluate
+from domains.tax.vehicle.evaluator import HALF, ONE, ZERO, evaluate, input_vat_evidence_sufficient
 
 
 def _ctx(
@@ -30,6 +32,7 @@ def _ctx(
     vat_amount: str = '0.00',
     net_amount: str = '10.00',
     vehicle: VehicleFacts | None = None,
+    document: DocumentFacts | None = None,
 ) -> TaxEvaluationContext:
     vat = Decimal(vat_amount)
     net = Decimal(net_amount)
@@ -41,7 +44,14 @@ def _ctx(
             gross_amount=net + vat,
         ),
         vehicle=vehicle or VehicleFacts(),
-        document=DocumentFacts(),
+        document=document or DocumentFacts(),
+    )
+
+
+def _invoice_registered() -> DocumentFacts:
+    return DocumentFacts(
+        evidence_type=EvidenceType.INVOICE,
+        supplier_vat_status=SupplierVatStatus.REGISTERED,
     )
 
 
@@ -171,7 +181,9 @@ class CandidateServiceTests(SimpleTestCase):
     def test_m1_none_with_vat_limits_and_addback(self):
         for kind in self.kinds:
             with self.subTest(kind=kind):
-                result = evaluate(_ctx(kind=kind, vat_amount='4.67', vehicle=_m1()))
+                result = evaluate(
+                    _ctx(kind=kind, vat_amount='4.67', vehicle=_m1(), document=_invoice_registered())
+                )
                 self.assertEqual(result.vat_treatment, VatTreatment.LIMITED_INPUT_VAT)
                 self.assertEqual(result.vat_deductible_ratio, HALF)
                 self.assertEqual(result.cit_treatment, CitTreatment.VEHICLE_50_ADD_BACK)
@@ -184,6 +196,7 @@ class CandidateServiceTests(SimpleTestCase):
                 kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
                 vat_amount='4.67',
                 vehicle=_m1(vat_exc=VatExceptionMode.FULL_DEDUCTION),
+                document=_invoice_registered(),
             )
         )
         self.assertEqual(result.vat_treatment, VatTreatment.FULL_INPUT_VAT)
@@ -201,6 +214,7 @@ class CandidateServiceTests(SimpleTestCase):
                     cit_exception_mode=CitExceptionMode.NONE,
                     benefit_in_kind=BenefitInKind.NONE,
                 ),
+                document=_invoice_registered(),
             )
         )
         self.assertTrue(result.vat_requires_review)
@@ -215,6 +229,7 @@ class CandidateServiceTests(SimpleTestCase):
                 kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
                 vat_amount='0.00',
                 vehicle=_m1(),
+                document=_invoice_registered(),
             )
         )
         self.assertTrue(result.vat_requires_review)
@@ -231,6 +246,7 @@ class CandidateServiceTests(SimpleTestCase):
                     cit_exception_mode=CitExceptionMode.NONE,
                     benefit_in_kind=BenefitInKind.NONE,
                 ),
+                document=_invoice_registered(),
             )
         )
         self.assertTrue(result.vat_requires_review)
@@ -246,6 +262,7 @@ class CandidateServiceTests(SimpleTestCase):
                     vat_exception_mode=VatExceptionMode.NONE,
                     cit_exception_mode=CitExceptionMode.EXCLUDED,
                 ),
+                document=_invoice_registered(),
             )
         )
         self.assertEqual(result.cit_treatment, CitTreatment.EXCLUDED_FROM_VEHICLE_50)
@@ -259,6 +276,7 @@ class CandidateServiceTests(SimpleTestCase):
                 kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
                 vat_amount='4.67',
                 vehicle=_m1(bik=BenefitInKind.APPLIED),
+                document=_invoice_registered(),
             )
         )
         self.assertEqual(result.cit_treatment, CitTreatment.EXCLUDED_FROM_VEHICLE_50)
@@ -275,8 +293,115 @@ class CandidateServiceTests(SimpleTestCase):
                     vehicle_class=VehicleClass.M1,
                     vat_exception_mode=VatExceptionMode.NONE,
                 ),
+                document=_invoice_registered(),
             )
         )
         self.assertFalse(result.vat_requires_review)
         self.assertTrue(result.cit_requires_review)
         self.assertIsNone(result.cit_addback_ratio)
+
+    def test_p2_review_skips_vat_vehicle_overlay(self):
+        result = evaluate(
+            _ctx(
+                kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
+                vat_amount='4.67',
+                vehicle=_m1(),
+            )
+        )
+        self.assertTrue(result.vat_requires_review)
+        self.assertIn(ReasonCode.VAT_EVIDENCE_INSUFFICIENT, result.reason_codes)
+        self.assertNotIn(ReasonCode.VAT_M1_LIMIT, result.reason_codes)
+        self.assertEqual(result.cit_treatment, CitTreatment.VEHICLE_50_ADD_BACK)
+
+
+class DocumentEvidenceTests(SimpleTestCase):
+    def test_input_vat_evidence_sufficient_is_three_facts(self):
+        ctx = _ctx(
+            kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
+            vat_amount='4.67',
+            document=_invoice_registered(),
+        )
+        self.assertTrue(input_vat_evidence_sufficient(ctx))
+        self.assertFalse(
+            input_vat_evidence_sufficient(
+                _ctx(
+                    kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
+                    vat_amount='4.67',
+                    document=DocumentFacts(
+                        evidence_type=EvidenceType.INVOICE,
+                        supplier_vat_status=SupplierVatStatus.UNKNOWN,
+                    ),
+                )
+            )
+        )
+
+    def test_null_and_unknown_are_not_invoice(self):
+        m1 = _m1()
+        for document in (
+            DocumentFacts(),
+            DocumentFacts(
+                evidence_type=EvidenceType.UNKNOWN,
+                supplier_vat_status=SupplierVatStatus.REGISTERED,
+            ),
+        ):
+            with self.subTest(document=document):
+                result = evaluate(
+                    _ctx(
+                        kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
+                        vat_amount='4.67',
+                        vehicle=m1,
+                        document=document,
+                    )
+                )
+                self.assertTrue(result.vat_requires_review)
+                self.assertIn(ReasonCode.VAT_EVIDENCE_INSUFFICIENT, result.reason_codes)
+                self.assertEqual(result.cit_treatment, CitTreatment.VEHICLE_50_ADD_BACK)
+
+    def test_other_evidence_reviews_not_no_input_vat(self):
+        result = evaluate(
+            _ctx(
+                kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
+                vat_amount='4.67',
+                vehicle=_m1(),
+                document=DocumentFacts(
+                    evidence_type=EvidenceType.OTHER,
+                    supplier_vat_status=SupplierVatStatus.REGISTERED,
+                ),
+            )
+        )
+        self.assertTrue(result.vat_requires_review)
+        self.assertIsNone(result.vat_treatment)
+        self.assertIn(ReasonCode.VAT_EVIDENCE_INSUFFICIENT, result.reason_codes)
+        self.assertEqual(result.cit_treatment, CitTreatment.VEHICLE_50_ADD_BACK)
+
+    def test_invoice_exempt_with_vat_is_contradiction(self):
+        result = evaluate(
+            _ctx(
+                kind=VehicleLineKind.TECHNICAL_INSPECTION_SERVICE,
+                vat_amount='4.67',
+                vehicle=_m1(),
+                document=DocumentFacts(
+                    evidence_type=EvidenceType.INVOICE,
+                    supplier_vat_status=SupplierVatStatus.EXEMPT,
+                ),
+            )
+        )
+        self.assertTrue(result.vat_requires_review)
+        self.assertIn(ReasonCode.VAT_EVIDENCE_CONTRADICTION, result.reason_codes)
+        self.assertNotIn(ReasonCode.VAT_M1_LIMIT, result.reason_codes)
+        self.assertEqual(result.cit_treatment, CitTreatment.VEHICLE_50_ADD_BACK)
+
+    def test_hard_expected_ignores_missing_supplier_status(self):
+        result = evaluate(
+            _ctx(
+                kind=VehicleLineKind.INSURANCE_COMPULSORY,
+                vat_amount='0.00',
+                document=DocumentFacts(
+                    evidence_type=EvidenceType.OTHER,
+                    supplier_vat_status=None,
+                ),
+            )
+        )
+        self.assertEqual(result.vat_treatment, VatTreatment.NO_INPUT_VAT)
+        self.assertFalse(result.vat_requires_review)
+        self.assertFalse(result.cit_requires_review)

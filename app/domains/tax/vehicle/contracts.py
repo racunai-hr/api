@@ -63,6 +63,7 @@ class SupplierVatStatus(StrEnum):
 
 class EvidenceType(StrEnum):
     INVOICE = 'invoice'
+    OTHER = 'other'
     UNKNOWN = 'unknown'
 
 
@@ -108,8 +109,8 @@ class VehicleFacts:
 
 @dataclass(frozen=True)
 class DocumentFacts:
-    evidence_type: EvidenceType = EvidenceType.UNKNOWN
-    supplier_vat_status: SupplierVatStatus = SupplierVatStatus.UNKNOWN
+    evidence_type: EvidenceType | None = None
+    supplier_vat_status: SupplierVatStatus | None = None
 
 
 @dataclass(frozen=True)
