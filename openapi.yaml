@@ -5933,10 +5933,8 @@ components:
             $ref: '#/components/schemas/PartnerSubledgerItem'
         closed_count:
           type: integer
-          description: Count of closed SubledgerItem rows for this partner (always computed)
         closed_results:
           type: array
-          description: Closed rows; empty unless include_closed=true
           items:
             $ref: '#/components/schemas/PartnerSubledgerItem'
       required:
