@@ -331,9 +331,33 @@ class Expense(TenantMixin, models.Model):
         if previous['expense_account_source'] != self.expense_account_source:
             changed['expense_account_source'] = 'Izvor konta se ne može mijenjati nakon odobrenja.'
         if previous['posting_profile'] != self.posting_profile:
-            changed['posting_profile'] = 'Posting profil se ne može mijenjati nakon odobrenja.'
+            if self._allows_remediation_posting_profile_migration(
+                previous_profile=previous['posting_profile'],
+            ):
+                pass
+            else:
+                changed['posting_profile'] = 'Posting profil se ne može mijenjati nakon odobrenja.'
         if changed:
             raise ValidationError(changed)
+
+    def _allows_remediation_posting_profile_migration(self, *, previous_profile: str) -> bool:
+        """Uski escape hatch: samo opex→asset_purchase kroz remediation meta + reason.
+
+        Normalni application/admin save i dalje mora odbiti promjenu profila nakon odobrenja.
+        """
+        meta = getattr(self, '_remediation_posting_profile_migration', None)
+        if not isinstance(meta, dict):
+            return False
+        reason = (meta.get('reason') or '').strip()
+        case_id = (meta.get('case_id') or '').strip()
+        if not reason or not case_id:
+            return False
+        return (
+            previous_profile == ExpensePostingProfile.OPEX
+            and self.posting_profile == ExpensePostingProfile.ASSET_PURCHASE
+            and meta.get('from_profile') == ExpensePostingProfile.OPEX
+            and meta.get('to_profile') == ExpensePostingProfile.ASSET_PURCHASE
+        )
 
 
 class ExpenseAttachment(TenantMixin, models.Model):

@@ -307,6 +307,17 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
         )
         if source_profile not in allowed_profiles:
             return False
+    elif (
+        rule.document_type == 'expense_approved'
+        and source is not None
+        and hasattr(source, 'posting_profile')
+    ):
+        # Legacy unscoped expense_approved rules (condition={}) behave as opex-only so
+        # they do not also fire for asset_purchase alongside the explicit asset rule.
+        from expenses.models import ExpensePostingProfile
+        source_profile = getattr(source, 'posting_profile', None) or ExpensePostingProfile.OPEX
+        if source_profile != ExpensePostingProfile.OPEX:
+            return False
 
     return True
 

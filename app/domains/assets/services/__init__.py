@@ -7,6 +7,7 @@ from domains.assets.services.depreciation import (
     post_depreciation,
     run_monthly_depreciation_for_tenant,
 )
+from domains.assets.services.retarget import retarget_purchase_journal_entry
 
 __all__ = [
     'activate_fixed_asset',
@@ -15,5 +16,6 @@ __all__ = [
     'extract_vin_from_journal_entry',
     'generate_monthly_depreciation',
     'post_depreciation',
+    'retarget_purchase_journal_entry',
     'run_monthly_depreciation_for_tenant',
 ]

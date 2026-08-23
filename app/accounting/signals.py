@@ -32,6 +32,8 @@ def auto_post_invoice(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender='expenses.Expense')
 def auto_post_expense(sender, instance, created, **kwargs):
+    if getattr(instance, '_skip_auto_posting', False):
+        return
     user = _get_system_user(instance.tenant)
     if not user:
         return

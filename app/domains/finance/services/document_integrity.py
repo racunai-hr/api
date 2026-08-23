@@ -255,6 +255,22 @@ def collect_document_posting_context(tenant, document) -> DocumentPostingContext
     raise TypeError(f'Unsupported document type: {type(document)!r}')
 
 
+def _je_is_tax_reverse_charge_only(
+    je_id: int,
+    lines_by_je: dict[int, list[JournalEntryLine]],
+) -> bool:
+    """JE with only reverse-charge tax lines (e.g. 14022/24022) — out of AP P2 scope."""
+    lines = lines_by_je.get(je_id, [])
+    if not lines:
+        return False
+    tax_bases = {'14022', '24022', '1402', '2402'}
+    for line in lines:
+        base = _account_base(line.account.account_code)
+        if base not in tax_bases and (line.debit_amount or line.credit_amount):
+            return False
+    return True
+
+
 def _je_has_partner_subledger_lines(
     je_id: int,
     lines_by_je: dict[int, list[JournalEntryLine]],
@@ -341,6 +357,10 @@ def classify_document_mismatch(ctx: DocumentPostingContext) -> list[str]:
     for je in ctx.posted_journal_entries:
         marker = extract_document_type(je.description or '')
         if marker is not None:
+            continue
+        if je.reversed_entry_id is not None:
+            continue
+        if _je_is_tax_reverse_charge_only(je.pk, ctx.lines_by_je):
             continue
         payable = ctx.document_type == 'expense'
         receivable = ctx.document_type == 'invoice'
