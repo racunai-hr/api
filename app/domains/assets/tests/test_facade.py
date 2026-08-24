@@ -15,6 +15,7 @@ class AssetsFacadeTests(SimpleTestCase):
             'create_fixed_asset_from_purchase',
             'extract_vin_from_journal_entry',
             'generate_monthly_depreciation',
+            'link_vehicle_to_fixed_asset',
             'post_depreciation',
             'run_monthly_depreciation_for_tenant',
         }

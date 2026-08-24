@@ -34,6 +34,7 @@ from .models import (
     FixedAsset,
     FixedAssetJournalLink,
     JournalEntry,
+    Vehicle,
     JournalEntryLine,
     PDVSReturn,
     PostingRule,
@@ -67,6 +68,16 @@ class FixedAssetJournalLinkInline(admin.TabularInline):
     model = FixedAssetJournalLink
     extra = 0
     autocomplete_fields = ('journal_entry',)
+
+
+@admin.register(Vehicle)
+class VehicleAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('name', 'vin', 'registration_plate', 'fixed_asset', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'vin', 'registration_plate')
+    list_select_related = ('fixed_asset',)
+    autocomplete_fields = ('fixed_asset',)
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(FixedAsset)

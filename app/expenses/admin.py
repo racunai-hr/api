@@ -124,13 +124,15 @@ class ExpensePayerAdmin(TenantAdminMixin, admin.ModelAdmin):
 class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
         'expense_number', 'status', 'paid_by', 'settlement_method', 'reimbursement_status',
-        'amount', 'currency', 'supplier', 'category', 'posting_profile', 'expense_date',
+        'amount', 'currency', 'supplier', 'category', 'vehicle', 'posting_profile', 'expense_date',
     )
     list_filter = (
         'status', 'paid_by', 'settlement_method', 'reimbursement_status',
-        'source', 'payment_method', 'category', 'posting_profile', 'currency', 'expense_date',
+        'source', 'payment_method', 'category', 'vehicle', 'posting_profile', 'currency',
+        'expense_date',
     )
     search_fields = ('expense_number', 'description', 'supplier__name', 'receipt_number')
+    autocomplete_fields = ('vehicle',)
     date_hierarchy = 'expense_date'
     readonly_fields = ('attachment_links', 'integration_status')
     change_list_template = 'admin/expenses/expense/change_list.html'
@@ -149,7 +151,7 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
         ('Osnovni podaci', {
             'fields': (
                 'expense_number', 'status', 'source', 'category', 'posting_profile', 'supplier',
-                'expense_account', 'expense_account_source',
+                'expense_account', 'expense_account_source', 'vehicle',
             )
         }),
         ('Plaćanje dobavljaču', {

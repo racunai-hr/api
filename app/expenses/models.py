@@ -262,6 +262,15 @@ class Expense(TenantMixin, models.Model):
         default=ExpenseAccountSource.CATEGORY_DEFAULT,
         verbose_name='Izvor rashodnog konta',
     )
+    vehicle = models.ForeignKey(
+        'accounting.Vehicle',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='expenses',
+        verbose_name='Vozilo',
+        help_text='Operativna pripadnost troška vozilu. Ne utječe na knjiženje.',
+    )
     supplier = models.ForeignKey(
         'partners.Partner',
         on_delete=models.CASCADE,
@@ -323,6 +332,8 @@ class Expense(TenantMixin, models.Model):
                 raise ValidationError({'expense_account': 'Konto ne pripada istom tenantu.'})
             if not account.is_active or not account.is_postable:
                 raise ValidationError({'expense_account': 'Konto mora biti aktivno i knjiživo.'})
+        if self.vehicle_id and self.vehicle.tenant_id != self.tenant_id:
+            raise ValidationError({'vehicle': 'Vozilo mora pripadati istom tenantu.'})
 
     def save(self, *args, **kwargs):
         self._reject_locked_accounting_input_changes(kwargs.get('update_fields'))

@@ -1432,6 +1432,87 @@ class FixedAssetJournalLink(TenantMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+VEHICLE_VIN_FORMAT_REGEX = r'^[A-HJ-NPR-Z0-9]{17}$'
+
+
+class Vehicle(TenantMixin, models.Model):
+    """Operativni identitet vozila. Nije računovodstvena kartica OS.
+
+    Vehicle.vin je operativni kanonski VIN. FixedAsset.vin ostaje legacy
+    snapshot — novi kod ne upisuje VIN proizvoljno na oba mjesta.
+    """
+
+    VIN_FORMAT_REGEX = VEHICLE_VIN_FORMAT_REGEX
+
+    name = models.CharField(max_length=200, verbose_name='Naziv')
+    vin = models.CharField(max_length=17, blank=True, verbose_name='VIN')
+    registration_plate = models.CharField(max_length=20, blank=True, verbose_name='Registracija')
+    fixed_asset = models.OneToOneField(
+        FixedAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vehicle',
+        verbose_name='Osnovno sredstvo',
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Aktivno')
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Vozilo'
+        verbose_name_plural = 'Vozila'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'vin'],
+                condition=~models.Q(vin=''),
+                name='unique_vehicle_vin_per_tenant',
+            ),
+            models.CheckConstraint(
+                check=~(models.Q(vin='') & models.Q(registration_plate='')),
+                name='vehicle_requires_vin_or_plate',
+            ),
+            models.CheckConstraint(
+                check=models.Q(vin='') | models.Q(vin__regex=VEHICLE_VIN_FORMAT_REGEX),
+                name='vehicle_vin_format',
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(registration_plate='')
+                    | ~models.Q(registration_plate__regex=r'^\s|\s$')
+                ),
+                name='vehicle_plate_not_padded',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name or self.vin or self.registration_plate or f'Vozilo #{self.pk}'
+
+    def clean(self):
+        super().clean()
+        if not self.fixed_asset_id:
+            return
+        asset = self.fixed_asset
+        if asset.tenant_id != self.tenant_id:
+            raise ValidationError({
+                'fixed_asset': 'Osnovno sredstvo mora pripadati istom tenantu.',
+            })
+        vehicle_vin = (self.vin or '').strip().upper()
+        asset_vin = (asset.vin or '').strip().upper()
+        if vehicle_vin and asset_vin and vehicle_vin != asset_vin:
+            raise ValidationError({
+                'fixed_asset': 'VIN vozila mora biti isti kao VIN osnovnog sredstva.',
+            })
+
+    def save(self, *args, **kwargs):
+        self.vin = (self.vin or '').strip().upper()
+        self.registration_plate = ' '.join((self.registration_plate or '').split()).upper()
+        self.name = (self.name or '').strip()
+        super().save(*args, **kwargs)
+
+
 class SubledgerItem(TenantMixin, models.Model):
     """Otvorena stavka saldakonta (potraživanje / obveza prema partneru)."""
 
