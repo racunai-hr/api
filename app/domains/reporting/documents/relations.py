@@ -65,7 +65,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     official_docs = {
         doc.pk: doc
         for doc in OfficialDocument.all_objects.filter(tenant=tenant, pk__in=official_ids).select_related(
-            'issuer', 'created_by', 'related_fixed_asset',
+            'issuer', 'created_by', 'related_fixed_asset', 'posting_profile',
         )
     }
     items_by_invoice = defaultdict(list)
@@ -109,6 +109,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     sub_out = _gfk_map(SubledgerItem.all_objects, invoice_ct, outgoing_ids)
     sub_in = _gfk_map(SubledgerItem.all_objects, expense_ct, incoming_ids)
     sub_dep = _gfk_map(SubledgerItem.all_objects, deposit_ct, deposit_ids)
+    sub_off = _gfk_map(SubledgerItem.all_objects, official_ct, official_ids)
     vat_out = _gfk_map(
         VATLedgerEntry.all_objects.select_related('vat_period'),
         invoice_ct,
@@ -131,7 +132,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
 
     sub_ids = [
         s.pk
-        for rows in list(sub_out.values()) + list(sub_in.values()) + list(sub_dep.values())
+        for rows in list(sub_out.values()) + list(sub_in.values()) + list(sub_dep.values()) + list(sub_off.values())
         for s in rows
     ]
     alloc_by_sub = defaultdict(list)
@@ -243,6 +244,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'sub_out': sub_out,
         'sub_in': sub_in,
         'sub_dep': sub_dep,
+        'sub_off': sub_off,
         'vat_out': vat_out,
         'vat_in': vat_in,
         'lines_by_je': lines_by_je,

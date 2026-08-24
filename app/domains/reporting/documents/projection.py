@@ -305,9 +305,17 @@ def operational_incoming(
     return provenanced(document.status, source='document_status')
 
 
-def operational_official(*, document, posting=None, bank_matched: bool = False) -> dict:
+def operational_official(*, document, posting=None, bank_matched: bool = False, subledger=None) -> dict:
     if document.status == 'cancelled':
         return provenanced('cancelled', source='document_status')
+    if subledger is not None and getattr(subledger, 'status', None) != 'cancelled':
+        if _subledger_settled(subledger):
+            return provenanced('paid', source='subledger_item')
+        if subledger.status == 'partial':
+            return provenanced('partially_paid', source='subledger_item')
+        if posting is not None and getattr(posting, 'status', None) == 'posted':
+            return provenanced('posted', source='journal_entry')
+        return provenanced('unpaid', source='subledger_item')
     if (
         bank_matched
         and posting is not None

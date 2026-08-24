@@ -420,6 +420,11 @@ class DocumentDetailSerializer(DocumentSummarySerializer):
     subledger_context = SubledgerContextSerializer(required=False)
     payment = PaymentBlockSerializer(required=False)
     settlement_trail = SettlementTrailSerializer(required=False)
+    official_kind = serializers.CharField(required=False, allow_null=True)
+    related_fixed_asset_id = serializers.IntegerField(required=False, allow_null=True)
+    posting_profile_id = serializers.IntegerField(required=False, allow_null=True)
+    posting_profile_code = serializers.CharField(required=False, allow_null=True)
+    posting_profile_name = serializers.CharField(required=False, allow_null=True)
 
 
 class CurrencySummarySerializer(serializers.Serializer):

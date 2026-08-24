@@ -393,6 +393,7 @@ class PostingRule(TenantMixin, models.Model):
         ('expense_approved', 'Odobren trošak'),
         ('expense_paid', 'Plaćen trošak'),
         ('payment_manual', 'Ručno plaćanje'),
+        ('official_document_posted', 'Knjižen službeni dokument'),
     ]
     AMOUNT_FIELDS = [
         ('subtotal', 'Osnovica'),
@@ -403,7 +404,7 @@ class PostingRule(TenantMixin, models.Model):
     ]
 
     name = models.CharField(max_length=100, verbose_name="Naziv pravila")
-    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPES, verbose_name="Tip dokumenta")
+    document_type = models.CharField(max_length=40, choices=DOCUMENT_TYPES, verbose_name="Tip dokumenta")
     debit_account_code = models.CharField(max_length=20, verbose_name="Konto duguje (šifra)")
     credit_account_code = models.CharField(max_length=20, verbose_name="Konto potražuje (šifra)")
     amount_field = models.CharField(max_length=20, choices=AMOUNT_FIELDS, verbose_name="Polje iznosa")
@@ -1737,6 +1738,45 @@ class Deposit(TenantMixin, models.Model):
         return f'{self.number} — {self.amount} {self.currency}'
 
 
+class OfficialDocumentPostingProfile(TenantMixin, models.Model):
+    """Katalog ekonomskog učinka za OfficialDocument (ADR-0029). Ne nosi konta."""
+
+    CODE_PPMV_VEHICLE_ACQUISITION = 'ppmv_vehicle_acquisition'
+    CODE_ADMINISTRATIVE_FEE = 'administrative_fee'
+
+    EFFECT_CAPITALIZE = 'capitalize'
+    EFFECT_EXPENSE = 'expense'
+    EFFECT_CHOICES = [
+        (EFFECT_CAPITALIZE, 'Kapitalizacija'),
+        (EFFECT_EXPENSE, 'Rashod'),
+    ]
+
+    code = models.CharField(max_length=64, verbose_name='Kod')
+    name = models.CharField(max_length=100, verbose_name='Naziv')
+    economic_effect = models.CharField(
+        max_length=20,
+        choices=EFFECT_CHOICES,
+        verbose_name='Ekonomski učinak',
+    )
+    allowed_kinds = models.JSONField(default=list, verbose_name='Dopušteni kind')
+    requires_fixed_asset = models.BooleanField(default=False, verbose_name='Zahtijeva imovinu')
+    is_active = models.BooleanField(default=True, verbose_name='Aktivno')
+
+    class Meta:
+        verbose_name = 'Profil knjiženja službenog dokumenta'
+        verbose_name_plural = 'Profili knjiženja službenih dokumenata'
+        ordering = ['code']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'code'],
+                name='unique_official_document_posting_profile',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.code} — {self.name}'
+
+
 def official_document_upload_to(instance, filename):
     """Path uses PK only. Caller must save the row before assigning original_file."""
     if not instance.pk:
@@ -1811,6 +1851,14 @@ class OfficialDocument(TenantMixin, models.Model):
         blank=True,
         related_name='official_documents',
         verbose_name='Povezana imovina',
+    )
+    posting_profile = models.ForeignKey(
+        OfficialDocumentPostingProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='official_documents',
+        verbose_name='Profil knjiženja',
     )
     notes = models.TextField(blank=True, verbose_name='Napomene')
     created_by = models.ForeignKey(

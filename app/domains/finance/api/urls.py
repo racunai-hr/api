@@ -11,7 +11,10 @@ from domains.finance.api.views import (
     OfficialDocumentCreateView,
     OfficialDocumentDetailView,
     OfficialDocumentLinkJournalView,
+    OfficialDocumentPostView,
+    OfficialDocumentPostingProfileListView,
     OfficialDocumentRegisterView,
+    OfficialDocumentSetPostingProfileView,
     ExpenseApproveView,
     ExpenseDraftPatchView,
     ExpensePostingPreviewView,
@@ -94,6 +97,11 @@ urlpatterns = [
     path('finance/deposits/<int:pk>/reverse/', DepositReverseView.as_view(), name='finance-deposit-reverse'),
     path('finance/deposits/<int:pk>/cancel/', DepositCancelView.as_view(), name='finance-deposit-cancel'),
     path(
+        'finance/official-document-posting-profiles/',
+        OfficialDocumentPostingProfileListView.as_view(),
+        name='finance-official-document-posting-profile-list',
+    ),
+    path(
         'finance/official-documents/',
         OfficialDocumentCreateView.as_view(),
         name='finance-official-document-create',
@@ -117,5 +125,15 @@ urlpatterns = [
         'finance/official-documents/<int:pk>/link-journal/',
         OfficialDocumentLinkJournalView.as_view(),
         name='finance-official-document-link-journal',
+    ),
+    path(
+        'finance/official-documents/<int:pk>/posting-profile/',
+        OfficialDocumentSetPostingProfileView.as_view(),
+        name='finance-official-document-set-posting-profile',
+    ),
+    path(
+        'finance/official-documents/<int:pk>/post/',
+        OfficialDocumentPostView.as_view(),
+        name='finance-official-document-post',
     ),
 ]

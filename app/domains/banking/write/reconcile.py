@@ -8,7 +8,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
 
-from accounting.models import Deposit, PrivateFundsClaim, SubledgerItem
+from accounting.models import Deposit, OfficialDocument, PrivateFundsClaim, SubledgerItem
 from banking.models import BankReconcileIdempotency, BankTransaction
 from banking.reconciliation import MatchConflict, match_transaction_to_journal_entry
 from domains.banking.read.dto import transaction_dto
@@ -81,7 +81,7 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
         if source_type == 'deposit':
             if bank_tx.transaction_type != 'credit' or item.open_amount != amount:
                 continue
-        elif source_type in ('invoice', 'expense', 'privatefundsclaim'):
+        elif source_type in ('invoice', 'expense', 'privatefundsclaim', 'officialdocument'):
             if item.open_amount < amount:
                 continue
         else:
@@ -192,6 +192,15 @@ def reconcile_open_item_api(
                 PrivateFundsClaim.all_objects.select_for_update(of=('self',))
                 .filter(tenant=tenant, pk=item.source_object_id)
                 .select_related('partner')
+                .first()
+            )
+            if locked_source is None:
+                raise Http404()
+        elif model == 'officialdocument':
+            locked_source = (
+                OfficialDocument.all_objects.select_for_update(of=('self',))
+                .filter(tenant=tenant, pk=item.source_object_id)
+                .select_related('issuer')
                 .first()
             )
             if locked_source is None:

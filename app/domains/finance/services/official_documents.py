@@ -11,8 +11,16 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, transaction
 from django.http import Http404
 
-from accounting.models import FixedAsset, JournalEntry, OfficialDocument
+from accounting.models import FixedAsset, JournalEntry, OfficialDocument, OfficialDocumentPostingProfile
+from accounting.services.posting import (
+    OFFICIAL_DOCUMENT_POSTED,
+    ensure_default_official_document_posting_profiles,
+    post_document,
+)
+from domains.finance.services.subledger import get_subledger_item_for_source
 from partners.models import Partner
+
+OFFICIAL_POSTED_MARKER = f'[{OFFICIAL_DOCUMENT_POSTED}]'
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
 ALLOWED_KINDS = frozenset({OfficialDocument.KIND_TAX_DECISION, OfficialDocument.KIND_OTHER})
@@ -59,7 +67,7 @@ def _lock_document(tenant, document_id: int) -> OfficialDocument:
     document = (
         OfficialDocument.all_objects.select_for_update(of=('self',))
         .filter(tenant=tenant, pk=document_id)
-        .select_related('issuer', 'related_fixed_asset', 'created_by')
+        .select_related('issuer', 'related_fixed_asset', 'created_by', 'posting_profile')
         .first()
     )
     if document is None:
@@ -165,6 +173,7 @@ def _serialize(document: OfficialDocument) -> dict:
     document.refresh_from_db()
     issuer = document.issuer
     asset = document.related_fixed_asset
+    profile = document.posting_profile
     return {
         'id': document.pk,
         'official_kind': document.kind,
@@ -184,6 +193,9 @@ def _serialize(document: OfficialDocument) -> dict:
         'file_size': document.file_size,
         'has_file': bool(document.original_file and document.original_file.name),
         'related_fixed_asset_id': asset.pk if asset else None,
+        'posting_profile_id': profile.pk if profile else None,
+        'posting_profile_code': profile.code if profile else None,
+        'posting_profile_name': profile.name if profile else None,
         'notes': document.notes or '',
         'created_at': document.created_at.isoformat() if document.created_at else None,
     }
@@ -192,7 +204,7 @@ def _serialize(document: OfficialDocument) -> dict:
 def get_official_document(*, tenant, document_id: int) -> dict:
     document = (
         OfficialDocument.all_objects.filter(tenant=tenant, pk=document_id)
-        .select_related('issuer', 'related_fixed_asset')
+        .select_related('issuer', 'related_fixed_asset', 'posting_profile')
         .first()
     )
     if document is None:
@@ -228,6 +240,7 @@ def create_official_document(*, tenant, data: dict, file=None, user=None) -> dic
         currency=currency,
         status=OfficialDocument.STATUS_DRAFT,
         related_fixed_asset=_asset(tenant, data.get('related_fixed_asset_id')),
+        posting_profile=_optional_profile(tenant, data.get('posting_profile_id'), kind=kind),
         notes=(data.get('notes') or '').strip(),
         created_by=user if getattr(user, 'pk', None) else None,
     )
@@ -307,4 +320,149 @@ def link_official_document_journal(*, tenant, document_id: int, journal_entry_id
     entry.source_content_type = ct
     entry.source_object_id = document.pk
     entry.save(update_fields=['source_content_type', 'source_object_id'])
+    return _serialize(document)
+
+
+def _source_journal_entries(tenant, document: OfficialDocument):
+    ct = ContentType.objects.get_for_model(OfficialDocument)
+    return list(
+        JournalEntry.all_objects.filter(
+            tenant=tenant,
+            source_content_type=ct,
+            source_object_id=document.pk,
+            status__in=['draft', 'posted'],
+        ).order_by('id')
+    )
+
+
+def _successful_ab_posting(tenant, document: OfficialDocument):
+    jes = _source_journal_entries(tenant, document)
+    marker_je = next(
+        (je for je in jes if (je.description or '').startswith(OFFICIAL_POSTED_MARKER)),
+        None,
+    )
+    item = get_subledger_item_for_source(tenant, document)
+    return jes, marker_je, item
+
+
+def _optional_profile(tenant, profile_id, *, kind: str):
+    if profile_id in (None, ''):
+        return None
+    return _resolve_profile(tenant, profile_id, kind=kind)
+
+
+def _resolve_profile(tenant, profile_id, *, kind: str) -> OfficialDocumentPostingProfile:
+    try:
+        pk = int(profile_id)
+    except (TypeError, ValueError) as exc:
+        raise OfficialDocumentBadRequest('invalid_profile', 'posting_profile_id nije valjan.') from exc
+    ensure_default_official_document_posting_profiles(tenant)
+    profile = OfficialDocumentPostingProfile.all_objects.filter(tenant=tenant, pk=pk).first()
+    if profile is None:
+        raise Http404()
+    if not profile.is_active:
+        raise OfficialDocumentBadRequest('profile_inactive', 'Profil knjiženja nije aktivan.')
+    allowed = profile.allowed_kinds or []
+    if kind not in allowed:
+        raise OfficialDocumentBadRequest(
+            'kind_not_allowed',
+            f'Profil {profile.code} ne dopušta kind={kind}.',
+        )
+    return profile
+
+
+def list_official_document_posting_profiles(*, tenant) -> list[dict]:
+    ensure_default_official_document_posting_profiles(tenant)
+    rows = OfficialDocumentPostingProfile.all_objects.filter(
+        tenant=tenant,
+        is_active=True,
+    ).order_by('code')
+    return [
+        {
+            'id': row.pk,
+            'code': row.code,
+            'name': row.name,
+            'economic_effect': row.economic_effect,
+            'allowed_kinds': list(row.allowed_kinds or []),
+            'requires_fixed_asset': row.requires_fixed_asset,
+            'is_active': row.is_active,
+        }
+        for row in rows
+    ]
+
+
+@transaction.atomic
+def set_official_document_posting_profile(*, tenant, document_id: int, posting_profile_id) -> dict:
+    document = _lock_document(tenant, document_id)
+    if document.status == OfficialDocument.STATUS_CANCELLED:
+        raise OfficialDocumentConflict('invalid_status', 'Otkazani dokument nema izmjenu profila.')
+    _jes, marker_je, item = _successful_ab_posting(tenant, document)
+    if marker_je is not None and item is not None:
+        raise OfficialDocumentConflict(
+            'profile_locked',
+            'Profil se ne može mijenjati nakon uspješnog knjiženja.',
+        )
+    document.posting_profile = _resolve_profile(tenant, posting_profile_id, kind=document.kind)
+    document.save(update_fields=['posting_profile', 'updated_at'])
+    return _serialize(document)
+
+
+@transaction.atomic
+def post_official_document(*, tenant, document_id: int, user) -> dict:
+    document = _lock_document(tenant, document_id)
+    if document.status != OfficialDocument.STATUS_REGISTERED:
+        raise OfficialDocumentConflict(
+            'invalid_status',
+            'Knjiži je dopušten samo za registrirani dokument.',
+        )
+    ensure_default_official_document_posting_profiles(tenant)
+    profile = document.posting_profile
+    if profile is None:
+        raise OfficialDocumentBadRequest('missing_profile', 'Knjiži zahtijeva posting profil.')
+    if not profile.is_active:
+        raise OfficialDocumentBadRequest('profile_inactive', 'Profil knjiženja nije aktivan.')
+    allowed = profile.allowed_kinds or []
+    if document.kind not in allowed:
+        raise OfficialDocumentBadRequest(
+            'kind_not_allowed',
+            f'Profil {profile.code} ne dopušta kind={document.kind}.',
+        )
+    if profile.requires_fixed_asset and not document.related_fixed_asset_id:
+        raise OfficialDocumentBadRequest(
+            'missing_fixed_asset',
+            'Ovaj profil zahtijeva povezanu imovinu.',
+        )
+
+    jes, marker_je, item = _successful_ab_posting(tenant, document)
+    if jes and item is None:
+        raise OfficialDocumentConflict(
+            'already_linked_manual_posting',
+            'Dokument ima ručno povezanu temeljnicu bez saldakonta.',
+        )
+    if marker_je is not None and item is not None:
+        return _serialize(document)
+    if jes:
+        raise OfficialDocumentConflict(
+            'already_linked_manual_posting',
+            'Dokument ima ručno povezanu temeljnicu bez saldakonta.',
+        )
+
+    entry = post_document(
+        tenant,
+        document,
+        OFFICIAL_DOCUMENT_POSTED,
+        user,
+        entry_date=document.issue_date,
+    )
+    if entry is None:
+        raise OfficialDocumentBadRequest(
+            'missing_posting_rule',
+            'Nema aktivnog pravila knjiženja za ovaj profil.',
+        )
+    item = get_subledger_item_for_source(tenant, document)
+    if item is None:
+        raise OfficialDocumentConflict(
+            'posting_incomplete',
+            'Knjiženje nije stvorilo stavku saldakonta.',
+        )
     return _serialize(document)

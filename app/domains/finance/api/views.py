@@ -27,7 +27,9 @@ from domains.finance.api.schema import (
     DepositSerializer,
     ExpenseApproveResponseSerializer,
     LinkOfficialDocumentJournalSerializer,
+    OfficialDocumentPostingProfileSerializer,
     OfficialDocumentSerializer,
+    SetOfficialDocumentPostingProfileSerializer,
     ExpenseDraftPatchSerializer,
     ExpensePostingPreviewSerializer,
     JournalEntryDetailSerializer,
@@ -69,7 +71,10 @@ from domains.finance.services.official_documents import (
     create_official_document,
     get_official_document,
     link_official_document_journal,
+    list_official_document_posting_profiles,
+    post_official_document,
     register_official_document,
+    set_official_document_posting_profile,
 )
 from domains.finance.services.private_funds import (
     PrivateFundsBadRequest,
@@ -487,6 +492,73 @@ class OfficialDocumentLinkJournalView(_FinanceWriteApiView):
                     tenant=_require_tenant(request),
                     document_id=pk,
                     journal_entry_id=request.data.get('journal_entry_id'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentPostingProfileListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_document_posting_profiles_list',
+        responses={200: OfficialDocumentPostingProfileSerializer(many=True), 401: ERROR_401},
+    )
+    def get(self, request):
+        return Response(list_official_document_posting_profiles(tenant=_require_tenant(request)))
+
+
+class OfficialDocumentSetPostingProfileView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_set_posting_profile',
+        request=SetOfficialDocumentPostingProfileSerializer,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(
+                set_official_document_posting_profile(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    posting_profile_id=request.data.get('posting_profile_id'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentPostView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_post',
+        request=None,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        _require_idempotency_key(request)
+        try:
+            return Response(
+                post_official_document(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    user=request.user,
                 )
             )
         except OfficialDocumentConflict as exc:

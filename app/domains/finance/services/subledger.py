@@ -189,6 +189,15 @@ def sync_subledger_for_document_posting(
             source=source,
             journal_entry=journal_entry,
         )
+    elif document_type == 'official_document_posted':
+        partner = getattr(source, 'issuer', None)
+        create_subledger_item(
+            tenant,
+            partner=partner,
+            direction='payable',
+            source=source,
+            journal_entry=journal_entry,
+        )
     elif document_type in ('invoice_paid', 'expense_paid'):
         allocate_payment(
             tenant,

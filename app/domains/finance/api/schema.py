@@ -126,6 +126,9 @@ class OfficialDocumentSerializer(serializers.Serializer):
     file_size = serializers.IntegerField()
     has_file = serializers.BooleanField()
     related_fixed_asset_id = serializers.IntegerField(allow_null=True)
+    posting_profile_id = serializers.IntegerField(allow_null=True)
+    posting_profile_code = serializers.CharField(allow_null=True)
+    posting_profile_name = serializers.CharField(allow_null=True)
     notes = serializers.CharField(allow_blank=True)
     created_at = serializers.CharField(allow_null=True)
 
@@ -140,6 +143,7 @@ class CreateOfficialDocumentSerializer(serializers.Serializer):
     amount = money_field()
     currency = serializers.CharField(required=False, default='EUR')
     related_fixed_asset_id = serializers.IntegerField(required=False, allow_null=True)
+    posting_profile_id = serializers.IntegerField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
     register = serializers.BooleanField(required=False)
     file = serializers.FileField(required=False)
@@ -147,6 +151,20 @@ class CreateOfficialDocumentSerializer(serializers.Serializer):
 
 class LinkOfficialDocumentJournalSerializer(serializers.Serializer):
     journal_entry_id = serializers.IntegerField()
+
+
+class SetOfficialDocumentPostingProfileSerializer(serializers.Serializer):
+    posting_profile_id = serializers.IntegerField()
+
+
+class OfficialDocumentPostingProfileSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    economic_effect = serializers.ChoiceField(choices=['capitalize', 'expense'])
+    allowed_kinds = serializers.ListField(child=serializers.CharField())
+    requires_fixed_asset = serializers.BooleanField()
+    is_active = serializers.BooleanField()
 
 
 class ExpenseApproveResponseSerializer(serializers.Serializer):

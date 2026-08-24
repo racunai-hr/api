@@ -44,6 +44,7 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
     invoice_ct = ContentType.objects.get_for_model(Invoice)
     expense_ct = ContentType.objects.get_for_model(Expense)
     deposit_ct = ContentType.objects.get_for_model(Deposit)
+    official_ct = ContentType.objects.get_for_model(OfficialDocument)
 
     inv_count = invoices.count()
     inv_gross = invoices.aggregate(total=Sum('total_amount'))['total']
@@ -70,13 +71,21 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
         source_object_id__in=deposits.values('pk'),
     ).aggregate(total=Sum('open_amount'))['total']
     open_ar = (open_ar_inv or 0) + (open_ar_dep or 0)
-    open_ap = SubledgerItem.all_objects.filter(
+    open_ap_exp = SubledgerItem.all_objects.filter(
         tenant=tenant,
         direction='payable',
         status__in=('open', 'partial'),
         source_content_type=expense_ct,
         source_object_id__in=expenses.values('pk'),
     ).aggregate(total=Sum('open_amount'))['total']
+    open_ap_off = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        direction='payable',
+        status__in=('open', 'partial'),
+        source_content_type=official_ct,
+        source_object_id__in=official.values('pk'),
+    ).aggregate(total=Sum('open_amount'))['total']
+    open_ap = (open_ap_exp or 0) + (open_ap_off or 0)
 
     by_currency: dict[str, dict] = {}
     eur = by_currency.setdefault('EUR', {

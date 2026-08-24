@@ -15,6 +15,7 @@ from accounting.services.analytics import (
     get_or_create_analytic_for_payer,
 )
 from domains.finance.services.subledger import (
+    get_subledger_item_for_source,
     handle_journal_entry_reversal,
     sync_subledger_for_document_posting,
     sync_subledger_for_invoice_payment,
@@ -110,7 +111,69 @@ DEFAULT_POSTING_RULES = [
         'use_analytic': True,
         'condition': {'settlement_method': ['company_cash']},
     },
+    {
+        'name': 'Službeni dokument — PPMV nabava vozila / obveza',
+        'document_type': 'official_document_posted',
+        'debit_account_code': '0373',
+        'credit_account_code': '2201',
+        'amount_field': 'amount',
+        'priority': 10,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['ppmv_vehicle_acquisition']},
+    },
+    {
+        'name': 'Službeni dokument — upravna pristojba / obveza',
+        'document_type': 'official_document_posted',
+        'debit_account_code': '4120',
+        'credit_account_code': '2201',
+        'amount_field': 'amount',
+        'priority': 20,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['administrative_fee']},
+    },
 ]
+
+
+OFFICIAL_DOCUMENT_POSTED = 'official_document_posted'
+
+
+class PostingEventSourceMismatch(ValueError):
+    """document_type does not match the source model (ADR-0029)."""
+
+
+def _assert_posting_event_source(source, document_type: str) -> None:
+    from accounting.models import OfficialDocument
+    from expenses.models import Expense
+    from invoices.models import Invoice
+
+    if document_type == OFFICIAL_DOCUMENT_POSTED:
+        if not isinstance(source, OfficialDocument):
+            raise PostingEventSourceMismatch(
+                f'{document_type} prihvaća samo OfficialDocument, dobiven {type(source).__name__}.'
+            )
+        return
+    if document_type.startswith('expense'):
+        if isinstance(source, OfficialDocument) or not isinstance(source, Expense):
+            raise PostingEventSourceMismatch(
+                f'{document_type} prihvaća samo Expense, dobiven {type(source).__name__}.'
+            )
+        return
+    if document_type.startswith('invoice'):
+        if isinstance(source, OfficialDocument) or not isinstance(source, Invoice):
+            raise PostingEventSourceMismatch(
+                f'{document_type} prihvaća samo Invoice, dobiven {type(source).__name__}.'
+            )
+        return
+
+
+def _source_posting_profile_code(source) -> str | None:
+    raw = getattr(source, 'posting_profile', None)
+    if raw is None:
+        return None
+    code = getattr(raw, 'code', None)
+    if code:
+        return str(code)
+    return str(raw)
 
 
 def ensure_default_posting_rules(tenant) -> int:
@@ -148,6 +211,41 @@ def ensure_default_posting_rules(tenant) -> int:
             rule.is_active = False
             rule.save(update_fields=['is_active'])
 
+    ensure_default_official_document_posting_profiles(tenant)
+    return created
+
+
+DEFAULT_OFFICIAL_DOCUMENT_POSTING_PROFILES = [
+    {
+        'code': 'ppmv_vehicle_acquisition',
+        'name': 'PPMV – nabava vozila',
+        'economic_effect': 'capitalize',
+        'allowed_kinds': ['tax_decision'],
+        'requires_fixed_asset': True,
+    },
+    {
+        'code': 'administrative_fee',
+        'name': 'Upravna pristojba',
+        'economic_effect': 'expense',
+        'allowed_kinds': ['other'],
+        'requires_fixed_asset': False,
+    },
+]
+
+
+def ensure_default_official_document_posting_profiles(tenant) -> int:
+    from accounting.models import OfficialDocumentPostingProfile
+
+    created = 0
+    for row in DEFAULT_OFFICIAL_DOCUMENT_POSTING_PROFILES:
+        exists = OfficialDocumentPostingProfile.all_objects.filter(
+            tenant=tenant,
+            code=row['code'],
+        ).exists()
+        if exists:
+            continue
+        OfficialDocumentPostingProfile.all_objects.create(tenant=tenant, **row)
+        created += 1
     return created
 
 
@@ -197,6 +295,7 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
         resolve_expense_account,
     )
 
+    _assert_posting_event_source(source, document_type)
     rules = _active_posting_rules(tenant, document_type)
     lines: list[PostingPlanLine] = []
     warnings: list[str] = []
@@ -300,8 +399,13 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
 
     posting_profiles = condition.get('posting_profile')
     if posting_profiles is not None:
+        from accounting.models import OfficialDocument
         from expenses.models import ExpensePostingProfile
-        source_profile = getattr(source, 'posting_profile', None) or ExpensePostingProfile.OPEX
+
+        if isinstance(source, OfficialDocument):
+            source_profile = _source_posting_profile_code(source)
+        else:
+            source_profile = getattr(source, 'posting_profile', None) or ExpensePostingProfile.OPEX
         allowed_profiles = (
             posting_profiles if isinstance(posting_profiles, list) else [posting_profiles]
         )
@@ -364,10 +468,10 @@ def _resolve_debit_credit_codes(
                 credit_code = code
                 credit_analytic = analytic
 
-    elif document_type.startswith('expense'):
-        supplier = getattr(source, 'supplier', None)
-        if supplier:
-            analytic = get_or_create_analytic_for_partner(tenant, supplier, synthetic_code='2201')
+    elif document_type.startswith('expense') or document_type == OFFICIAL_DOCUMENT_POSTED:
+        partner = getattr(source, 'supplier', None) or getattr(source, 'issuer', None)
+        if partner:
+            analytic = get_or_create_analytic_for_partner(tenant, partner, synthetic_code='2201')
             code = analytic.account_code
             if debit_code in ('2201', '2200'):
                 debit_code = code
@@ -386,7 +490,7 @@ def _resolve_debit_credit_codes(
 
 
 def _document_reference(source) -> str:
-    for attr in ('invoice_number', 'expense_number', 'payment_number', 'receipt_number'):
+    for attr in ('invoice_number', 'expense_number', 'payment_number', 'receipt_number', 'document_number'):
         value = getattr(source, attr, None)
         if value:
             return str(value)
@@ -500,6 +604,7 @@ def post_document(
 ) -> JournalEntry | None:
     from accounting.services.tax_projection.locks import lock_open_vat_period_for_source_mutation
 
+    _assert_posting_event_source(source, document_type)
     ct = ContentType.objects.get_for_model(source)
     marker = f"[{document_type}]"
     existing = (
@@ -514,6 +619,13 @@ def post_document(
         .first()
     )
     if existing is not None:
+        if document_type == OFFICIAL_DOCUMENT_POSTED:
+            item = get_subledger_item_for_source(tenant, source)
+            if item is None:
+                raise ValueError(
+                    'official_document_posted JE bez SubledgerItem nije uspješan posting; heal je zabranjen.'
+                )
+            return existing
         # Heal missing subledger when posting JE already exists (legacy / partial sync).
         sync_subledger_for_document_posting(tenant, source, document_type, existing)
         return existing

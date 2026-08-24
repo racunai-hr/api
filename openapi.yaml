@@ -2120,6 +2120,32 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/official-document-posting-profiles/:
+    get:
+      operationId: finance_official_document_posting_profiles_list
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfficialDocumentPostingProfile'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
   /api/finance/official-documents/:
     post:
       operationId: finance_official_documents_create
@@ -2277,6 +2303,116 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/LinkOfficialDocumentJournalRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/finance/official-documents/{id}/post/:
+    post:
+      operationId: finance_official_documents_post
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/finance/official-documents/{id}/posting-profile/:
+    post:
+      operationId: finance_official_documents_set_posting_profile
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOfficialDocumentPostingProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SetOfficialDocumentPostingProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SetOfficialDocumentPostingProfileRequest'
         required: true
       security:
       - bearerAuth: []
@@ -4948,6 +5084,9 @@ components:
         related_fixed_asset_id:
           type: integer
           nullable: true
+        posting_profile_id:
+          type: integer
+          nullable: true
         notes:
           type: string
         register:
@@ -5354,6 +5493,21 @@ components:
           $ref: '#/components/schemas/PaymentBlock'
         settlement_trail:
           $ref: '#/components/schemas/SettlementTrail'
+        official_kind:
+          type: string
+          nullable: true
+        related_fixed_asset_id:
+          type: integer
+          nullable: true
+        posting_profile_id:
+          type: integer
+          nullable: true
+        posting_profile_code:
+          type: string
+          nullable: true
+        posting_profile_name:
+          type: string
+          nullable: true
       required:
       - allocations
       - amounts
@@ -5572,6 +5726,14 @@ components:
       - expense_id
       - kind
       - label
+    EconomicEffectEnum:
+      enum:
+      - capitalize
+      - expense
+      type: string
+      description: |-
+        * `capitalize` - capitalize
+        * `expense` - expense
     EracunBlock:
       type: object
       properties:
@@ -6600,6 +6762,15 @@ components:
         related_fixed_asset_id:
           type: integer
           nullable: true
+        posting_profile_id:
+          type: integer
+          nullable: true
+        posting_profile_code:
+          type: string
+          nullable: true
+        posting_profile_name:
+          type: string
+          nullable: true
         notes:
           type: string
         created_at:
@@ -6622,9 +6793,39 @@ components:
       - notes
       - official_kind
       - original_filename
+      - posting_profile_code
+      - posting_profile_id
+      - posting_profile_name
       - reference
       - related_fixed_asset_id
       - workflow_status
+    OfficialDocumentPostingProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        economic_effect:
+          $ref: '#/components/schemas/EconomicEffectEnum'
+        allowed_kinds:
+          type: array
+          items:
+            type: string
+        requires_fixed_asset:
+          type: boolean
+        is_active:
+          type: boolean
+      required:
+      - allowed_kinds
+      - code
+      - economic_effect
+      - id
+      - is_active
+      - name
+      - requires_fixed_asset
     OfficialKindEnum:
       enum:
       - tax_decision
@@ -8023,6 +8224,13 @@ components:
           description: Decimal as string, e.g. "1100.00"
       required:
       - return_bank_account_id
+    SetOfficialDocumentPostingProfileRequest:
+      type: object
+      properties:
+        posting_profile_id:
+          type: integer
+      required:
+      - posting_profile_id
     SettlementTrail:
       type: object
       properties:

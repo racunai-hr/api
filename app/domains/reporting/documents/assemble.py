@@ -6,7 +6,10 @@ from datetime import date
 
 from domains.reporting.documents.attachments import download_available_field
 from domains.reporting.documents.evidence import incoming_pdf_available, incoming_ubl_available
-from domains.reporting.documents.incoming_detail import enrich_incoming_detail_payload
+from domains.reporting.documents.incoming_detail import (
+    build_subledger_context,
+    enrich_incoming_detail_payload,
+)
 from domains.reporting.documents.provenance import provenanced
 from domains.reporting.documents.projection import (
     bank_block,
@@ -28,7 +31,11 @@ from accounting.services.journal_markers import extract_document_type
 from fiscal_gateway.models import As4DocumentLink
 from integrations.models import IntegrationOutboxMessage
 
-OBLIGATION_DOCUMENT_TYPES = frozenset({'expense_approved', 'invoice_issued'})
+OBLIGATION_DOCUMENT_TYPES = frozenset({
+    'expense_approved',
+    'invoice_issued',
+    'official_document_posted',
+})
 
 
 def _primary_subledger(rows):
@@ -414,7 +421,14 @@ def assemble_official_row(document, rel, as_of_day: date, *, detail: bool) -> di
         from domains.reporting.documents.attachments import attachment_blob_available
 
         has_pdf = attachment_blob_available(document)
-    operational = operational_official(document=document, posting=posting, bank_matched=bank_matched)
+    subledger_rows = rel.get('sub_off', {}).get(document.pk, [])
+    subledger = _primary_subledger(subledger_rows)
+    operational = operational_official(
+        document=document,
+        posting=posting,
+        bank_matched=bank_matched,
+        subledger=subledger,
+    )
     payload = {
         'id': document.pk,
         'kind': 'official',
@@ -429,7 +443,7 @@ def assemble_official_row(document, rel, as_of_day: date, *, detail: bool) -> di
         'document_status': provenanced(document.status, source='document_status'),
         'operational_status': operational,
         'posting': posting_block(posting),
-        'subledger': build_subledger_block(None, as_of_day),
+        'subledger': build_subledger_block(subledger, as_of_day),
         'bank': bank_block(match_status='matched' if bank_matched else None, expected=False),
         'payment_order': payment_order_block(None),
         'vat': {
@@ -470,6 +484,15 @@ def assemble_official_row(document, rel, as_of_day: date, *, detail: bool) -> di
     payload['created_by'] = document.created_by.username if document.created_by_id else None
     payload['related_fixed_asset_id'] = document.related_fixed_asset_id
     payload['official_kind'] = document.kind
+    profile = getattr(document, 'posting_profile', None)
+    payload['posting_profile_id'] = profile.pk if profile else None
+    payload['posting_profile_code'] = profile.code if profile else None
+    payload['posting_profile_name'] = profile.name if profile else None
+    allocations = rel.get('alloc_by_sub', {}).get(subledger.pk, []) if subledger else []
+    payload['subledger_context'] = build_subledger_context(
+        subledger=subledger,
+        allocations=allocations,
+    )
     payload['items'] = []
     payload['service_date'] = None
     payload['journal_lines'] = []

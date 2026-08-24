@@ -1852,3 +1852,51 @@ class DocumentReadModelTests(TestCase):
         detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
         self.assertEqual(detail['operational_status']['value'], 'paid')
         self.assertEqual(detail['subledger']['open_amount']['reason'], 'not_recorded')
+
+    def test_official_open_ap_is_ssot_over_bank_match(self):
+        document = self._official()
+        je = self._journal(document, number='JE-OFF-AB', description='[official_document_posted] PPMV')
+        SubledgerItem.all_objects.create(
+            tenant=self.tenant,
+            partner=document.issuer,
+            direction='payable',
+            source_content_type=ContentType.objects.get_for_model(OfficialDocument),
+            source_object_id=document.pk,
+            journal_entry=je,
+            original_amount=document.amount,
+            open_amount=document.amount,
+            due_date=document.issue_date,
+            status='open',
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='EUR-OFF-AP',
+            bank_name='OTP',
+            account_number='222',
+            iban='HR6124070001100204772',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-OFF-2',
+            bank_account=bank_account,
+            statement_date=date(2026, 8, 10),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('10347.20'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 8, 10),
+            amount=Decimal('10347.20'),
+            currency='EUR',
+            transaction_type='debit',
+            description='PPMV',
+            match_status='matched',
+            matched_journal_entry=je,
+        )
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['operational_status']['value'], 'posted')
+        self.assertEqual(detail['operational_status']['source'], 'journal_entry')
+        self.assertEqual(detail['subledger']['state']['value'], 'open')
+        self.assertEqual(detail['subledger']['open_amount']['value'], '10347.20')

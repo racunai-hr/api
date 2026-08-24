@@ -13,7 +13,14 @@ from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
-from accounting.models import Deposit, JournalEntry, JournalEntryLine, PrivateFundsClaim, SubledgerItem
+from accounting.models import (
+    Deposit,
+    JournalEntry,
+    JournalEntryLine,
+    OfficialDocument,
+    PrivateFundsClaim,
+    SubledgerItem,
+)
 from accounting.services.analytics import get_or_create_analytic_for_partner
 from accounting.services.posting import (
     get_or_create_fiscal_period,
@@ -232,6 +239,24 @@ def settle_open_item_from_bank(
             source_id=source.pk,
         )
 
+    if model == 'officialdocument':
+        if transaction_type != 'debit':
+            raise SettlementBadRequest('direction_mismatch', 'Obveza zahtijeva terećenje.')
+        entry = _settle_official_document(
+            tenant=tenant,
+            user=user,
+            document=source,
+            bank_account=bank_account,
+            amount=amount,
+            settlement_date=settlement_date,
+            bank_transaction_id=bank_transaction_id,
+        )
+        return SettlementResult(
+            journal_entry=entry,
+            source_type='officialdocument',
+            source_id=source.pk,
+        )
+
     raise SettlementBadRequest('unsupported_source', f'Nepodržan tip izvora: {model}')
 
 
@@ -351,6 +376,58 @@ def _settle_expense(
     if allocated is None:
         raise SettlementConflict('allocation_failed', 'Alokacija saldakonta nije uspjela.')
     _mark_expense_paid_if_closed(tenant=tenant, expense=expense)
+    return entry
+
+
+def _settle_official_document(
+    *,
+    tenant,
+    user,
+    document: OfficialDocument,
+    bank_account,
+    amount,
+    settlement_date,
+    bank_transaction_id: int,
+):
+    partner = document.issuer
+    if partner is None:
+        raise SettlementBadRequest('missing_partner', 'Službeni dokument nema izdavatelja.')
+    bank_coa = _bank_ledger_account(tenant, bank_account)
+    analytic = get_or_create_analytic_for_partner(tenant, partner, synthetic_code='2201')
+    payable = analytic.chart_account
+    marker = bank_reconcile_marker(bank_transaction_id)
+    entry = JournalEntry.all_objects.create(
+        tenant=tenant,
+        entry_number=_next_entry_number(tenant, settlement_date),
+        entry_date=settlement_date,
+        status='draft',
+        description=f'{marker} officialdocument-{document.pk} Bank reconcile — {document.document_number}',
+        reference=document.document_number or '',
+        is_auto=True,
+        source_content_type=ContentType.objects.get_for_model(OfficialDocument),
+        source_object_id=document.pk,
+        fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
+        created_by=user,
+    )
+    JournalEntryLine.objects.create(
+        journal_entry=entry,
+        account=payable,
+        analytic_account=analytic,
+        description='Plaćanje obveze',
+        debit_amount=amount,
+        credit_amount=Decimal('0'),
+    )
+    JournalEntryLine.objects.create(
+        journal_entry=entry,
+        account=bank_coa,
+        description='Plaćanje — banka',
+        debit_amount=Decimal('0'),
+        credit_amount=amount,
+    )
+    entry.post(user)
+    allocated = allocate_payment(tenant, source=document, journal_entry=entry, amount=amount)
+    if allocated is None:
+        raise SettlementConflict('allocation_failed', 'Alokacija saldakonta nije uspjela.')
     return entry
 
 

@@ -68,6 +68,9 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('post', '/api/finance/official-documents/{id}/register/'),
         ('post', '/api/finance/official-documents/{id}/cancel/'),
         ('post', '/api/finance/official-documents/{id}/link-journal/'),
+        ('get', '/api/finance/official-document-posting-profiles/'),
+        ('post', '/api/finance/official-documents/{id}/posting-profile/'),
+        ('post', '/api/finance/official-documents/{id}/post/'),
         ('get', '/api/assets/fixed-assets/'),
         ('get', '/api/assets/fixed-assets/{id}/'),
         ('get', '/api/assets/fixed-assets/{id}/depreciation-schedule/'),
@@ -160,6 +163,18 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     'finance-official-document-link-journal': (
         'post',
         '/api/finance/official-documents/{id}/link-journal/',
+    ),
+    'finance-official-document-posting-profile-list': (
+        'get',
+        '/api/finance/official-document-posting-profiles/',
+    ),
+    'finance-official-document-set-posting-profile': (
+        'post',
+        '/api/finance/official-documents/{id}/posting-profile/',
+    ),
+    'finance-official-document-post': (
+        'post',
+        '/api/finance/official-documents/{id}/post/',
     ),
     'assets-fixed-asset-list': ('get', '/api/assets/fixed-assets/'),
     'assets-fixed-asset-detail': ('get', '/api/assets/fixed-assets/{id}/'),
