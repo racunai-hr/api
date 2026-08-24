@@ -7,11 +7,19 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, transaction
 from django.http import Http404
 
-from accounting.models import FixedAsset, JournalEntry, OfficialDocument, OfficialDocumentPostingProfile
+from accounting.models import (
+    AssetJournalLinkRole,
+    FixedAsset,
+    FixedAssetJournalLink,
+    JournalEntry,
+    OfficialDocument,
+    OfficialDocumentPostingProfile,
+)
 from accounting.services.posting import (
     OFFICIAL_DOCUMENT_POSTED,
     ensure_default_official_document_posting_profiles,
@@ -97,6 +105,59 @@ def _asset(tenant, asset_id):
     if asset is None:
         raise Http404()
     return asset
+
+
+def _ensure_capitalize_asset_link(*, tenant, document, entry) -> None:
+    """Link capitalize OfficialDocument JE onto the related asset (ADR-0029 §2.5).
+
+    Idempotent. Does not reuse apply_asset_journal_links (backfill audit).
+    """
+    profile = document.posting_profile
+    if profile is None or profile.economic_effect != OfficialDocumentPostingProfile.EFFECT_CAPITALIZE:
+        return
+    if entry is None or not document.related_fixed_asset_id:
+        return
+
+    asset = document.related_fixed_asset
+    if asset is None:
+        asset = FixedAsset.all_objects.filter(pk=document.related_fixed_asset_id).first()
+    if asset is None:
+        raise OfficialDocumentBadRequest('invalid_asset', 'Povezana imovina nije pronađena.')
+    if asset.tenant_id != tenant.pk or entry.tenant_id != tenant.pk:
+        raise OfficialDocumentBadRequest(
+            'invalid_asset',
+            'Imovina i temeljnica moraju pripadati istom tenantu.',
+        )
+    if asset.tenant_id != entry.tenant_id:
+        raise OfficialDocumentBadRequest(
+            'invalid_asset',
+            'Imovina i temeljnica moraju pripadati istom tenantu.',
+        )
+
+    existing = FixedAssetJournalLink.all_objects.filter(
+        tenant=tenant,
+        fixed_asset=asset,
+        journal_entry=entry,
+    ).first()
+    if existing is not None:
+        return
+
+    link = FixedAssetJournalLink(
+        tenant=tenant,
+        fixed_asset=asset,
+        journal_entry=entry,
+        role=AssetJournalLinkRole.DEPENDENT_COST,
+    )
+    try:
+        link.full_clean()
+        link.save()
+    except ValidationError as exc:
+        raise OfficialDocumentBadRequest(
+            'invalid_asset',
+            'Temeljnicu nije moguće povezati s imovinom.',
+        ) from exc
+    except IntegrityError:
+        return
 
 
 def _detect_kind(header: bytes) -> str | None:
@@ -440,6 +501,7 @@ def post_official_document(*, tenant, document_id: int, user) -> dict:
             'Dokument ima ručno povezanu temeljnicu bez saldakonta.',
         )
     if marker_je is not None and item is not None:
+        _ensure_capitalize_asset_link(tenant=tenant, document=document, entry=marker_je)
         return _serialize(document)
     if jes:
         raise OfficialDocumentConflict(
@@ -465,4 +527,5 @@ def post_official_document(*, tenant, document_id: int, user) -> dict:
             'posting_incomplete',
             'Knjiženje nije stvorilo stavku saldakonta.',
         )
+    _ensure_capitalize_asset_link(tenant=tenant, document=document, entry=entry)
     return _serialize(document)

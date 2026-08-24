@@ -13,9 +13,11 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounting.models import (
+    AssetJournalLinkRole,
     ChartOfAccounts,
     DepreciationMethod,
     FixedAsset,
+    FixedAssetJournalLink,
     FixedAssetOrigin,
     FixedAssetStatus,
     JournalEntry,
@@ -135,6 +137,36 @@ class OfficialDocumentPostingTests(TestCase):
             HTTP_IDEMPOTENCY_KEY=key,
         )
 
+    def _marker_entries(self, document_id):
+        ct = ContentType.objects.get_for_model(OfficialDocument)
+        return list(
+            JournalEntry.all_objects.filter(
+                tenant=self.tenant,
+                source_content_type=ct,
+                source_object_id=document_id,
+                description__startswith=f'[{OFFICIAL_DOCUMENT_POSTED}]',
+                status='posted',
+            )
+        )
+
+    def _payables(self, document_id):
+        ct = ContentType.objects.get_for_model(OfficialDocument)
+        return list(
+            SubledgerItem.all_objects.filter(
+                tenant=self.tenant,
+                source_content_type=ct,
+                source_object_id=document_id,
+            ).exclude(status='cancelled')
+        )
+
+    def _asset_links(self, *, asset=None, entry=None):
+        qs = FixedAssetJournalLink.all_objects.filter(tenant=self.tenant)
+        if asset is not None:
+            qs = qs.filter(fixed_asset=asset)
+        if entry is not None:
+            qs = qs.filter(journal_entry=entry)
+        return list(qs)
+
     def test_register_without_profile_is_ok(self):
         created = self._create_registered()
         self.assertIsNone(created['posting_profile_id'])
@@ -223,6 +255,11 @@ class OfficialDocumentPostingTests(TestCase):
         self.assertEqual(items[0].open_amount, Decimal('10347.20'))
         self.assertEqual(items[0].status, 'open')
         self.assertEqual(document.status, OfficialDocument.STATUS_REGISTERED)
+        links = self._asset_links(asset=self.asset, entry=entry)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].role, AssetJournalLinkRole.DEPENDENT_COST)
+        self.assertEqual(links[0].fixed_asset_id, self.asset.pk)
+        self.assertEqual(links[0].journal_entry_id, entry.pk)
 
     def test_second_post_is_idempotent(self):
         created = self._create_registered(document_number='UP/I-IDEM')
@@ -249,6 +286,118 @@ class OfficialDocumentPostingTests(TestCase):
             ).exclude(status='cancelled').count(),
             1,
         )
+        entries = self._marker_entries(created['id'])
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(len(self._asset_links(asset=self.asset, entry=entries[0])), 1)
+        third = self._post(created['id'], key='idem-3')
+        self.assertEqual(third.status_code, 200)
+        self.assertEqual(len(self._marker_entries(created['id'])), 1)
+        self.assertEqual(len(self._payables(created['id'])), 1)
+        self.assertEqual(len(self._asset_links(asset=self.asset, entry=entries[0])), 1)
+
+    def test_second_post_heals_missing_capitalize_link(self):
+        created = self._create_registered(document_number='UP/I-HEAL')
+        self._set_profile(created['id'], self.ppmv.pk)
+        first = self._post(created['id'], key='heal-1')
+        self.assertEqual(first.status_code, 200, first.data)
+        entries = self._marker_entries(created['id'])
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        payables = self._payables(created['id'])
+        self.assertEqual(len(payables), 1)
+        payable_id = payables[0].pk
+        FixedAssetJournalLink.all_objects.filter(
+            tenant=self.tenant,
+            journal_entry=entry,
+        ).delete()
+        self.assertEqual(len(self._asset_links(entry=entry)), 0)
+        second = self._post(created['id'], key='heal-2')
+        self.assertEqual(second.status_code, 200, second.data)
+        healed_entries = self._marker_entries(created['id'])
+        self.assertEqual(len(healed_entries), 1)
+        self.assertEqual(healed_entries[0].pk, entry.pk)
+        healed_payables = self._payables(created['id'])
+        self.assertEqual(len(healed_payables), 1)
+        self.assertEqual(healed_payables[0].pk, payable_id)
+        links = self._asset_links(asset=self.asset, entry=entry)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].role, AssetJournalLinkRole.DEPENDENT_COST)
+
+    def test_administrative_fee_post_creates_no_asset_link(self):
+        created = self._create_registered(
+            official_kind='other',
+            document_number='UPR-2026-1',
+        )
+        set_profile = self._set_profile(created['id'], self.admin_fee.pk)
+        self.assertEqual(set_profile.status_code, 200, set_profile.data)
+        response = self._post(created['id'], key='admin-fee-1')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(self._marker_entries(created['id'])), 1)
+        self.assertEqual(len(self._payables(created['id'])), 1)
+        self.assertEqual(len(self._asset_links(asset=self.asset)), 0)
+
+    def test_capitalize_link_rejects_foreign_tenant_asset(self):
+        from domains.finance.services.official_documents import (
+            OfficialDocumentBadRequest,
+            _ensure_capitalize_asset_link,
+        )
+
+        other = Tenant.objects.create(slug='other-post', name='Other Post Co')
+        provision_tenant_chart(other)
+        other_asset = FixedAsset.all_objects.create(
+            tenant=other,
+            name='Tuđi Audi',
+            inventory_number='OS-FOREIGN',
+            status=FixedAssetStatus.IN_PREPARATION,
+            origin=FixedAssetOrigin.PURCHASE,
+            acquisition_cost=Decimal('1000.00'),
+            purchase_date=date(2026, 8, 1),
+            depreciation_method=DepreciationMethod.LINEAR,
+            construction_account=ChartOfAccounts.all_objects.get(tenant=other, account_code='0373'),
+            asset_account=ChartOfAccounts.all_objects.get(tenant=other, account_code='032001'),
+            accumulated_depreciation_account=ChartOfAccounts.all_objects.get(
+                tenant=other, account_code='0393'
+            ),
+            depreciation_expense_account=ChartOfAccounts.all_objects.get(
+                tenant=other, account_code='4314'
+            ),
+        )
+        created = self._create_registered(document_number='UP/I-X-TENANT')
+        OfficialDocument.all_objects.filter(pk=created['id']).update(
+            related_fixed_asset=other_asset,
+        )
+        self._set_profile(created['id'], self.ppmv.pk)
+        response = self._post(created['id'], key='x-tenant-1')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['code'], 'invalid_asset')
+        self.assertEqual(len(self._marker_entries(created['id'])), 0)
+        self.assertEqual(len(self._payables(created['id'])), 0)
+        self.assertFalse(
+            FixedAssetJournalLink.all_objects.filter(
+                journal_entry__source_object_id=created['id'],
+            ).exists()
+        )
+        self.assertFalse(
+            FixedAssetJournalLink.all_objects.filter(fixed_asset=other_asset).exists()
+        )
+
+        created_ok = self._create_registered(document_number='UP/I-X-HELPER')
+        self._set_profile(created_ok['id'], self.ppmv.pk)
+        self.assertEqual(self._post(created_ok['id'], key='x-helper-1').status_code, 200)
+        document = OfficialDocument.all_objects.get(pk=created_ok['id'])
+        entry = self._marker_entries(created_ok['id'])[0]
+        document.related_fixed_asset = other_asset
+        with self.assertRaises(OfficialDocumentBadRequest) as raised:
+            _ensure_capitalize_asset_link(
+                tenant=self.tenant,
+                document=document,
+                entry=entry,
+            )
+        self.assertEqual(raised.exception.code, 'invalid_asset')
+        self.assertFalse(
+            FixedAssetJournalLink.all_objects.filter(fixed_asset=other_asset).exists()
+        )
+        self.assertEqual(len(self._asset_links(asset=self.asset, entry=entry)), 1)
 
     def test_manual_link_without_ap_is_409_and_does_not_lock_profile(self):
         created = self._create_registered(document_number='UP/I-LEGACY')

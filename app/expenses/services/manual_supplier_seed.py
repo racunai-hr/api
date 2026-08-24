@@ -29,6 +29,7 @@ def _defaults(tax_number: str) -> dict:
         'phone': data.get('phone', ''),
         'partner_type': 'supplier',
         'status': 'active',
+        'notes': data.get('notes', ''),
     }
 
 
