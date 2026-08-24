@@ -131,6 +131,26 @@ DEFAULT_POSTING_RULES = [
         'use_analytic': True,
         'condition': {'posting_profile': ['administrative_fee']},
     },
+    {
+        'name': 'Službeni dokument — FZOEU naknada vozila / obveza',
+        'document_type': 'official_document_posted',
+        'debit_account_code': '0373',
+        'credit_account_code': '2201',
+        'amount_field': 'amount',
+        'priority': 30,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['fzoeu_vehicle_acquisition_fee']},
+    },
+    {
+        'name': 'Službeni dokument — FZOEU naknada guma / obveza',
+        'document_type': 'official_document_posted',
+        'debit_account_code': '0373',
+        'credit_account_code': '2201',
+        'amount_field': 'amount',
+        'priority': 40,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['fzoeu_tire_acquisition_fee']},
+    },
 ]
 
 
@@ -229,6 +249,20 @@ DEFAULT_OFFICIAL_DOCUMENT_POSTING_PROFILES = [
         'economic_effect': 'expense',
         'allowed_kinds': ['other'],
         'requires_fixed_asset': False,
+    },
+    {
+        'code': 'fzoeu_vehicle_acquisition_fee',
+        'name': 'FZOEU – naknada za vozilo (nabava)',
+        'economic_effect': 'capitalize',
+        'allowed_kinds': ['tax_decision'],
+        'requires_fixed_asset': True,
+    },
+    {
+        'code': 'fzoeu_tire_acquisition_fee',
+        'name': 'FZOEU – naknada za gume (nabava)',
+        'economic_effect': 'capitalize',
+        'allowed_kinds': ['tax_decision'],
+        'requires_fixed_asset': True,
     },
 ]
 

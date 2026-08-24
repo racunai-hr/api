@@ -95,6 +95,14 @@ class OfficialDocumentPostingTests(TestCase):
             tenant=cls.tenant,
             code='administrative_fee',
         )
+        cls.fzoeu_vehicle = OfficialDocumentPostingProfile.all_objects.get(
+            tenant=cls.tenant,
+            code=OfficialDocumentPostingProfile.CODE_FZOEU_VEHICLE_ACQUISITION_FEE,
+        )
+        cls.fzoeu_tire = OfficialDocumentPostingProfile.all_objects.get(
+            tenant=cls.tenant,
+            code=OfficialDocumentPostingProfile.CODE_FZOEU_TIRE_ACQUISITION_FEE,
+        )
 
     def setUp(self):
         self.client = APIClient()
@@ -183,10 +191,20 @@ class OfficialDocumentPostingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         codes = {row['code'] for row in response.data}
         effects = {row['economic_effect'] for row in response.data}
-        self.assertEqual(codes, {'ppmv_vehicle_acquisition', 'administrative_fee'})
+        self.assertEqual(
+            codes,
+            {
+                OfficialDocumentPostingProfile.CODE_PPMV_VEHICLE_ACQUISITION,
+                OfficialDocumentPostingProfile.CODE_ADMINISTRATIVE_FEE,
+                OfficialDocumentPostingProfile.CODE_FZOEU_VEHICLE_ACQUISITION_FEE,
+                OfficialDocumentPostingProfile.CODE_FZOEU_TIRE_ACQUISITION_FEE,
+            },
+        )
         self.assertEqual(effects, {'capitalize', 'expense'})
         self.assertNotIn('tax_obligation', codes)
         self.assertNotIn('liability_only', effects)
+        self.assertNotIn('fzoeu_vehicle_fee', codes)
+        self.assertNotIn('fzoeu_tire_fee', codes)
         for row in response.data:
             self.assertNotIn('debit_account_code', row)
             self.assertNotIn('credit_account_code', row)
@@ -322,6 +340,47 @@ class OfficialDocumentPostingTests(TestCase):
         links = self._asset_links(asset=self.asset, entry=entry)
         self.assertEqual(len(links), 1)
         self.assertEqual(links[0].role, AssetJournalLinkRole.DEPENDENT_COST)
+
+    def test_fzoeu_vehicle_acquisition_fee_posts_capitalize_link(self):
+        created = self._create_registered(
+            document_number='UP/I-351-02/26-29/9463',
+            amount='166.00',
+        )
+        set_profile = self._set_profile(created['id'], self.fzoeu_vehicle.pk)
+        self.assertEqual(set_profile.status_code, 200, set_profile.data)
+        response = self._post(created['id'], key='fzoeu-vehicle-1')
+        self.assertEqual(response.status_code, 200, response.data)
+        entries = self._marker_entries(created['id'])
+        self.assertEqual(len(entries), 1)
+        lines = list(entries[0].lines.all())
+        debit = next(line for line in lines if line.debit_amount)
+        credit = next(line for line in lines if line.credit_amount)
+        self.assertEqual(debit.account.account_code, '0373')
+        self.assertTrue(str(credit.account.account_code).startswith('2201'))
+        self.assertEqual(debit.debit_amount, Decimal('166.00'))
+        payables = self._payables(created['id'])
+        self.assertEqual(len(payables), 1)
+        self.assertEqual(payables[0].open_amount, Decimal('166.00'))
+        links = self._asset_links(asset=self.asset, entry=entries[0])
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].role, AssetJournalLinkRole.DEPENDENT_COST)
+
+    def test_fzoeu_tire_acquisition_fee_posts_capitalize_link(self):
+        created = self._create_registered(
+            document_number='UP/I-351-02/26-24/11251',
+            amount='3.60',
+        )
+        set_profile = self._set_profile(created['id'], self.fzoeu_tire.pk)
+        self.assertEqual(set_profile.status_code, 200, set_profile.data)
+        response = self._post(created['id'], key='fzoeu-tire-1')
+        self.assertEqual(response.status_code, 200, response.data)
+        entries = self._marker_entries(created['id'])
+        self.assertEqual(len(entries), 1)
+        debit = next(line for line in entries[0].lines.all() if line.debit_amount)
+        self.assertEqual(debit.account.account_code, '0373')
+        self.assertEqual(debit.debit_amount, Decimal('3.60'))
+        self.assertEqual(len(self._payables(created['id'])), 1)
+        self.assertEqual(len(self._asset_links(asset=self.asset, entry=entries[0])), 1)
 
     def test_administrative_fee_post_creates_no_asset_link(self):
         created = self._create_registered(

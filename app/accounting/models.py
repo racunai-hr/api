@@ -1743,6 +1743,8 @@ class OfficialDocumentPostingProfile(TenantMixin, models.Model):
 
     CODE_PPMV_VEHICLE_ACQUISITION = 'ppmv_vehicle_acquisition'
     CODE_ADMINISTRATIVE_FEE = 'administrative_fee'
+    CODE_FZOEU_VEHICLE_ACQUISITION_FEE = 'fzoeu_vehicle_acquisition_fee'
+    CODE_FZOEU_TIRE_ACQUISITION_FEE = 'fzoeu_tire_acquisition_fee'
 
     EFFECT_CAPITALIZE = 'capitalize'
     EFFECT_EXPENSE = 'expense'
