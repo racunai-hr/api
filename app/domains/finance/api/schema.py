@@ -108,6 +108,47 @@ class DepositConflictSerializer(serializers.Serializer):
     detail = serializers.CharField()
 
 
+class OfficialDocumentSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    official_kind = serializers.ChoiceField(choices=['tax_decision', 'other'])
+    issuer_id = serializers.IntegerField()
+    issuer_name = serializers.CharField()
+    document_number = serializers.CharField()
+    reference = serializers.CharField(allow_blank=True)
+    issue_date = serializers.CharField(allow_null=True)
+    due_date = serializers.CharField(allow_null=True)
+    amount = serializers.CharField()
+    currency = serializers.CharField()
+    workflow_status = serializers.ChoiceField(choices=['draft', 'registered', 'cancelled'])
+    original_filename = serializers.CharField(allow_blank=True)
+    content_type = serializers.CharField(allow_blank=True)
+    file_sha256 = serializers.CharField(allow_blank=True)
+    file_size = serializers.IntegerField()
+    has_file = serializers.BooleanField()
+    related_fixed_asset_id = serializers.IntegerField(allow_null=True)
+    notes = serializers.CharField(allow_blank=True)
+    created_at = serializers.CharField(allow_null=True)
+
+
+class CreateOfficialDocumentSerializer(serializers.Serializer):
+    official_kind = serializers.ChoiceField(choices=['tax_decision', 'other'], required=False)
+    issuer_id = serializers.IntegerField()
+    document_number = serializers.CharField()
+    reference = serializers.CharField(required=False, allow_blank=True)
+    issue_date = serializers.DateField()
+    due_date = serializers.DateField(required=False, allow_null=True)
+    amount = money_field()
+    currency = serializers.CharField(required=False, default='EUR')
+    related_fixed_asset_id = serializers.IntegerField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    register = serializers.BooleanField(required=False)
+    file = serializers.FileField(required=False)
+
+
+class LinkOfficialDocumentJournalSerializer(serializers.Serializer):
+    journal_entry_id = serializers.IntegerField()
+
+
 class ExpenseApproveResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     expense_number = serializers.CharField()

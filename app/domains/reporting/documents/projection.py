@@ -305,6 +305,37 @@ def operational_incoming(
     return provenanced(document.status, source='document_status')
 
 
+def operational_official(*, document, posting=None, bank_matched: bool = False) -> dict:
+    if document.status == 'cancelled':
+        return provenanced('cancelled', source='document_status')
+    if (
+        bank_matched
+        and posting is not None
+        and getattr(posting, 'status', None) == 'posted'
+    ):
+        return provenanced('paid', source='bank_transaction')
+    if posting is not None and getattr(posting, 'status', None) == 'posted':
+        return provenanced('posted', source='journal_entry')
+    if document.status == 'registered':
+        return provenanced('registered', source='document_status')
+    if document.status == 'draft':
+        return provenanced('draft', source='document_status')
+    return provenanced(document.status, source='document_status')
+
+
+def collect_official_controls(document, *, has_pdf: bool) -> list[str]:
+    alerts: list[str] = []
+    if document.issuer_id is None:
+        alerts.append('missing_partner_or_oib')
+    if not (document.document_number or '').strip() or not document.issue_date:
+        alerts.append('missing_document_number_or_date')
+    if document.amount is None or document.amount <= Decimal('0'):
+        alerts.append('missing_amount')
+    if not has_pdf:
+        alerts.append('missing_pdf_xml')
+    return alerts
+
+
 def operational_deposit(*, document, subledger) -> dict:
     """Operational status for kaucija — SubledgerItem SSOT when present (ADR-0024)."""
     if document.status == 'cancelled':

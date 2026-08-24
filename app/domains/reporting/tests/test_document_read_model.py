@@ -27,6 +27,7 @@ from accounting.models import (
     FiscalPeriod,
     JournalEntry,
     JournalEntryLine,
+    OfficialDocument,
     PrivateFundsClaim,
     SubledgerAllocation,
     SubledgerItem,
@@ -1749,3 +1750,105 @@ class DocumentReadModelTests(TestCase):
         self.assertIsNone(trail['closings'][0]['bank_transaction_id'])
         self.assertIsNone(trail['closings'][0]['private_funds_claim_id'])
         self.assertEqual(trail['warnings'], [])
+
+    def _official(self, **overrides):
+        defaults = {
+            'tenant': self.tenant,
+            'kind': OfficialDocument.KIND_TAX_DECISION,
+            'issuer': self.supplier,
+            'document_number': f'UP/I-{OfficialDocument.all_objects.filter(tenant=self.tenant).count() + 1}',
+            'issue_date': date(2026, 8, 3),
+            'amount': Decimal('10347.20'),
+            'currency': 'EUR',
+            'status': OfficialDocument.STATUS_REGISTERED,
+            'created_by': self.user,
+        }
+        defaults.update(overrides)
+        document = OfficialDocument.all_objects.create(**defaults)
+        document.original_file.save(
+            'rjesnje.pdf',
+            ContentFile(b'%PDF-1.4\ntrailer\n<<>>\n%%EOF\n'),
+            save=False,
+        )
+        document.original_filename = 'rjesnje.pdf'
+        document.content_type = 'application/pdf'
+        document.file_size = document.original_file.size
+        document.save()
+        return document
+
+    def test_official_incoming_filter_excludes_official(self):
+        document = self._official()
+        self._expense()
+        incoming = self._auth_client().get('/api/documents/?direction=incoming').json()
+        self.assertTrue(all(row['direction'] == 'incoming' for row in incoming['results']))
+        self.assertFalse(any(row['kind'] == 'official' for row in incoming['results']))
+        grouped = self._auth_client().get('/api/documents/?direction=incoming,official').json()
+        kinds = {row['kind'] for row in grouped['results']}
+        self.assertIn('official', kinds)
+        self.assertIn('expense', kinds)
+        only_off = self._auth_client().get('/api/documents/?direction=official').json()
+        self.assertGreaterEqual(only_off['count'], 1)
+        self.assertTrue(all(row['direction'] == 'official' for row in only_off['results']))
+        self.assertTrue(any(row['id'] == document.pk for row in only_off['results']))
+
+    def test_official_detail_and_pdf_download(self):
+        document = self._official()
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['kind'], 'official')
+        self.assertEqual(detail['direction'], 'official')
+        self.assertTrue(detail['pdf_available'])
+        self.assertEqual(detail['subledger']['open_amount']['reason'], 'not_recorded')
+        self.assertNotIn('issued_unposted', detail['controls'])
+        pdf = self._auth_client().get(f'/api/documents/official/{document.pk}/pdf/')
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf['Content-Type'], 'application/pdf')
+
+    def test_official_other_tenant_pdf_is_404(self):
+        document = self._official()
+        other_user = get_user_model().objects.create_user(username='off-x', password='test')
+        TenantMembership.objects.create(user=other_user, tenant=self.other, role='owner')
+        response = self._auth_client(other_user, host=OTHER_HOST).get(
+            f'/api/documents/official/{document.pk}/pdf/'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_official_unposted_has_no_issued_unposted_control(self):
+        document = self._official()
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['posting']['state']['value'], 'not_posted')
+        self.assertNotIn('issued_unposted', detail['controls'])
+        self.assertEqual(detail['operational_status']['value'], 'registered')
+
+    def test_official_bank_matched_posted_je_is_paid(self):
+        document = self._official()
+        je = self._journal(document, number='JE-OFF-PAY', description='PPMV')
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='EUR-OFF',
+            bank_name='OTP',
+            account_number='111',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-OFF-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 8, 10),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('10347.20'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 8, 10),
+            amount=Decimal('10347.20'),
+            currency='EUR',
+            transaction_type='debit',
+            description='PPMV',
+            match_status='matched',
+            matched_journal_entry=je,
+        )
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['operational_status']['value'], 'paid')
+        self.assertEqual(detail['subledger']['open_amount']['reason'], 'not_recorded')

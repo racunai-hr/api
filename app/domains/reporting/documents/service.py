@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Sum
 from django.http import Http404
 
-from accounting.models import Deposit, SubledgerItem
+from accounting.models import Deposit, OfficialDocument, SubledgerItem
 from expenses.models import Expense, ExpenseAttachment
 from invoices.models import Invoice
 
@@ -20,6 +20,7 @@ from domains.reporting.documents.query import (
     filtered_deposits,
     filtered_expenses,
     filtered_invoices,
+    filtered_official,
     paginate_union,
     union_rows,
 )
@@ -39,6 +40,7 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
     invoices = filtered_invoices(tenant, filters, today)
     expenses = filtered_expenses(tenant, filters, today)
     deposits = filtered_deposits(tenant, filters, today)
+    official = filtered_official(tenant, filters, today)
     invoice_ct = ContentType.objects.get_for_model(Invoice)
     expense_ct = ContentType.objects.get_for_model(Expense)
     deposit_ct = ContentType.objects.get_for_model(Deposit)
@@ -49,6 +51,9 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
     dep_gross = deposits.aggregate(total=Sum('amount'))['total']
     exp_by_currency = list(
         expenses.values('currency').annotate(count=Count('id'), total=Sum('amount'))
+    )
+    off_by_currency = list(
+        official.values('currency').annotate(count=Count('id'), total=Sum('amount'))
     )
     open_ar_inv = SubledgerItem.all_objects.filter(
         tenant=tenant,
@@ -86,8 +91,13 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
     eur['outgoing_gross'] = money((inv_gross or 0) + (dep_gross or 0))
     eur['open_receivables'] = money(open_ar)
 
-    for row in exp_by_currency:
+    incoming_totals: dict[str, dict] = {}
+    for row in exp_by_currency + off_by_currency:
         currency = row['currency'] or 'EUR'
+        bucket = incoming_totals.setdefault(currency, {'count': 0, 'total': 0})
+        bucket['count'] += row['count'] or 0
+        bucket['total'] += row['total'] or 0
+    for currency, row in incoming_totals.items():
         bucket = by_currency.setdefault(currency, {
             'outgoing_count': 0,
             'incoming_count': 0,
@@ -124,7 +134,7 @@ def list_documents(tenant, filters: DocumentListFilters) -> dict:
 
 
 def get_document_detail(tenant, direction: str, pk: int) -> dict:
-    if direction not in ('outgoing', 'incoming', 'deposit'):
+    if direction not in ('outgoing', 'incoming', 'deposit', 'official'):
         raise Http404()
     with read_snapshot() as as_of:
         today = as_of_date(as_of)
@@ -132,6 +142,8 @@ def get_document_detail(tenant, direction: str, pk: int) -> dict:
             model = Invoice
         elif direction == 'incoming':
             model = Expense
+        elif direction == 'official':
+            model = OfficialDocument
         else:
             model = Deposit
         exists = model.all_objects.filter(tenant=tenant, pk=pk).exists()

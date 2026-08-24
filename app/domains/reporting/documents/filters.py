@@ -42,9 +42,12 @@ EXPORT_COLUMNS = (
 )
 
 
+DIRECTIONS = frozenset({'incoming', 'outgoing', 'deposit', 'official'})
+
+
 @dataclass(frozen=True)
 class DocumentListFilters:
-    direction: str | None = None
+    direction: frozenset[str] | None = None
     status: str | None = None
     search: str | None = None
     year: int | None = None
@@ -84,10 +87,21 @@ def _date(raw: str | None) -> date | None:
     return date.fromisoformat(raw)
 
 
+def includes_direction(filters: DocumentListFilters, name: str) -> bool:
+    if filters.direction is None:
+        return True
+    return name in filters.direction
+
+
 def parse_filters(query) -> DocumentListFilters:
-    direction = query.get('direction') or None
-    if direction not in (None, 'incoming', 'outgoing', 'deposit'):
-        raise ValueError('direction mora biti incoming, outgoing ili deposit')
+    raw = query.get('direction') or None
+    direction = None
+    if raw:
+        parts = [part.strip() for part in raw.split(',') if part.strip()]
+        unknown = [part for part in parts if part not in DIRECTIONS]
+        if unknown or not parts:
+            raise ValueError('direction mora biti incoming, outgoing, deposit ili official')
+        direction = frozenset(parts)
     view = query.get('view') or None
     if view and view not in SYSTEM_VIEWS:
         raise ValueError(f'Nepoznat view: {view}')

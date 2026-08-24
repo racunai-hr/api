@@ -1029,7 +1029,9 @@ paths:
           enum:
           - deposit
           - incoming
+          - official
           - outgoing
+        description: Jedan identitet ili skup odvojen zarezom, npr. incoming,official.
       - in: query
         name: due_from
         schema:
@@ -1315,7 +1317,9 @@ paths:
           enum:
           - deposit
           - incoming
+          - official
           - outgoing
+        description: Jedan identitet ili skup odvojen zarezom, npr. incoming,official.
       - in: query
         name: due_from
         schema:
@@ -2116,6 +2120,263 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/official-documents/:
+    post:
+      operationId: finance_official_documents_create
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialDocumentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialDocumentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialDocumentRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/finance/official-documents/{id}/:
+    get:
+      operationId: finance_official_documents_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/official-documents/{id}/cancel/:
+    post:
+      operationId: finance_official_documents_cancel
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/finance/official-documents/{id}/link-journal/:
+    post:
+      operationId: finance_official_documents_link_journal
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkOfficialDocumentJournalRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LinkOfficialDocumentJournalRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LinkOfficialDocumentJournalRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/finance/official-documents/{id}/register/:
+    post:
+      operationId: finance_official_documents_register
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialDocumentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialDocumentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialDocumentRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialDocument'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
   /api/finance/partners/{id}/financial-summary/:
     get:
       operationId: finance_partner_financial_summary
@@ -4657,6 +4918,48 @@ components:
       - amount
       - deposit_date
       - partner_id
+    CreateOfficialDocumentRequest:
+      type: object
+      properties:
+        official_kind:
+          $ref: '#/components/schemas/OfficialKindEnum'
+        issuer_id:
+          type: integer
+        document_number:
+          type: string
+          minLength: 1
+        reference:
+          type: string
+        issue_date:
+          type: string
+          format: date
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        amount:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        currency:
+          type: string
+          minLength: 1
+          default: EUR
+        related_fixed_asset_id:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+        register:
+          type: boolean
+        file:
+          type: string
+          format: binary
+      required:
+      - amount
+      - document_number
+      - issue_date
+      - issuer_id
     CreatePartnerFromImportRequest:
       type: object
       properties:
@@ -4885,11 +5188,13 @@ components:
       - incoming
       - outgoing
       - deposit
+      - official
       type: string
       description: |-
         * `incoming` - incoming
         * `outgoing` - outgoing
         * `deposit` - deposit
+        * `official` - official
     DocumentActions:
       type: object
       properties:
@@ -6183,11 +6488,13 @@ components:
       - invoice
       - expense
       - deposit
+      - official
       type: string
       description: |-
         * `invoice` - invoice
         * `expense` - expense
         * `deposit` - deposit
+        * `official` - official
     LedgerEntry:
       type: object
       properties:
@@ -6233,6 +6540,13 @@ components:
       required:
       - code
       - scheme
+    LinkOfficialDocumentJournalRequest:
+      type: object
+      properties:
+        journal_entry_id:
+          type: integer
+      required:
+      - journal_entry_id
     MatchRequestRequest:
       type: object
       properties:
@@ -6246,6 +6560,79 @@ components:
     NullEnum:
       enum:
       - null
+    OfficialDocument:
+      type: object
+      properties:
+        id:
+          type: integer
+        official_kind:
+          $ref: '#/components/schemas/OfficialKindEnum'
+        issuer_id:
+          type: integer
+        issuer_name:
+          type: string
+        document_number:
+          type: string
+        reference:
+          type: string
+        issue_date:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          nullable: true
+        amount:
+          type: string
+        currency:
+          type: string
+        workflow_status:
+          $ref: '#/components/schemas/WorkflowStatusEnum'
+        original_filename:
+          type: string
+        content_type:
+          type: string
+        file_sha256:
+          type: string
+        file_size:
+          type: integer
+        has_file:
+          type: boolean
+        related_fixed_asset_id:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+        created_at:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - content_type
+      - created_at
+      - currency
+      - document_number
+      - due_date
+      - file_sha256
+      - file_size
+      - has_file
+      - id
+      - issue_date
+      - issuer_id
+      - issuer_name
+      - notes
+      - official_kind
+      - original_filename
+      - reference
+      - related_fixed_asset_id
+      - workflow_status
+    OfficialKindEnum:
+      enum:
+      - tax_decision
+      - other
+      type: string
+      description: |-
+        * `tax_decision` - tax_decision
+        * `other` - other
     OpenItemCandidate:
       type: object
       properties:
@@ -8397,6 +8784,16 @@ components:
       - base
       - rate
       - vat
+    WorkflowStatusEnum:
+      enum:
+      - draft
+      - registered
+      - cancelled
+      type: string
+      description: |-
+        * `draft` - draft
+        * `registered` - registered
+        * `cancelled` - cancelled
   securitySchemes:
     bearerAuth:
       type: http

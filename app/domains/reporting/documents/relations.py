@@ -10,6 +10,7 @@ from accounting.models import (
     Deposit,
     JournalEntry,
     JournalEntryLine,
+    OfficialDocument,
     PrivateFundsClaim,
     SubledgerAllocation,
     SubledgerItem,
@@ -37,9 +38,11 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     outgoing_ids = [pk for direction, pk in keys if direction == 'outgoing']
     incoming_ids = [pk for direction, pk in keys if direction == 'incoming']
     deposit_ids = [pk for direction, pk in keys if direction == 'deposit']
+    official_ids = [pk for direction, pk in keys if direction == 'official']
     invoice_ct = _ct(Invoice)
     expense_ct = _ct(Expense)
     deposit_ct = _ct(Deposit)
+    official_ct = _ct(OfficialDocument)
 
     invoices = {
         inv.pk: inv
@@ -59,6 +62,12 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
             'partner', 'created_by', 'return_bank_account',
         )
     }
+    official_docs = {
+        doc.pk: doc
+        for doc in OfficialDocument.all_objects.filter(tenant=tenant, pk__in=official_ids).select_related(
+            'issuer', 'created_by', 'related_fixed_asset',
+        )
+    }
     items_by_invoice = defaultdict(list)
     for item in InvoiceItem.objects.filter(invoice_id__in=outgoing_ids):
         items_by_invoice[item.invoice_id].append(item)
@@ -71,6 +80,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         {inv.company_to_id for inv in invoices.values()}
         | {exp.supplier_id for exp in expenses.values()}
         | {dep.partner_id for dep in deposits.values()}
+        | {doc.issuer_id for doc in official_docs.values()}
     )
     partners = {
         p.pk: p
@@ -95,6 +105,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     je_out = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), invoice_ct, outgoing_ids)
     je_in = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), expense_ct, incoming_ids)
     je_dep = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), deposit_ct, deposit_ids)
+    je_off = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), official_ct, official_ids)
     sub_out = _gfk_map(SubledgerItem.all_objects, invoice_ct, outgoing_ids)
     sub_in = _gfk_map(SubledgerItem.all_objects, expense_ct, incoming_ids)
     sub_dep = _gfk_map(SubledgerItem.all_objects, deposit_ct, deposit_ids)
@@ -111,7 +122,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
 
     je_ids = [
         e.pk
-        for rows in list(je_out.values()) + list(je_in.values()) + list(je_dep.values())
+        for rows in list(je_out.values()) + list(je_in.values()) + list(je_dep.values()) + list(je_off.values())
         for e in rows
     ]
     lines_by_je = defaultdict(list)
@@ -219,6 +230,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'invoices': invoices,
         'expenses': expenses,
         'deposits': deposits,
+        'official_docs': official_docs,
         'items_by_invoice': items_by_invoice,
         'attachments_by_expense': attachments_by_expense,
         'partners': partners,
@@ -227,6 +239,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'je_out': je_out,
         'je_in': je_in,
         'je_dep': je_dep,
+        'je_off': je_off,
         'sub_out': sub_out,
         'sub_in': sub_in,
         'sub_dep': sub_dep,

@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from decimal import Decimal
 
@@ -1734,6 +1735,108 @@ class Deposit(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.number} — {self.amount} {self.currency}'
+
+
+def official_document_upload_to(instance, filename):
+    """Path uses PK only. Caller must save the row before assigning original_file."""
+    if not instance.pk:
+        raise ValueError('OfficialDocument must be saved before attaching original_file.')
+    base = os.path.basename(filename)
+    safe = re.sub(r'[^\w.\-]', '_', base) or 'document.bin'
+    tenant_id = instance.tenant_id or 'unknown'
+    return f'official_documents/{tenant_id}/{instance.pk}/{safe}'
+
+
+class OfficialDocument(TenantMixin, models.Model):
+    """Službeni ulazni dokument (ADR-0028) — porezno rješenje i slične isprave."""
+
+    KIND_TAX_DECISION = 'tax_decision'
+    KIND_OTHER = 'other'
+    KIND_CHOICES = [
+        (KIND_TAX_DECISION, 'Porezno rješenje'),
+        (KIND_OTHER, 'Ostalo'),
+    ]
+
+    STATUS_DRAFT = 'draft'
+    STATUS_REGISTERED = 'registered'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Nacrt'),
+        (STATUS_REGISTERED, 'Registrirano'),
+        (STATUS_CANCELLED, 'Otkazano'),
+    ]
+
+    kind = models.CharField(
+        max_length=20,
+        choices=KIND_CHOICES,
+        default=KIND_TAX_DECISION,
+        verbose_name='Vrsta',
+    )
+    issuer = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.PROTECT,
+        related_name='official_documents',
+        verbose_name='Izdavatelj',
+    )
+    document_number = models.CharField(max_length=100, verbose_name='Broj dokumenta')
+    reference = models.CharField(max_length=100, blank=True, verbose_name='Referenca')
+    issue_date = models.DateField(verbose_name='Datum izdavanja')
+    due_date = models.DateField(null=True, blank=True, verbose_name='Datum dospijeća')
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Iznos',
+    )
+    currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        verbose_name='Status',
+    )
+    original_file = models.FileField(
+        upload_to=official_document_upload_to,
+        blank=True,
+        verbose_name='Izvorni dokument',
+    )
+    original_filename = models.CharField(max_length=255, blank=True, verbose_name='Originalni naziv')
+    content_type = models.CharField(max_length=100, blank=True)
+    file_sha256 = models.CharField(max_length=64, blank=True, db_index=True)
+    file_size = models.PositiveIntegerField(default=0)
+    related_fixed_asset = models.ForeignKey(
+        'accounting.FixedAsset',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='official_documents',
+        verbose_name='Povezana imovina',
+    )
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_official_documents',
+        verbose_name='Kreirao',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Službeni dokument'
+        verbose_name_plural = 'Službeni dokumenti'
+        ordering = ['-issue_date', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'issuer', 'document_number'],
+                name='unique_official_document_per_issuer',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.document_number} — {self.amount} {self.currency}'
 
 
 class PrivateFundsClaim(TenantMixin, models.Model):

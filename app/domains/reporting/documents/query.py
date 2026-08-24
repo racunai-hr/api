@@ -17,13 +17,13 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 
-from accounting.models import Deposit, JournalEntry, SubledgerItem, VATLedgerEntry
+from accounting.models import Deposit, JournalEntry, OfficialDocument, SubledgerItem, VATLedgerEntry
 from expenses.models import Expense
 from fiscal_gateway.models import As4DocumentLink
 from integrations.models import IntegrationOutboxMessage
 from invoices.models import Invoice
 
-from domains.reporting.documents.filters import DocumentListFilters
+from domains.reporting.documents.filters import DocumentListFilters, includes_direction
 
 _CHAR = CharField()
 _MONEY = DecimalField(max_digits=15, decimal_places=2)
@@ -55,6 +55,10 @@ def _base_expenses(tenant):
 
 def _base_deposits(tenant):
     return Deposit.all_objects.filter(tenant=tenant).select_related('partner')
+
+
+def _base_official(tenant):
+    return OfficialDocument.all_objects.filter(tenant=tenant).select_related('issuer')
 
 
 def _apply_common_invoice_filters(qs, filters: DocumentListFilters):
@@ -124,6 +128,55 @@ def _apply_common_expense_filters(qs, filters: DocumentListFilters):
     if filters.currency:
         qs = qs.filter(currency=filters.currency)
     return qs
+
+
+def _apply_common_official_filters(qs, filters: DocumentListFilters):
+    if filters.status:
+        qs = qs.filter(status=filters.status)
+    if filters.search:
+        qs = qs.filter(
+            Q(document_number__icontains=filters.search)
+            | Q(reference__icontains=filters.search)
+            | Q(issuer__name__icontains=filters.search)
+            | Q(issuer__tax_number__icontains=filters.search)
+        )
+    if filters.year:
+        qs = qs.filter(issue_date__year=filters.year)
+    if filters.month:
+        qs = qs.filter(issue_date__month=filters.month)
+    if filters.partner_id:
+        qs = qs.filter(issuer_id=filters.partner_id)
+    if filters.oib:
+        qs = qs.filter(issuer__tax_number=filters.oib)
+    if filters.date_from:
+        qs = qs.filter(issue_date__gte=filters.date_from)
+    if filters.date_to:
+        qs = qs.filter(issue_date__lte=filters.date_to)
+    if filters.due_from:
+        qs = qs.filter(due_date__gte=filters.due_from)
+    if filters.due_to:
+        qs = qs.filter(due_date__lte=filters.due_to)
+    if filters.amount_min is not None:
+        qs = qs.filter(amount__gte=filters.amount_min)
+    if filters.amount_max is not None:
+        qs = qs.filter(amount__lte=filters.amount_max)
+    if filters.currency:
+        qs = qs.filter(currency=filters.currency)
+    return qs
+
+
+def _apply_official_view(qs, tenant, filters: DocumentListFilters, today: date):
+    view = filters.view
+    if not view:
+        return qs
+    if view == 'unposted':
+        return qs.filter(status='registered').exclude(
+            Exists(_journal_exists(tenant, OfficialDocument, ('posted',)))
+        )
+    if view == 'attention':
+        missing = Q(original_file='') | Q(issuer__isnull=True) | Q(document_number='')
+        return qs.filter(missing)
+    return qs.none()
 
 
 def _apply_common_deposit_filters(qs, filters: DocumentListFilters):
@@ -347,24 +400,31 @@ def _apply_deposit_view(qs, tenant, filters: DocumentListFilters, today: date):
 
 
 def filtered_invoices(tenant, filters: DocumentListFilters, today: date):
-    if filters.direction in ('incoming', 'deposit'):
+    if not includes_direction(filters, 'outgoing'):
         return _base_invoices(tenant).none()
     qs = _apply_common_invoice_filters(_base_invoices(tenant), filters)
     return _apply_invoice_view(qs, tenant, filters, today)
 
 
 def filtered_expenses(tenant, filters: DocumentListFilters, today: date):
-    if filters.direction in ('outgoing', 'deposit'):
+    if not includes_direction(filters, 'incoming'):
         return _base_expenses(tenant).none()
     qs = _apply_common_expense_filters(_base_expenses(tenant), filters)
     return _apply_expense_view(qs, tenant, filters, today)
 
 
 def filtered_deposits(tenant, filters: DocumentListFilters, today: date):
-    if filters.direction in ('incoming', 'outgoing'):
+    if not includes_direction(filters, 'deposit'):
         return _base_deposits(tenant).none()
     qs = _apply_common_deposit_filters(_base_deposits(tenant), filters)
     return _apply_deposit_view(qs, tenant, filters, today)
+
+
+def filtered_official(tenant, filters: DocumentListFilters, today: date):
+    if not includes_direction(filters, 'official'):
+        return _base_official(tenant).none()
+    qs = _apply_common_official_filters(_base_official(tenant), filters)
+    return _apply_official_view(qs, tenant, filters, today)
 
 
 def _invoice_values(qs):
@@ -427,6 +487,36 @@ def _expense_values(qs):
     )
 
 
+def _official_values(qs):
+    return qs.annotate(
+        _doc_id=F('id'),
+        _direction=Value('official', output_field=_CHAR),
+        _document_date=F('issue_date'),
+        _due_date=F('due_date'),
+        _internal_number=F('document_number'),
+        _source_number=F('document_number'),
+        _document_status=F('status'),
+        _partner_id=F('issuer_id'),
+        _gross=F('amount'),
+        _net=F('amount'),
+        _vat_amount=Value(Decimal('0.00'), output_field=_MONEY),
+        _currency=F('currency'),
+    ).values(
+        '_doc_id',
+        '_direction',
+        '_document_date',
+        '_due_date',
+        '_internal_number',
+        '_source_number',
+        '_document_status',
+        '_partner_id',
+        '_gross',
+        '_net',
+        '_vat_amount',
+        '_currency',
+    )
+
+
 def _deposit_values(qs):
     return qs.annotate(
         _doc_id=F('id'),
@@ -466,7 +556,8 @@ def union_rows(tenant, filters: DocumentListFilters, today: date):
     inv = _invoice_values(filtered_invoices(tenant, filters, today)).order_by()
     exp = _expense_values(filtered_expenses(tenant, filters, today)).order_by()
     dep = _deposit_values(filtered_deposits(tenant, filters, today)).order_by()
-    combined = inv.union(exp, dep, all=True)
+    off = _official_values(filtered_official(tenant, filters, today)).order_by()
+    combined = inv.union(exp, dep, off, all=True)
     return combined.order_by(*UNION_ORDER)
 
 

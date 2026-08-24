@@ -7,6 +7,11 @@ from domains.finance.api.views import (
     DepositPostView,
     DepositReturnView,
     DepositReverseView,
+    OfficialDocumentCancelView,
+    OfficialDocumentCreateView,
+    OfficialDocumentDetailView,
+    OfficialDocumentLinkJournalView,
+    OfficialDocumentRegisterView,
     ExpenseApproveView,
     ExpenseDraftPatchView,
     ExpensePostingPreviewView,
@@ -88,4 +93,29 @@ urlpatterns = [
     path('finance/deposits/<int:pk>/return/', DepositReturnView.as_view(), name='finance-deposit-return'),
     path('finance/deposits/<int:pk>/reverse/', DepositReverseView.as_view(), name='finance-deposit-reverse'),
     path('finance/deposits/<int:pk>/cancel/', DepositCancelView.as_view(), name='finance-deposit-cancel'),
+    path(
+        'finance/official-documents/',
+        OfficialDocumentCreateView.as_view(),
+        name='finance-official-document-create',
+    ),
+    path(
+        'finance/official-documents/<int:pk>/',
+        OfficialDocumentDetailView.as_view(),
+        name='finance-official-document-detail',
+    ),
+    path(
+        'finance/official-documents/<int:pk>/register/',
+        OfficialDocumentRegisterView.as_view(),
+        name='finance-official-document-register',
+    ),
+    path(
+        'finance/official-documents/<int:pk>/cancel/',
+        OfficialDocumentCancelView.as_view(),
+        name='finance-official-document-cancel',
+    ),
+    path(
+        'finance/official-documents/<int:pk>/link-journal/',
+        OfficialDocumentLinkJournalView.as_view(),
+        name='finance-official-document-link-journal',
+    ),
 ]

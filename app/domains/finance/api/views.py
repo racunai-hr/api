@@ -20,11 +20,14 @@ from domains.finance.api.schema import (
     CHART_OF_ACCOUNTS_PARAMS,
     ChartOfAccountsListSerializer,
     CreateDepositSerializer,
+    CreateOfficialDocumentSerializer,
     CreatePrivateFundsClaimSerializer,
     DepositConflictSerializer,
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
+    LinkOfficialDocumentJournalSerializer,
+    OfficialDocumentSerializer,
     ExpenseDraftPatchSerializer,
     ExpensePostingPreviewSerializer,
     JournalEntryDetailSerializer,
@@ -59,6 +62,15 @@ from domains.finance.services.expenses import (
 )
 from domains.finance.services.chart_accounts import list_postable_accounts
 from domains.finance.services.account_resolver import ExpenseAccountResolutionError
+from domains.finance.services.official_documents import (
+    OfficialDocumentBadRequest,
+    OfficialDocumentConflict,
+    cancel_official_document,
+    create_official_document,
+    get_official_document,
+    link_official_document_journal,
+    register_official_document,
+)
 from domains.finance.services.private_funds import (
     PrivateFundsBadRequest,
     PrivateFundsConflict,
@@ -88,11 +100,11 @@ def _require_idempotency_key(request) -> str:
     return key
 
 
-def _conflict(exc: DepositConflict):
+def _conflict(exc):
     return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_409_CONFLICT)
 
 
-def _bad_request(exc: DepositBadRequest):
+def _bad_request(exc):
     return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -365,6 +377,121 @@ class DepositReverseView(_FinanceWriteApiView):
         except DepositConflict as exc:
             return _conflict(exc)
         except DepositBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentCreateView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_create',
+        request=CreateOfficialDocumentSerializer,
+        responses={
+            201: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request):
+        try:
+            return Response(
+                create_official_document(
+                    tenant=_require_tenant(request),
+                    data=request.data,
+                    file=request.FILES.get('file'),
+                    user=request.user,
+                ),
+                status=status.HTTP_201_CREATED,
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentDetailView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_retrieve',
+        responses={200: OfficialDocumentSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        return Response(get_official_document(tenant=_require_tenant(request), document_id=pk))
+
+
+class OfficialDocumentRegisterView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_register',
+        request=CreateOfficialDocumentSerializer,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(
+                register_official_document(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    file=request.FILES.get('file'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentCancelView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_cancel',
+        request=None,
+        responses={
+            200: OfficialDocumentSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(cancel_official_document(tenant=_require_tenant(request), document_id=pk))
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+
+
+class OfficialDocumentLinkJournalView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_link_journal',
+        request=LinkOfficialDocumentJournalSerializer,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(
+                link_official_document_journal(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    journal_entry_id=request.data.get('journal_entry_id'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
             return _bad_request(exc)
 
 

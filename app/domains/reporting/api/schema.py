@@ -84,8 +84,8 @@ class AmountsBlockSerializer(serializers.Serializer):
 
 class DocumentSummarySerializer(serializers.Serializer):
     id = serializers.IntegerField()
-    kind = serializers.ChoiceField(choices=['invoice', 'expense', 'deposit'])
-    direction = serializers.ChoiceField(choices=['incoming', 'outgoing', 'deposit'])
+    kind = serializers.ChoiceField(choices=['invoice', 'expense', 'deposit', 'official'])
+    direction = serializers.ChoiceField(choices=['incoming', 'outgoing', 'deposit', 'official'])
     internal_number = serializers.CharField(allow_blank=True, allow_null=True)
     source_number = serializers.CharField(allow_blank=True, allow_null=True)
     partner_name = serializers.CharField(allow_blank=True, allow_null=True)
@@ -449,7 +449,8 @@ DOCUMENT_LIST_PARAMS = [
         'direction',
         OpenApiTypes.STR,
         OpenApiParameter.QUERY,
-        enum=['incoming', 'outgoing', 'deposit'],
+        description='Jedan identitet ili skup odvojen zarezom, npr. incoming,official.',
+        enum=['incoming', 'outgoing', 'deposit', 'official'],
     ),
     OpenApiParameter('status', OpenApiTypes.STR, OpenApiParameter.QUERY),
     OpenApiParameter('search', OpenApiTypes.STR, OpenApiParameter.QUERY),
