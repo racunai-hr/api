@@ -244,10 +244,19 @@ class JournalEntryLineSerializer(serializers.Serializer):
     credit = money_field()
 
 
+class JournalEntrySourceDocumentSerializer(serializers.Serializer):
+    # Same choice set as DocumentSummary.direction so spectacular reuses DirectionEnum.
+    # DTO never emits deposit — no /dokumenti detail route for that kind.
+    direction = serializers.ChoiceField(choices=['incoming', 'outgoing', 'deposit', 'official'])
+    id = serializers.IntegerField()
+    label = serializers.CharField()
+
+
 class JournalEntryDetailSerializer(JournalEntryListItemSerializer):
     as_of = serializers.CharField()
     reference = serializers.CharField(allow_blank=True)
     source_id = serializers.IntegerField(allow_null=True)
+    source_document = JournalEntrySourceDocumentSerializer(allow_null=True)
     lines = JournalEntryLineSerializer(many=True)
 
 

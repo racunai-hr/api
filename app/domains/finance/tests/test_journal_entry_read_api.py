@@ -14,14 +14,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from accounting.models import (
     AccountType,
     ChartOfAccounts,
+    Deposit,
     FixedAsset,
     JournalEntry,
     JournalEntryLine,
+    OfficialDocument,
 )
 from banking.models import BankStatement, BankTransaction
-from expenses.models import Expense
+from expenses.models import Expense, ExpenseCategory
 from invoices.models import Invoice
-from payments.models import BankAccount
+from partners.models import Partner
+from payments.models import BankAccount, Payment
 from tenants.models import Tenant, TenantMembership
 
 HOST = 'jeread.racunai.hr'
@@ -66,6 +69,97 @@ class JournalEntryReadApiTests(TestCase):
         invoice_ct = ContentType.objects.get_for_model(Invoice)
         expense_ct = ContentType.objects.get_for_model(Expense)
         asset_ct = ContentType.objects.get_for_model(FixedAsset)
+        official_ct = ContentType.objects.get_for_model(OfficialDocument)
+        payment_ct = ContentType.objects.get_for_model(Payment)
+        deposit_ct = ContentType.objects.get_for_model(Deposit)
+
+        customer = Partner.all_objects.create(
+            tenant=cls.tenant,
+            name='Kupac JE',
+            tax_number='11111111111',
+            partner_type='customer',
+            status='active',
+            country_code='HR',
+            country='Hrvatska',
+        )
+        supplier = Partner.all_objects.create(
+            tenant=cls.tenant,
+            name='Dobavljač JE',
+            tax_number='22222222222',
+            partner_type='supplier',
+            status='active',
+            country_code='HR',
+            country='Hrvatska',
+        )
+        issuer = Partner.all_objects.create(
+            tenant=cls.tenant,
+            name='Carinska uprava',
+            tax_number='18683136487',
+            partner_type='supplier',
+            status='active',
+            country_code='HR',
+            country='Hrvatska',
+        )
+        other_issuer = Partner.all_objects.create(
+            tenant=cls.other,
+            name='Tuđi izdavatelj',
+            tax_number='33333333333',
+            partner_type='supplier',
+            status='active',
+            country_code='HR',
+            country='Hrvatska',
+        )
+        category = ExpenseCategory.all_objects.create(tenant=cls.tenant, name='Ostalo')
+
+        cls.invoice = Invoice.all_objects.create(
+            tenant=cls.tenant,
+            invoice_number='INV-001/2026',
+            company_to=customer,
+            issue_date=date(2026, 7, 27),
+            due_date=date(2026, 8, 10),
+            status='sent',
+            subtotal=Decimal('20000.00'),
+            tax_amount=Decimal('5000.00'),
+            total_amount=Decimal('25000.00'),
+            created_by=cls.viewer,
+        )
+        cls.expense = Expense.all_objects.create(
+            tenant=cls.tenant,
+            expense_number='T-2026-0001',
+            status='approved',
+            category=category,
+            supplier=supplier,
+            amount=Decimal('50.00'),
+            tax_amount=Decimal('0'),
+            expense_date=date(2026, 7, 15),
+            description='Ulazni račun',
+            created_by=cls.viewer,
+        )
+        cls.official = OfficialDocument.all_objects.create(
+            tenant=cls.tenant,
+            kind=OfficialDocument.KIND_TAX_DECISION,
+            issuer=issuer,
+            document_number='UP/I-410-22/26-09/36939',
+            issue_date=date(2026, 6, 17),
+            amount=Decimal('1051.04'),
+            created_by=cls.viewer,
+        )
+        cls.other_official = OfficialDocument.all_objects.create(
+            tenant=cls.other,
+            kind=OfficialDocument.KIND_TAX_DECISION,
+            issuer=other_issuer,
+            document_number='UP/I-OTHER-TENANT',
+            issue_date=date(2026, 6, 17),
+            amount=Decimal('10.00'),
+        )
+        cls.deposit = Deposit.all_objects.create(
+            tenant=cls.tenant,
+            number='DEP-JE-1',
+            partner=supplier,
+            amount=Decimal('100.00'),
+            deposit_date=date(2026, 7, 1),
+            created_by=cls.viewer,
+        )
 
         cls.multi = cls._entry(
             cls.tenant,
@@ -103,7 +197,7 @@ class JournalEntryReadApiTests(TestCase):
             entry_date=date(2026, 7, 27),
             is_auto=True,
             source_content_type=invoice_ct,
-            source_object_id=1,
+            source_object_id=cls.invoice.pk,
         )
         cls._balanced_lines(cls.invoice_je, cls.account, Decimal('25000.00'))
 
@@ -116,7 +210,7 @@ class JournalEntryReadApiTests(TestCase):
             entry_date=date(2026, 7, 15),
             is_auto=True,
             source_content_type=expense_ct,
-            source_object_id=1,
+            source_object_id=cls.expense.pk,
         )
         cls._balanced_lines(cls.expense_je, cls.account, Decimal('50.00'))
 
@@ -144,6 +238,58 @@ class JournalEntryReadApiTests(TestCase):
             source_object_id=1,
         )
         cls._balanced_lines(cls.asset_je, cls.account, Decimal('10.00'))
+
+        cls.official_je = cls._entry(
+            cls.tenant,
+            cls.viewer,
+            number='202606-OFF',
+            description='[official_document_posted] rješenje',
+            status='posted',
+            entry_date=date(2026, 6, 17),
+            is_auto=True,
+            source_content_type=official_ct,
+            source_object_id=cls.official.pk,
+        )
+        cls._balanced_lines(cls.official_je, cls.account, Decimal('1051.04'))
+
+        cls.deposit_je = cls._entry(
+            cls.tenant,
+            cls.viewer,
+            number='202607-DEP',
+            description='Kaucija',
+            status='posted',
+            entry_date=date(2026, 7, 1),
+            is_auto=True,
+            source_content_type=deposit_ct,
+            source_object_id=cls.deposit.pk,
+        )
+        cls._balanced_lines(cls.deposit_je, cls.account, Decimal('100.00'))
+
+        cls.cross_tenant_source_je = cls._entry(
+            cls.tenant,
+            cls.viewer,
+            number='202607-XTEN',
+            description='GFK na tuđi dokument',
+            status='posted',
+            entry_date=date(2026, 7, 2),
+            is_auto=True,
+            source_content_type=official_ct,
+            source_object_id=cls.other_official.pk,
+        )
+        cls._balanced_lines(cls.cross_tenant_source_je, cls.account, Decimal('10.00'))
+
+        cls.dangling_je = cls._entry(
+            cls.tenant,
+            cls.viewer,
+            number='202607-DANG',
+            description='Dangling GFK',
+            status='posted',
+            entry_date=date(2026, 7, 3),
+            is_auto=True,
+            source_content_type=invoice_ct,
+            source_object_id=999999,
+        )
+        cls._balanced_lines(cls.dangling_je, cls.account, Decimal('1.00'))
 
         cls.draft = cls._entry(
             cls.tenant,
@@ -185,6 +331,29 @@ class JournalEntryReadApiTests(TestCase):
             matched_journal_entry=cls.manual,
             external_id='btx-ppmv',
         )
+        payment = Payment.all_objects.create(
+            tenant=cls.tenant,
+            payment_number='PAY-JE-1',
+            payment_type='outgoing',
+            payment_method='bank_transfer',
+            status='completed',
+            amount=Decimal('50.00'),
+            bank_account=bank,
+            payment_date=date(2026, 7, 20),
+            created_by=cls.viewer,
+        )
+        cls.payment_je = cls._entry(
+            cls.tenant,
+            cls.viewer,
+            number='202607-PAY',
+            description='Uplata',
+            status='posted',
+            entry_date=date(2026, 7, 20),
+            is_auto=True,
+            source_content_type=payment_ct,
+            source_object_id=payment.pk,
+        )
+        cls._balanced_lines(cls.payment_je, cls.account, Decimal('50.00'))
 
         other_je = cls._entry(
             cls.other,
@@ -344,7 +513,70 @@ class JournalEntryReadApiTests(TestCase):
         invoice = client.get(f'/api/finance/journal-entries/{self.invoice_je.pk}/')
         self.assertEqual(invoice.status_code, 200)
         self.assertEqual(invoice.data['source_type'], 'invoice')
-        self.assertEqual(invoice.data['source_id'], 1)
+        self.assertEqual(invoice.data['source_id'], self.invoice.pk)
+        self.assertIsNone(data['source_document'])
+        self.assertEqual(
+            invoice.data['source_document'],
+            {
+                'direction': 'outgoing',
+                'id': self.invoice.pk,
+                'label': 'INV-001/2026',
+            },
+        )
+
+    def test_detail_source_document_expense(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.expense_je.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['source_type'], 'expense')
+        self.assertEqual(
+            response.data['source_document'],
+            {
+                'direction': 'incoming',
+                'id': self.expense.pk,
+                'label': 'T-2026-0001',
+            },
+        )
+
+    def test_detail_source_document_official_keeps_source_type_other(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.official_je.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['source_type'], 'other')
+        self.assertEqual(
+            response.data['source_document'],
+            {
+                'direction': 'official',
+                'id': self.official.pk,
+                'label': 'UP/I-410-22/26-09/36939',
+            },
+        )
+
+    def test_detail_source_document_null_for_payment_and_deposit(self):
+        client = self._client(self.viewer)
+        payment = client.get(f'/api/finance/journal-entries/{self.payment_je.pk}/')
+        self.assertEqual(payment.status_code, 200)
+        self.assertEqual(payment.data['source_type'], 'other')
+        self.assertIsNone(payment.data['source_document'])
+
+        deposit = client.get(f'/api/finance/journal-entries/{self.deposit_je.pk}/')
+        self.assertEqual(deposit.status_code, 200)
+        self.assertEqual(deposit.data['source_type'], 'other')
+        self.assertIsNone(deposit.data['source_document'])
+
+    def test_detail_source_document_null_for_cross_tenant_gfk(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.cross_tenant_source_je.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['source_id'], self.other_official.pk)
+        self.assertIsNone(response.data['source_document'])
+
+    def test_detail_source_document_null_for_dangling_gfk(self):
+        client = self._client(self.viewer)
+        response = client.get(f'/api/finance/journal-entries/{self.dangling_je.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['source_id'], 999999)
+        self.assertIsNone(response.data['source_document'])
 
     def test_detail_bank_match_does_not_change_source_type(self):
         client = self._client(self.viewer)

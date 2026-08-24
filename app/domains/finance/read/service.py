@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import DecimalField, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404
@@ -72,4 +73,13 @@ def get_journal_entry(tenant, entry_id: int) -> dict:
         )
         if entry is None:
             raise Http404()
-        return journal_entry_detail_dto(entry, as_of=isoformat(as_of))
+        try:
+            source = entry.source
+        except ObjectDoesNotExist:
+            source = None
+        return journal_entry_detail_dto(
+            entry,
+            as_of=isoformat(as_of),
+            tenant=tenant,
+            source=source,
+        )

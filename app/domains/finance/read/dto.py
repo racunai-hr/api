@@ -24,6 +24,18 @@ _GFK_SOURCE_TYPE = {
     'fixedasset': SOURCE_TYPE_ASSET,
 }
 
+_GFK_DOCUMENT_DIRECTION = {
+    'expense': 'incoming',
+    'invoice': 'outgoing',
+    'officialdocument': 'official',
+}
+
+_GFK_DOCUMENT_LABEL_ATTR = {
+    'expense': 'expense_number',
+    'invoice': 'invoice_number',
+    'officialdocument': 'document_number',
+}
+
 
 def money(value: Decimal | None) -> str:
     if value is None:
@@ -67,7 +79,31 @@ def journal_entry_line_dto(line) -> dict:
     }
 
 
-def journal_entry_detail_dto(entry, *, as_of: str) -> dict:
+def journal_source_document_dto(entry, source, *, tenant) -> dict | None:
+    """Navigational /dokumenti link. Fail-closed: no tenant match -> None.
+
+    Kept separate from journal_source_type() — source_type is the accounting
+    classification; this is display routing only.
+    """
+    if source is None:
+        return None
+    if getattr(source, 'tenant_id', None) != tenant.pk:
+        return None
+    ct = getattr(entry, 'source_content_type', None)
+    model = getattr(ct, 'model', None)
+    direction = _GFK_DOCUMENT_DIRECTION.get(model)
+    if direction is None:
+        return None
+    attr = _GFK_DOCUMENT_LABEL_ATTR[model]
+    label = (getattr(source, attr, None) or '').strip() or f'#{source.pk}'
+    return {
+        'direction': direction,
+        'id': source.pk,
+        'label': label,
+    }
+
+
+def journal_entry_detail_dto(entry, *, as_of: str, tenant, source) -> dict:
     """Detail reuses list fields + source_type helper — do not re-derive elsewhere."""
     payload = journal_entry_list_dto(entry)
     lines = sorted(entry.lines.all(), key=lambda row: row.pk)
@@ -76,6 +112,7 @@ def journal_entry_detail_dto(entry, *, as_of: str) -> dict:
             'as_of': as_of,
             'reference': entry.reference or '',
             'source_id': entry.source_object_id,
+            'source_document': journal_source_document_dto(entry, source, tenant=tenant),
             'lines': [journal_entry_line_dto(line) for line in lines],
         }
     )

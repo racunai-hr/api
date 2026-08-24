@@ -6547,6 +6547,10 @@ components:
         source_id:
           type: integer
           nullable: true
+        source_document:
+          allOf:
+          - $ref: '#/components/schemas/JournalEntrySourceDocument'
+          nullable: true
         lines:
           type: array
           items:
@@ -6560,6 +6564,7 @@ components:
       - is_auto
       - lines
       - reference
+      - source_document
       - source_id
       - source_type
       - status
@@ -6624,6 +6629,19 @@ components:
       - status
       - total_credit
       - total_debit
+    JournalEntrySourceDocument:
+      type: object
+      properties:
+        direction:
+          $ref: '#/components/schemas/DirectionEnum'
+        id:
+          type: integer
+        label:
+          type: string
+      required:
+      - direction
+      - id
+      - label
     JournalLine:
       type: object
       properties:
