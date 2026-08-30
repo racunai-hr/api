@@ -12,6 +12,8 @@ from domains.finance.services.account_resolver import (
     load_postable_account,
     load_tenant_category,
 )
+from domains.finance.services.cost_centers import cost_center_ref
+from domains.finance.services.cost_center_resolver import load_bookable_cost_center
 from expenses.models import Expense, ExpenseAccountSource, SettlementMethod
 
 # Sentinel: omit ``settlement_method`` → keep legacy fill-in (blank → business_account).
@@ -61,6 +63,7 @@ def expense_dto(expense: Expense) -> dict:
         'category_id': expense.category_id,
         'expense_account_id': expense.expense_account_id,
         'expense_account_source': expense.expense_account_source,
+        'cost_center_id': expense.cost_center_id,
         'settlement_method': expense.settlement_method or '',
         'approved_by_id': expense.approved_by_id,
     }
@@ -82,6 +85,8 @@ def serialize_document_posting_plan(expense: Expense, plan) -> dict:
                 'amount': _money(line.amount),
                 'debit': _account_ref(line.debit_account),
                 'credit': _account_ref(line.credit_account),
+                'debit_cost_center': cost_center_ref(line.debit_cost_center),
+                'credit_cost_center': cost_center_ref(line.credit_cost_center),
             })
     return {
         'category': (
@@ -118,6 +123,7 @@ def update_draft_expense_posting(
     expense_id: int,
     category_id=_OMIT,
     expense_account_id=_OMIT,
+    cost_center_id=_OMIT,
 ) -> dict:
     expense = (
         Expense.all_objects.select_for_update(of=('self',))
@@ -132,8 +138,11 @@ def update_draft_expense_posting(
             'not_draft',
             'Vrsta troška i konto mogu se mijenjati samo dok je nalog u nacrtu.',
         )
-    if category_id is _OMIT and expense_account_id is _OMIT:
-        raise ExpenseApproveBadRequest('empty_patch', 'Potrebna je category_id ili expense_account_id.')
+    if category_id is _OMIT and expense_account_id is _OMIT and cost_center_id is _OMIT:
+        raise ExpenseApproveBadRequest(
+            'empty_patch',
+            'Potrebna je category_id, expense_account_id ili cost_center_id.',
+        )
 
     if category_id is not _OMIT:
         expense.category = load_tenant_category(tenant, category_id)
@@ -148,12 +157,20 @@ def update_draft_expense_posting(
             expense.expense_account = load_postable_account(tenant, expense_account_id)
             expense.expense_account_source = ExpenseAccountSource.MANUAL_OVERRIDE
 
-    expense.save(update_fields=[
-        'category',
-        'expense_account',
-        'expense_account_source',
-        'updated_at',
-    ])
+    if cost_center_id is not _OMIT:
+        if cost_center_id is None:
+            expense.cost_center = None
+        else:
+            expense.cost_center = load_bookable_cost_center(tenant, cost_center_id)
+
+    update_fields = ['updated_at']
+    if category_id is not _OMIT:
+        update_fields.extend(['category', 'expense_account_source'])
+    if expense_account_id is not _OMIT:
+        update_fields.extend(['expense_account', 'expense_account_source'])
+    if cost_center_id is not _OMIT:
+        update_fields.append('cost_center')
+    expense.save(update_fields=list(dict.fromkeys(update_fields)))
     expense.refresh_from_db()
     return expense_dto(expense)
 

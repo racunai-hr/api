@@ -127,6 +127,7 @@ class OfficialDocumentSerializer(serializers.Serializer):
     has_file = serializers.BooleanField()
     related_fixed_asset_id = serializers.IntegerField(allow_null=True)
     posting_profile_id = serializers.IntegerField(allow_null=True)
+    cost_center = serializers.DictField(allow_null=True)
     posting_profile_code = serializers.CharField(allow_null=True)
     posting_profile_name = serializers.CharField(allow_null=True)
     notes = serializers.CharField(allow_blank=True)
@@ -144,6 +145,7 @@ class CreateOfficialDocumentSerializer(serializers.Serializer):
     currency = serializers.CharField(required=False, default='EUR')
     related_fixed_asset_id = serializers.IntegerField(required=False, allow_null=True)
     posting_profile_id = serializers.IntegerField(required=False, allow_null=True)
+    cost_center_id = serializers.IntegerField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
     register = serializers.BooleanField(required=False)
     file = serializers.FileField(required=False)
@@ -181,6 +183,7 @@ class ExpenseApproveResponseSerializer(serializers.Serializer):
     expense_account_source = serializers.CharField(allow_blank=True)
     settlement_method = serializers.CharField(allow_blank=True)
     approved_by_id = serializers.IntegerField(allow_null=True)
+    cost_center_id = serializers.IntegerField(allow_null=True)
 
 
 class PrivateFundsClaimSerializer(serializers.Serializer):
@@ -235,6 +238,16 @@ class PaginatedJournalEntriesSerializer(serializers.Serializer):
     results = JournalEntryListItemSerializer(many=True)
 
 
+class CostCenterRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    kind = serializers.CharField(required=False)
+    is_active = serializers.BooleanField(required=False)
+    is_bookable = serializers.BooleanField(required=False)
+    parent_id = serializers.IntegerField(allow_null=True, required=False)
+
+
 class JournalEntryLineSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     account_code = serializers.CharField(allow_blank=True)
@@ -242,6 +255,7 @@ class JournalEntryLineSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True)
     debit = money_field()
     credit = money_field()
+    cost_center = CostCenterRefSerializer(allow_null=True)
 
 
 class JournalEntrySourceDocumentSerializer(serializers.Serializer):
@@ -386,6 +400,8 @@ class PostingPlanLineSerializer(serializers.Serializer):
     amount = money_field()
     debit = AccountRefSerializer()
     credit = AccountRefSerializer()
+    debit_cost_center = CostCenterRefSerializer(allow_null=True)
+    credit_cost_center = CostCenterRefSerializer(allow_null=True)
 
 
 class ExpensePostingPreviewSerializer(serializers.Serializer):
@@ -400,3 +416,90 @@ class ExpensePostingPreviewSerializer(serializers.Serializer):
 class ExpenseDraftPatchSerializer(serializers.Serializer):
     category_id = serializers.IntegerField(required=False)
     expense_account_id = serializers.IntegerField(required=False, allow_null=True)
+    cost_center_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class CostCenterSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    kind = serializers.ChoiceField(choices=['location', 'object', 'overhead', 'group'])
+    is_active = serializers.BooleanField()
+    is_bookable = serializers.BooleanField()
+    notes = serializers.CharField(allow_blank=True)
+    parent_id = serializers.IntegerField(allow_null=True)
+    parent = CostCenterRefSerializer(allow_null=True)
+
+
+class CostCenterListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = CostCenterSerializer(many=True)
+
+
+class CostCenterWriteSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+    kind = serializers.ChoiceField(choices=['location', 'object', 'overhead', 'group'])
+    parent_id = serializers.IntegerField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+
+class CostCenterPatchSerializer(serializers.Serializer):
+    code = serializers.CharField(required=False)
+    name = serializers.CharField(required=False)
+    kind = serializers.ChoiceField(required=False, choices=['location', 'object', 'overhead', 'group'])
+    parent_id = serializers.IntegerField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+
+class CostCenterReportAccountSerializer(serializers.Serializer):
+    account_code = serializers.CharField()
+    account_name = serializers.CharField()
+    account_class = serializers.CharField()
+    amount = money_field()
+
+
+class CostCenterReportRowSerializer(serializers.Serializer):
+    cost_center_id = serializers.IntegerField(allow_null=True)
+    code = serializers.CharField(allow_blank=True)
+    name = serializers.CharField()
+    kind = serializers.CharField(allow_blank=True)
+    parent_id = serializers.IntegerField(allow_null=True)
+    parent_code = serializers.CharField(allow_null=True, required=False)
+    total = money_field()
+    accounts = CostCenterReportAccountSerializer(many=True, required=False)
+
+
+class CostCenterReportSerializer(serializers.Serializer):
+    year = serializers.IntegerField()
+    month = serializers.IntegerField()
+    cumulative = serializers.BooleanField()
+    total = money_field()
+    assigned_total = money_field()
+    unassigned_total = money_field()
+    groups = CostCenterReportRowSerializer(many=True)
+    results = CostCenterReportRowSerializer(many=True)
+
+
+COST_CENTER_REPORT_PARAMS = [
+    OpenApiParameter(
+        name='year',
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=True,
+    ),
+    OpenApiParameter(
+        name='month',
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=True,
+    ),
+    OpenApiParameter(
+        name='cumulative',
+        type=OpenApiTypes.BOOL,
+        location=OpenApiParameter.QUERY,
+        required=False,
+    ),
+]

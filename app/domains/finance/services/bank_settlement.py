@@ -16,12 +16,12 @@ from django.utils import timezone
 from accounting.models import (
     Deposit,
     JournalEntry,
-    JournalEntryLine,
     OfficialDocument,
     PrivateFundsClaim,
     SubledgerItem,
 )
 from accounting.services.analytics import get_or_create_analytic_for_partner
+from accounting.services.journal_lines import persist_journal_entry_line
 from accounting.services.posting import (
     get_or_create_fiscal_period,
     resolve_account,
@@ -304,14 +304,14 @@ def _settle_invoice(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
         description='Naplata — banka',
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=customer,
         analytic_account=analytic,
@@ -356,7 +356,7 @@ def _settle_expense(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=payable,
         analytic_account=analytic,
@@ -364,7 +364,7 @@ def _settle_expense(
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
         description='Plaćanje — banka',
@@ -409,7 +409,7 @@ def _settle_official_document(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=payable,
         analytic_account=analytic,
@@ -417,7 +417,7 @@ def _settle_official_document(
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
         description='Plaćanje — banka',
@@ -464,7 +464,7 @@ def _settle_private_funds_claim(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=payable,
         analytic_account=analytic,
@@ -472,7 +472,7 @@ def _settle_private_funds_claim(
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
         description='Povrat — banka',

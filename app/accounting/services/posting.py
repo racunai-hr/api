@@ -9,7 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.utils import timezone
 
-from accounting.models import ChartOfAccounts, FiscalPeriod, JournalEntry, JournalEntryLine, PostingRule
+from accounting.models import ChartOfAccounts, FiscalPeriod, JournalEntry, PostingRule
 from accounting.services.analytics import (
     get_or_create_analytic_for_partner,
     get_or_create_analytic_for_payer,
@@ -292,6 +292,8 @@ class PostingPlanLine:
     debit_analytic: object | None
     credit_analytic: object | None
     amount_field: str
+    debit_cost_center: object | None = None
+    credit_cost_center: object | None = None
 
 
 @dataclass(frozen=True)
@@ -328,6 +330,7 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
         is_expense_net_amount_rule,
         resolve_expense_account,
     )
+    from domains.finance.services.cost_center_resolver import apply_cost_center, resolve_cost_center
 
     _assert_posting_event_source(source, document_type)
     rules = _active_posting_rules(tenant, document_type)
@@ -358,6 +361,7 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
             debit_account = resolve_account(tenant, debit_code)
 
         credit_account = resolve_account(tenant, credit_code)
+        resolved_cc = resolve_cost_center(source)
         lines.append(
             PostingPlanLine(
                 debit_account=debit_account,
@@ -367,6 +371,8 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
                 debit_analytic=debit_analytic,
                 credit_analytic=credit_analytic,
                 amount_field=rule.amount_field,
+                debit_cost_center=apply_cost_center(debit_account, resolved_cc),
+                credit_cost_center=apply_cost_center(credit_account, resolved_cc),
             )
         )
 
@@ -600,15 +606,17 @@ def post_invoice_payment(
         created_by=user,
     )
 
+    from accounting.services.journal_lines import persist_journal_entry_line
+
     line_desc = 'Naplata računa — banka / kupci'
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_account,
         description=line_desc,
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=customer_account,
         analytic_account=analytic,
@@ -696,19 +704,23 @@ def post_document(
         created_by=user,
     )
 
+    from accounting.services.journal_lines import persist_journal_entry_line
+
     for line in plan.lines:
-        JournalEntryLine.objects.create(
+        persist_journal_entry_line(
             journal_entry=entry,
             account=line.debit_account,
             analytic_account=line.debit_analytic,
+            cost_center=line.debit_cost_center,
             description=line.description,
             debit_amount=line.amount,
             credit_amount=Decimal('0'),
         )
-        JournalEntryLine.objects.create(
+        persist_journal_entry_line(
             journal_entry=entry,
             account=line.credit_account,
             analytic_account=line.credit_analytic,
+            cost_center=line.credit_cost_center,
             description=line.description,
             debit_amount=Decimal('0'),
             credit_amount=line.amount,

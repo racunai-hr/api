@@ -10,7 +10,8 @@ from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.utils import timezone
 
-from accounting.models import Deposit, JournalEntry, JournalEntryLine
+from accounting.models import Deposit, JournalEntry
+from accounting.services.journal_lines import persist_journal_entry_line
 from accounting.services.posting import (
     get_or_create_fiscal_period,
     resolve_account,
@@ -204,14 +205,14 @@ def _create_balanced_entry(
         fiscal_period=get_or_create_fiscal_period(tenant, entry_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=debit,
         description=description,
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=credit,
         description=description,

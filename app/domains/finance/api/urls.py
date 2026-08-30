@@ -19,6 +19,9 @@ from domains.finance.api.views import (
     ExpenseDraftPatchView,
     ExpensePostingPreviewView,
     ChartOfAccountsListView,
+    CostCenterDetailView,
+    CostCenterListCreateView,
+    CostCenterReportView,
     JournalEntryDetailView,
     JournalEntryListView,
     PartnerFinancialSummaryView,
@@ -59,6 +62,21 @@ urlpatterns = [
         'finance/chart-of-accounts/',
         ChartOfAccountsListView.as_view(),
         name='finance-chart-of-accounts',
+    ),
+    path(
+        'finance/cost-centers/',
+        CostCenterListCreateView.as_view(),
+        name='finance-cost-center-list',
+    ),
+    path(
+        'finance/cost-centers/<int:pk>/',
+        CostCenterDetailView.as_view(),
+        name='finance-cost-center-detail',
+    ),
+    path(
+        'finance/reports/cost-centers/',
+        CostCenterReportView.as_view(),
+        name='finance-cost-center-report',
     ),
     path(
         'finance/expenses/<int:pk>/',

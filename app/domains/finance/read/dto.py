@@ -69,6 +69,7 @@ def journal_entry_list_dto(entry) -> dict:
 
 def journal_entry_line_dto(line) -> dict:
     account = line.account
+    cost_center = getattr(line, 'cost_center', None)
     return {
         'id': line.pk,
         'account_code': account.account_code if account is not None else '',
@@ -76,6 +77,15 @@ def journal_entry_line_dto(line) -> dict:
         'description': line.description or '',
         'debit': money(line.debit_amount),
         'credit': money(line.credit_amount),
+        'cost_center': (
+            {
+                'id': cost_center.pk,
+                'code': cost_center.code,
+                'name': cost_center.name,
+            }
+            if cost_center is not None
+            else None
+        ),
     }
 
 

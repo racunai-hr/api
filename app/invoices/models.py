@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 from django.utils import timezone
@@ -63,6 +64,15 @@ class Invoice(TenantMixin, models.Model):
 
     description = models.TextField(blank=True, verbose_name="Opis")
     notes = models.TextField(blank=True, verbose_name="Napomene")
+    cost_center = models.ForeignKey(
+        'accounting.CostCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices',
+        verbose_name='Mjesto troška',
+        help_text='Input za resolver prihoda. Kanonski trag nakon knjiženja je JournalEntryLine.cost_center.',
+    )
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="Kreirao")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Datum stvaranja")
@@ -101,7 +111,18 @@ class Invoice(TenantMixin, models.Model):
         self.invoice_number = f'{prefix}{next_num:04d}'
         return self.invoice_number
 
+    def clean(self):
+        super().clean()
+        if self.cost_center_id:
+            if self.cost_center.tenant_id != self.tenant_id:
+                raise ValidationError({'cost_center': 'Mjesto troška mora pripadati istom tenantu.'})
+            if not self.cost_center.is_bookable:
+                raise ValidationError({'cost_center': 'Grupa mjesta troška nije knjiživa.'})
+
     def save(self, *args, **kwargs):
+        from accounting.services.journal_lines import reject_cost_center_change_after_posting
+
+        reject_cost_center_change_after_posting(self, kwargs.get('update_fields'))
         if not self.invoice_number and self.status != 'draft':
             self.assign_invoice_number()
         super().save(*args, **kwargs)

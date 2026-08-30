@@ -9,8 +9,9 @@ from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.utils import timezone
 
-from accounting.models import Deposit, JournalEntry, JournalEntryLine, PrivateFundsClaim
+from accounting.models import Deposit, JournalEntry, PrivateFundsClaim
 from accounting.services.analytics import get_or_create_analytic_for_partner
+from accounting.services.journal_lines import persist_journal_entry_line
 from accounting.services.posting import (
     get_or_create_fiscal_period,
     resolve_account,
@@ -378,7 +379,7 @@ def _post_supplier_payment(*, tenant, user, claim: PrivateFundsClaim, expense: E
         fiscal_period=get_or_create_fiscal_period(tenant, claim.claim_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=supplier_analytic.chart_account,
         analytic_account=supplier_analytic,
@@ -386,7 +387,7 @@ def _post_supplier_payment(*, tenant, user, claim: PrivateFundsClaim, expense: E
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=ante_analytic.chart_account,
         analytic_account=ante_analytic,
@@ -447,14 +448,14 @@ def _post_deposit_funding(*, tenant, user, claim: PrivateFundsClaim, deposit: De
         fiscal_period=get_or_create_fiscal_period(tenant, claim.claim_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=cash,
         description='Korekcija blagajne — privatno financiranje kaucije',
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=ante_analytic.chart_account,
         analytic_account=ante_analytic,

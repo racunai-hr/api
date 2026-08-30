@@ -32,6 +32,7 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
     override = bool(payload.pop('duplicate_override', False))
     category_id = payload.pop('category_id', None)
     expense_account_id = payload.pop('expense_account_id', None)
+    cost_center_id = payload.pop('cost_center_id', None)
     remember = bool(payload.pop('remember_category_for_partner', False))
 
     with transaction.atomic():
@@ -83,6 +84,11 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             expense_account_id=expense_account_id,
             remember_category_for_partner=remember,
         )
+        cost_center = None
+        if cost_center_id not in (None, ''):
+            from domains.finance.services.cost_center_resolver import load_bookable_cost_center
+
+            cost_center = load_bookable_cost_center(tenant, int(cost_center_id))
 
         expense = Expense.all_objects.create(
             tenant=tenant,
@@ -92,6 +98,7 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             category=category,
             expense_account=expense_account,
             expense_account_source=account_source,
+            cost_center=cost_center,
             supplier=partner,
             amount=values['amount'],
             tax_amount=values['tax_amount'] or 0,

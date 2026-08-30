@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -26,6 +27,12 @@ from domains.finance.api.schema import (
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
+    CostCenterListSerializer,
+    CostCenterPatchSerializer,
+    CostCenterReportSerializer,
+    CostCenterSerializer,
+    CostCenterWriteSerializer,
+    COST_CENTER_REPORT_PARAMS,
     LinkOfficialDocumentJournalSerializer,
     OfficialDocumentPostingProfileSerializer,
     OfficialDocumentSerializer,
@@ -63,6 +70,12 @@ from domains.finance.services.expenses import (
     update_draft_expense_posting,
 )
 from domains.finance.services.chart_accounts import list_postable_accounts
+from domains.finance.services.cost_centers import (
+    create_cost_center,
+    list_cost_centers,
+    update_cost_center,
+)
+from accounting.services.reports import cost_center_report
 from domains.finance.services.account_resolver import ExpenseAccountResolutionError
 from domains.finance.services.official_documents import (
     OfficialDocumentBadRequest,
@@ -677,6 +690,8 @@ class ExpenseDraftPatchView(_FinanceWriteApiView):
             kwargs['category_id'] = ser.validated_data['category_id']
         if 'expense_account_id' in ser.validated_data:
             kwargs['expense_account_id'] = ser.validated_data['expense_account_id']
+        if 'cost_center_id' in ser.validated_data:
+            kwargs['cost_center_id'] = ser.validated_data['cost_center_id']
         try:
             return Response(
                 update_draft_expense_posting(
@@ -697,6 +712,8 @@ class ExpenseDraftPatchView(_FinanceWriteApiView):
             )
         except ExpenseAccountResolutionError as exc:
             return _resolution_error(exc)
+        except DjangoValidationError as exc:
+            return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
 
 
 def _pf_conflict(exc: PrivateFundsConflict):
@@ -774,3 +791,98 @@ class PrivateFundsClaimPostView(_FinanceWriteApiView):
             return _pf_conflict(exc)
         except PrivateFundsBadRequest as exc:
             return _pf_bad_request(exc)
+
+
+class CostCenterListCreateView(APIView):
+    authentication_classes = [FinanceJWTAuthentication]
+    permission_classes = [IsAuthenticated, TenantFinanceReadPermission]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), TenantFinanceWritePermission()]
+        return super().get_permissions()
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_list',
+        responses={200: CostCenterListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        include_inactive = str(request.query_params.get('include_inactive') or '').lower() in {
+            '1', 'true', 'yes',
+        }
+        return Response(
+            list_cost_centers(tenant=_require_tenant(request), include_inactive=include_inactive)
+        )
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_create',
+        request=CostCenterWriteSerializer,
+        responses={201: CostCenterSerializer, 400: ERROR_400, 401: ERROR_401, 404: ERROR_404},
+    )
+    def post(self, request):
+        ser = CostCenterWriteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                create_cost_center(tenant=_require_tenant(request), data=ser.validated_data),
+                status=status.HTTP_201_CREATED,
+            )
+        except DjangoValidationError as exc:
+            return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CostCenterDetailView(_FinanceWriteApiView):
+    http_method_names = ['patch', 'head', 'options']
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_partial_update',
+        request=CostCenterPatchSerializer,
+        responses={200: CostCenterSerializer, 400: ERROR_400, 401: ERROR_401, 404: ERROR_404},
+    )
+    def patch(self, request, pk: int):
+        ser = CostCenterPatchSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                update_cost_center(
+                    tenant=_require_tenant(request),
+                    cost_center_id=pk,
+                    data=ser.validated_data,
+                )
+            )
+        except DjangoValidationError as exc:
+            return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CostCenterReportView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_report',
+        parameters=COST_CENTER_REPORT_PARAMS,
+        responses={200: CostCenterReportSerializer, 400: ERROR_400, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        try:
+            year = int(request.query_params.get('year'))
+            month = int(request.query_params.get('month'))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'year i month su obavezni.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if month < 1 or month > 12:
+            return Response({'detail': 'month mora biti 1–12.'}, status=status.HTTP_400_BAD_REQUEST)
+        cumulative = str(request.query_params.get('cumulative') or '1').lower() not in {
+            '0', 'false', 'no',
+        }
+        return Response(
+            cost_center_report(
+                _require_tenant(request),
+                year,
+                month,
+                cumulative=cumulative,
+            )
+        )

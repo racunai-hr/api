@@ -109,6 +109,7 @@ class ConfirmInvoiceImportSerializer(serializers.Serializer):
     duplicate_override = serializers.BooleanField(required=False)
     category_id = serializers.IntegerField(required=False, allow_null=True)
     expense_account_id = serializers.IntegerField(required=False, allow_null=True)
+    cost_center_id = serializers.IntegerField(required=False, allow_null=True)
     remember_category_for_partner = serializers.BooleanField(required=False)
 
 
@@ -154,6 +155,7 @@ class ExpenseCategorySerializer(serializers.Serializer):
     code = serializers.CharField(allow_null=True)
     is_active = serializers.BooleanField()
     default_account = ExpenseCategoryAccountRefSerializer(allow_null=True)
+    default_cost_center = serializers.DictField(allow_null=True)
 
 
 class ExpenseCategoryListSerializer(serializers.Serializer):
@@ -162,4 +164,5 @@ class ExpenseCategoryListSerializer(serializers.Serializer):
 
 
 class ExpenseCategoryPatchSerializer(serializers.Serializer):
-    default_account_id = serializers.IntegerField(allow_null=True)
+    default_account_id = serializers.IntegerField(required=False, allow_null=True)
+    default_cost_center_id = serializers.IntegerField(required=False, allow_null=True)

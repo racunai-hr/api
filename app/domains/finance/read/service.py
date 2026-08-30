@@ -66,7 +66,7 @@ def get_journal_entry(tenant, entry_id: int) -> dict:
             .prefetch_related(
                 Prefetch(
                     'lines',
-                    queryset=JournalEntryLine.objects.select_related('account').order_by('id'),
+                    queryset=JournalEntryLine.objects.select_related('account', 'cost_center').order_by('id'),
                 )
             )
             .first()

@@ -10,7 +10,8 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from accounting.models import AnalyticAccount, ChartOfAccounts, JournalEntry, JournalEntryLine
+from accounting.models import AnalyticAccount, ChartOfAccounts, CostCenter, JournalEntry
+from accounting.services.journal_lines import persist_journal_entry_line
 from accounting.services.posting import (
     _next_entry_number,
     get_or_create_fiscal_period,
@@ -26,7 +27,7 @@ class JournalLineInput:
     credit: Decimal
     description: str | None = None
     analytic_account: AnalyticAccount | None = None
-    cost_center: str | None = None
+    cost_center: CostCenter | None = None
     partner: Partner | None = None
     tax_code: str | None = None
 
@@ -93,10 +94,11 @@ def create_manual_journal_entry(
 
     for line in lines:
         account = _resolve_line_account(tenant, line)
-        JournalEntryLine.objects.create(
+        persist_journal_entry_line(
             journal_entry=entry,
             account=account,
             analytic_account=line.analytic_account,
+            cost_center=line.cost_center,
             description=line.description or '',
             debit_amount=line.debit,
             credit_amount=line.credit,

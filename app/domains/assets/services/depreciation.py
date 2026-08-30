@@ -142,6 +142,7 @@ def post_depreciation(
                 account_code=asset.depreciation_expense_account.account_code,
                 debit=schedule.amount,
                 credit=Decimal('0'),
+                cost_center=asset.cost_center,
             ),
             JournalLineInput(
                 account_code=asset.accumulated_depreciation_account.account_code,

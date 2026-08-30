@@ -154,6 +154,77 @@ class AnalyticAccount(TenantMixin, models.Model):
         return f"{self.account_code} - {self.account_name}"
 
 
+class CostCenterKind(models.TextChoices):
+    LOCATION = 'location', 'Lokacijsko'
+    OBJECT = 'object', 'Objektno'
+    OVERHEAD = 'overhead', 'Režijsko'
+    GROUP = 'group', 'Grupa'
+
+
+class CostCenter(TenantMixin, models.Model):
+    """Mjesto troška — upravljačka dimenzija, nije konto u kontnom planu.
+
+    Source-dokument nosi MT kao input za resolver. Kanonski trag nakon
+    knjiženja je JournalEntryLine.cost_center. Promjena MT-a na dokumentu
+    ne mijenja već proknjižene stavke; ispravak ide kroz storno/reposting.
+    """
+
+    code = models.CharField(max_length=32, verbose_name='Šifra')
+    name = models.CharField(max_length=200, verbose_name='Naziv')
+    kind = models.CharField(
+        max_length=16,
+        choices=CostCenterKind.choices,
+        verbose_name='Vrsta',
+    )
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='children',
+        verbose_name='Nadređeno MT',
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Aktivno')
+    notes = models.TextField(blank=True, verbose_name='Napomene')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ažurirano')
+
+    class Meta:
+        verbose_name = 'Mjesto troška'
+        verbose_name_plural = 'Mjesta troška'
+        ordering = ['code']
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'code'], name='unique_cost_center_code_per_tenant'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} — {self.name}'
+
+    @property
+    def is_bookable(self) -> bool:
+        return self.kind != CostCenterKind.GROUP
+
+    def clean(self):
+        super().clean()
+        if self.parent_id:
+            parent = self.parent
+            if parent.tenant_id != self.tenant_id:
+                raise ValidationError({'parent': 'Nadređeno MT mora pripadati istom tenantu.'})
+            if parent.parent_id:
+                raise ValidationError({'parent': 'Hijerarhija MT smije imati najviše dvije razine.'})
+            if self.pk and parent.pk == self.pk:
+                raise ValidationError({'parent': 'MT ne može biti nadređeno samom sebi.'})
+            ancestor = parent
+            seen = {self.pk} if self.pk else set()
+            while ancestor is not None:
+                if ancestor.pk in seen:
+                    raise ValidationError({'parent': 'Hijerarhija MT ne smije sadržavati ciklus.'})
+                seen.add(ancestor.pk)
+                ancestor = ancestor.parent if ancestor.parent_id else None
+        if self.kind != CostCenterKind.GROUP and self.parent_id and self.parent.kind != CostCenterKind.GROUP:
+            raise ValidationError({'parent': 'Knjiživo MT mora biti pod grupom.'})
+
+
 class FiscalPeriod(TenantMixin, models.Model):
     STATUS_CHOICES = [
         ('open', 'Otvoreno'),
@@ -324,11 +395,14 @@ class JournalEntry(TenantMixin, models.Model):
                 posted_by=user,
                 posted_at=timezone.now(),
             )
+            from accounting.services.journal_lines import persist_journal_entry_line
+
             for line in self.lines.all():
-                JournalEntryLine.objects.create(
+                persist_journal_entry_line(
                     journal_entry=reversal,
                     account=line.account,
                     analytic_account=line.analytic_account,
+                    cost_center=line.cost_center,
                     description=f"Storno: {line.description}",
                     debit_amount=line.credit_amount,
                     credit_amount=line.debit_amount,
@@ -362,6 +436,16 @@ class JournalEntryLine(models.Model):
         related_name='journal_lines',
         verbose_name="Analitički konto",
     )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='journal_lines',
+        verbose_name='Mjesto troška',
+        db_index=True,
+        help_text='Kanonski računovodstveni trag nakon knjiženja. Samo RDG klase 4/5/7.',
+    )
     description = models.TextField(blank=True, verbose_name="Opis stavke")
     debit_amount = models.DecimalField(
         max_digits=15,
@@ -384,6 +468,12 @@ class JournalEntryLine(models.Model):
 
     def __str__(self):
         return f"{self.account.account_code} - {self.debit_amount or self.credit_amount}"
+
+    def clean(self):
+        super().clean()
+        from accounting.services.journal_lines import validate_cost_center_for_account
+
+        validate_cost_center_for_account(self.account, self.cost_center)
 
 
 class PostingRule(TenantMixin, models.Model):
@@ -1187,6 +1277,15 @@ class FixedAsset(TenantMixin, models.Model):
         related_name='fixed_assets_depreciation_expense',
         verbose_name='Konto troška amortizacije',
     )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fixed_assets',
+        verbose_name='Mjesto troška',
+        help_text='Input za resolver amortizacije. Kanonski trag je JournalEntryLine.cost_center.',
+    )
 
     purchase_journal_entry = models.ForeignKey(
         JournalEntry,
@@ -1276,6 +1375,11 @@ class FixedAsset(TenantMixin, models.Model):
             account = getattr(self, field, None)
             if account and account.tenant_id != self.tenant_id:
                 raise ValidationError({field: 'Konto mora pripadati istom tenantu.'})
+        if self.cost_center_id:
+            if self.cost_center.tenant_id != self.tenant_id:
+                raise ValidationError({'cost_center': 'Mjesto troška mora pripadati istom tenantu.'})
+            if not self.cost_center.is_bookable:
+                raise ValidationError({'cost_center': 'Grupa mjesta troška nije knjiživa.'})
         if self.residual_value >= self.acquisition_cost:
             raise ValidationError(
                 {'residual_value': 'Ostatak vrijednosti mora biti manji od nabavne vrijednosti.'},
@@ -1457,6 +1561,15 @@ class Vehicle(TenantMixin, models.Model):
         related_name='vehicle',
         verbose_name='Osnovno sredstvo',
     )
+    cost_center = models.OneToOneField(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vehicle',
+        verbose_name='Mjesto troška',
+        help_text='Objektno MT vozila. Input za resolver; kanonski trag je JournalEntryLine.',
+    )
     is_active = models.BooleanField(default=True, verbose_name='Aktivno')
     notes = models.TextField(blank=True, verbose_name='Napomene')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
@@ -1494,6 +1607,11 @@ class Vehicle(TenantMixin, models.Model):
 
     def clean(self):
         super().clean()
+        if self.cost_center_id:
+            if self.cost_center.tenant_id != self.tenant_id:
+                raise ValidationError({'cost_center': 'Mjesto troška mora pripadati istom tenantu.'})
+            if not self.cost_center.is_bookable:
+                raise ValidationError({'cost_center': 'Grupa mjesta troška nije knjiživa.'})
         if not self.fixed_asset_id:
             return
         asset = self.fixed_asset
@@ -1862,6 +1980,15 @@ class OfficialDocument(TenantMixin, models.Model):
         related_name='official_documents',
         verbose_name='Profil knjiženja',
     )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='official_documents',
+        verbose_name='Mjesto troška',
+        help_text='Input za resolver. Kanonski trag nakon knjiženja je JournalEntryLine.cost_center.',
+    )
     notes = models.TextField(blank=True, verbose_name='Napomene')
     created_by = models.ForeignKey(
         User,
@@ -1887,6 +2014,20 @@ class OfficialDocument(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.document_number} — {self.amount} {self.currency}'
+
+    def clean(self):
+        super().clean()
+        if self.cost_center_id:
+            if self.cost_center.tenant_id != self.tenant_id:
+                raise ValidationError({'cost_center': 'Mjesto troška mora pripadati istom tenantu.'})
+            if not self.cost_center.is_bookable:
+                raise ValidationError({'cost_center': 'Grupa mjesta troška nije knjiživa.'})
+
+    def save(self, *args, **kwargs):
+        from accounting.services.journal_lines import reject_cost_center_change_after_posting
+
+        reject_cost_center_change_after_posting(self, kwargs.get('update_fields'))
+        super().save(*args, **kwargs)
 
 
 class PrivateFundsClaim(TenantMixin, models.Model):

@@ -20,6 +20,8 @@ from accounting.models import (
     OfficialDocument,
     OfficialDocumentPostingProfile,
 )
+from domains.finance.services.cost_centers import cost_center_ref
+from domains.finance.services.cost_center_resolver import load_bookable_cost_center
 from accounting.services.posting import (
     OFFICIAL_DOCUMENT_POSTED,
     ensure_default_official_document_posting_profiles,
@@ -75,7 +77,7 @@ def _lock_document(tenant, document_id: int) -> OfficialDocument:
     document = (
         OfficialDocument.all_objects.select_for_update(of=('self',))
         .filter(tenant=tenant, pk=document_id)
-        .select_related('issuer', 'related_fixed_asset', 'created_by', 'posting_profile')
+        .select_related('issuer', 'related_fixed_asset', 'created_by', 'posting_profile', 'cost_center')
         .first()
     )
     if document is None:
@@ -257,6 +259,7 @@ def _serialize(document: OfficialDocument) -> dict:
         'posting_profile_id': profile.pk if profile else None,
         'posting_profile_code': profile.code if profile else None,
         'posting_profile_name': profile.name if profile else None,
+        'cost_center': cost_center_ref(document.cost_center),
         'notes': document.notes or '',
         'created_at': document.created_at.isoformat() if document.created_at else None,
     }
@@ -265,7 +268,7 @@ def _serialize(document: OfficialDocument) -> dict:
 def get_official_document(*, tenant, document_id: int) -> dict:
     document = (
         OfficialDocument.all_objects.filter(tenant=tenant, pk=document_id)
-        .select_related('issuer', 'related_fixed_asset', 'posting_profile')
+        .select_related('issuer', 'related_fixed_asset', 'posting_profile', 'cost_center')
         .first()
     )
     if document is None:
@@ -302,6 +305,7 @@ def create_official_document(*, tenant, data: dict, file=None, user=None) -> dic
         status=OfficialDocument.STATUS_DRAFT,
         related_fixed_asset=_asset(tenant, data.get('related_fixed_asset_id')),
         posting_profile=_optional_profile(tenant, data.get('posting_profile_id'), kind=kind),
+        cost_center=_optional_cost_center(tenant, data.get('cost_center_id')),
         notes=(data.get('notes') or '').strip(),
         created_by=user if getattr(user, 'pk', None) else None,
     )
@@ -404,6 +408,18 @@ def _successful_ab_posting(tenant, document: OfficialDocument):
     )
     item = get_subledger_item_for_source(tenant, document)
     return jes, marker_je, item
+
+
+def _optional_cost_center(tenant, cost_center_id):
+    if cost_center_id in (None, ''):
+        return None
+    try:
+        return load_bookable_cost_center(tenant, int(cost_center_id))
+    except (TypeError, ValueError) as exc:
+        raise OfficialDocumentBadRequest('invalid_cost_center', 'cost_center_id nije valjan.') from exc
+    except ValidationError as exc:
+        detail = next(iter(exc.message_dict.values()))[0] if hasattr(exc, 'message_dict') else str(exc)
+        raise OfficialDocumentBadRequest('invalid_cost_center', str(detail)) from exc
 
 
 def _optional_profile(tenant, profile_id, *, kind: str):

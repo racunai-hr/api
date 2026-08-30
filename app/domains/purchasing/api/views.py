@@ -29,7 +29,7 @@ from domains.purchasing.api.schema import (
 from domains.purchasing.services.confirm import confirm_invoice_import
 from domains.purchasing.services.expense_categories import (
     list_expense_categories,
-    update_expense_category_default_account,
+    update_expense_category,
 )
 from domains.purchasing.services.exceptions import PurchasingBadRequest, PurchasingConflict
 from domains.finance.services.account_resolver import ExpenseAccountResolutionError
@@ -308,10 +308,14 @@ class ExpenseCategoryDetailView(_PurchasingApiView):
         ser.is_valid(raise_exception=True)
         try:
             return Response(
-                update_expense_category_default_account(
+                update_expense_category(
                     tenant=_require_tenant(request),
                     category_id=pk,
-                    default_account_id=ser.validated_data['default_account_id'],
+                    **{
+                        key: ser.validated_data[key]
+                        for key in ('default_account_id', 'default_cost_center_id')
+                        if key in ser.validated_data
+                    },
                 )
             )
         except ExpenseAccountResolutionError as exc:

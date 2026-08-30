@@ -47,6 +47,14 @@ class ExpenseCategory(TenantMixin, models.Model):
         related_name='expense_categories',
         verbose_name="Konto rashoda",
     )
+    default_cost_center = models.ForeignKey(
+        'accounting.CostCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expense_categories',
+        verbose_name='Zadano mjesto troška',
+    )
     is_active = models.BooleanField(default=True, verbose_name="Aktivna")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Datum stvaranja")
 
@@ -271,6 +279,15 @@ class Expense(TenantMixin, models.Model):
         verbose_name='Vozilo',
         help_text='Operativna pripadnost troška vozilu. Ne utječe na knjiženje.',
     )
+    cost_center = models.ForeignKey(
+        'accounting.CostCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expenses',
+        verbose_name='Mjesto troška',
+        help_text='Input za resolver. Kanonski trag nakon knjiženja je JournalEntryLine.cost_center.',
+    )
     supplier = models.ForeignKey(
         'partners.Partner',
         on_delete=models.CASCADE,
@@ -334,6 +351,11 @@ class Expense(TenantMixin, models.Model):
                 raise ValidationError({'expense_account': 'Konto mora biti aktivno i knjiživo.'})
         if self.vehicle_id and self.vehicle.tenant_id != self.tenant_id:
             raise ValidationError({'vehicle': 'Vozilo mora pripadati istom tenantu.'})
+        if self.cost_center_id:
+            if self.cost_center.tenant_id != self.tenant_id:
+                raise ValidationError({'cost_center': 'Mjesto troška mora pripadati istom tenantu.'})
+            if not self.cost_center.is_bookable:
+                raise ValidationError({'cost_center': 'Grupa mjesta troška nije knjiživa.'})
 
     def save(self, *args, **kwargs):
         self._reject_locked_accounting_input_changes(kwargs.get('update_fields'))
@@ -350,7 +372,14 @@ class Expense(TenantMixin, models.Model):
             return
         previous = (
             type(self).all_objects.filter(pk=self.pk)
-            .values('status', 'category_id', 'expense_account_id', 'expense_account_source', 'posting_profile')
+            .values(
+                'status',
+                'category_id',
+                'expense_account_id',
+                'expense_account_source',
+                'posting_profile',
+                'cost_center_id',
+            )
             .first()
         )
         if previous is None or previous['status'] == 'draft':
@@ -360,6 +389,7 @@ class Expense(TenantMixin, models.Model):
             'expense_account_id': 'expense_account',
             'expense_account_source': 'expense_account_source',
             'posting_profile': 'posting_profile',
+            'cost_center_id': 'cost_center',
         }
         if update_fields is not None:
             update_names = set(update_fields)
@@ -383,6 +413,11 @@ class Expense(TenantMixin, models.Model):
                 pass
             else:
                 changed['posting_profile'] = 'Posting profil se ne može mijenjati nakon odobrenja.'
+        if previous['cost_center_id'] != self.cost_center_id:
+            changed['cost_center'] = (
+                'Mjesto troška se ne može mijenjati nakon knjiženja. '
+                'Ispravak ide kroz storno i ponovno knjiženje.'
+            )
         if changed:
             raise ValidationError(changed)
 
