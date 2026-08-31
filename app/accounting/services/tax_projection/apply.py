@@ -20,7 +20,7 @@ from accounting.models import (
     VATProjectionRun,
     VATProjectionRunStatus,
 )
-from accounting.services.tax_forms.pdv.mapping import PDV_MAPPING, PDV_MAPPING_VERSION
+from accounting.services.tax_forms.pdv.mapping import PDV_MAPPING, PDV_MAPPING_VERSION, partner_eu_vat_id
 from accounting.services.tax_projection.contracts import (
     PROJECTION_ENGINE_VERSION,
     ProjectedLedgerRow,
@@ -292,6 +292,7 @@ def _insert_engine_rows(
     line_ct = ContentType.objects.get_for_model(JournalEntryLine)
     period_ct = ContentType.objects.get_for_model(VATPeriod)
     entry_date = _period_last_day(period)
+    expenses, invoices = _source_partners(candidate.rows)
 
     to_create: list[VATLedgerEntry] = []
     for row in writable_rows(candidate.rows):
@@ -301,6 +302,7 @@ def _insert_engine_rows(
         vat_rate = Decimal('0.00')
         if row.base_amount:
             vat_rate = (row.tax_amount / row.base_amount * Decimal('100')).quantize(Decimal('0.01'))
+        partner_name, partner_oib = _partner_identity(row, expenses, invoices)
         to_create.append(
             VATLedgerEntry(
                 tenant_id=period.tenant_id,
@@ -308,8 +310,8 @@ def _insert_engine_rows(
                 ledger_type=row.ledger_type,
                 entry_date=entry_date,
                 document_number=_document_number(row),
-                partner_name='',
-                partner_oib='',
+                partner_name=partner_name,
+                partner_oib=partner_oib,
                 base_amount=row.base_amount * row.sign,
                 vat_rate=vat_rate,
                 vat_amount=row.tax_amount * row.sign,
@@ -327,6 +329,38 @@ def _insert_engine_rows(
         )
     if to_create:
         VATLedgerEntry.all_objects.bulk_create(to_create)
+
+
+def _source_partners(rows: tuple[ProjectedLedgerRow, ...]):
+    from expenses.models import Expense
+    from invoices.models import Invoice
+
+    expense_ids = [row.source_id for row in rows if row.source_kind == 'expense']
+    invoice_ids = [
+        row.source_id for row in rows if row.source_kind in {'invoice', 'invoice_item'}
+    ]
+    expenses = {
+        expense.pk: expense
+        for expense in Expense.all_objects.filter(pk__in=expense_ids).select_related('supplier')
+    }
+    invoices = {
+        invoice.pk: invoice
+        for invoice in Invoice.all_objects.filter(pk__in=invoice_ids).select_related('company_to')
+    }
+    return expenses, invoices
+
+
+def _partner_identity(row: ProjectedLedgerRow, expenses, invoices) -> tuple[str, str]:
+    partner = None
+    if row.source_kind == 'expense':
+        expense = expenses.get(row.source_id)
+        partner = getattr(expense, 'supplier', None)
+    elif row.source_kind in {'invoice', 'invoice_item'}:
+        invoice = invoices.get(row.source_id)
+        partner = getattr(invoice, 'company_to', None)
+    if partner is None:
+        return '', ''
+    return partner.name or '', partner_eu_vat_id(partner)
 
 
 def _source_content_type(row: ProjectedLedgerRow, invoice_ct, expense_ct, line_ct, period_ct):

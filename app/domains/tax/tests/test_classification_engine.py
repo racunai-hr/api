@@ -61,6 +61,7 @@ def _input(**overrides) -> TaxDocumentInput:
         description='',
         period_year=2026,
         period_month=4,
+        input_vat_deductible=True,
         input_hash='',
     )
     values.update(overrides)
@@ -341,7 +342,7 @@ class ClassifyExpenseTests(SimpleTestCase):
         self.assertEqual(skipped.outcome, Outcome.NOT_TAX_RELEVANT)
         self.assertEqual(skipped.rule_code, 'eu_expense_posted_via_journal')
 
-        placeholder = classify(
+        registered = classify(
             _input(
                 source_kind='expense',
                 direction=Direction.INPUT,
@@ -355,9 +356,10 @@ class ClassifyExpenseTests(SimpleTestCase):
                 description='EU usluga',
             )
         )
-        self.assertEqual(placeholder.outcome, Outcome.CLASSIFIED)
-        self.assertEqual(placeholder.rule_code, 'EXP_EU_614')
-        self.assertEqual(placeholder.rows[0].box, '614')
+        self.assertEqual(registered.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(registered.rule_code, 'EXP_EU_SERVICES_210_306')
+        self.assertEqual([row.box for row in registered.rows], ['210', '306'])
+        self.assertIn('pdv_s', registered.rows[0].outputs)
 
     def test_eu_goods_supply_kind_classifies_207_307_without_vin(self):
         partner = PartnerSnapshot(
@@ -385,6 +387,36 @@ class ClassifyExpenseTests(SimpleTestCase):
         self.assertEqual(result.rule_code, 'EXP_EU_GOODS_207_307')
         self.assertEqual(result.rows[2].box, '307')
         self.assertEqual(result.rows[1].tax_amount, Decimal('2000.00'))
+        self.assertIn('pdv_s', result.rows[0].outputs)
+
+    def test_vat_id_eu_service_has_output_rc_without_pretporez(self):
+        partner = PartnerSnapshot(
+            name='Booking.com B.V.',
+            country='Netherlands',
+            tax_number='NL805734958B01',
+            vat_id='NL805734958B01',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='paid',
+                partner=partner,
+                vat_rate=None,
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('550.95'),
+                supply_kind='services',
+                input_vat_deductible=False,
+                description='Booking commission',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rule_code, 'EXP_EU_SERVICES_210')
+        self.assertEqual([row.box for row in result.rows], ['210'])
+        self.assertEqual(result.rows[0].base_amount, Decimal('550.95'))
+        self.assertEqual(result.rows[0].tax_amount, Decimal('137.74'))
+        self.assertIn('pdv_s', result.rows[0].outputs)
 
     def test_third_country_vin_does_not_become_eu_goods(self):
         partner = PartnerSnapshot(

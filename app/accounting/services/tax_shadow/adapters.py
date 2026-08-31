@@ -11,6 +11,7 @@ from accounting.models import JournalEntry, JournalEntryLine, VATLedgerEntry, VA
 from accounting.services.tax_forms.pdv.mapping import derived_expense_vat_rate, partner_eu_vat_id
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
 from accounting.services.tax_shadow.reversal_relevance import assess_reversal_relevance
+from settings.models import CompanySettings
 from domains.tax.classification.contracts import (
     Direction,
     EventKind,
@@ -22,6 +23,15 @@ from domains.tax.classification.contracts import (
     TaxRelevance,
 )
 from domains.tax.classification.hashing import hash_tax_input
+
+
+def _input_vat_deductible(tenant_id: int) -> bool:
+    settings = CompanySettings.all_objects.filter(tenant_id=tenant_id).only(
+        'vat_registration_status',
+    ).first()
+    if settings is None:
+        return True
+    return settings.input_vat_deductible
 
 
 def _finalize(document: TaxDocumentInput) -> TaxDocumentInput:
@@ -80,6 +90,7 @@ def adapt_invoice_item(item, *, period: VATPeriod) -> TaxDocumentInput:
             description=item.item_name or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(invoice.tenant_id),
             input_hash='',
         )
     )
@@ -118,6 +129,7 @@ def adapt_invoice_header(invoice, *, period: VATPeriod) -> TaxDocumentInput:
             description=invoice.description or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(invoice.tenant_id),
             input_hash='',
         )
     )
@@ -165,6 +177,7 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
             description=expense.description or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(expense.tenant_id),
             input_hash='',
         )
     )
@@ -282,6 +295,7 @@ def adapt_journal_line(line: JournalEntryLine, *, period: VATPeriod) -> TaxDocum
             description=entry.description or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(entry.tenant_id),
             input_hash='',
         )
     )

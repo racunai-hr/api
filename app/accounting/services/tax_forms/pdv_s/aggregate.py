@@ -100,7 +100,7 @@ def _supplier_key_for_ledger_entry(entry: VATLedgerEntry) -> _SupplierKey:
 
 
 def aggregate_pdv_s_rows(period: VATPeriod) -> PdvSPayload:
-    """Build PDV-S payload from box 207 (EU goods) and 612 (services) ledger entries."""
+    """Build PDV-S payload from box 207 (EU goods) and 210 (EU services) ledger entries."""
     period_from, period_to = _period_bounds(period)
     taxpayer_info = _taxpayer_for_period(period)
     settings = CompanySettings.all_objects.filter(tenant=period.tenant).first()
@@ -123,7 +123,7 @@ def aggregate_pdv_s_rows(period: VATPeriod) -> PdvSPayload:
 
     ledger_qs = VATLedgerEntry.all_objects.filter(
         vat_period=period,
-        vat_box__in=('207', '612'),
+        vat_box__in=('207', '210'),
     ).order_by('entry_date', 'pk')
 
     for entry in ledger_qs:

@@ -45,6 +45,12 @@ class TaxRate(TenantMixin, models.Model):
         super().save(*args, **kwargs)
 
 
+class VatRegistrationStatus(models.TextChoices):
+    NONE = 'none', 'Nije u sustavu PDV-a'
+    VAT_ID = 'vat_id', 'Nije u sustavu PDV-a, ima PDV ID (samo za EU stjecanja/usluge)'
+    REGISTERED = 'registered', 'U sustavu PDV-a'
+
+
 class CompanySettings(TenantMixin, models.Model):
     """Postavke tvrtke po tenantu"""
     company_name = models.CharField(max_length=200, verbose_name="Naziv tvrtke")
@@ -59,7 +65,18 @@ class CompanySettings(TenantMixin, models.Model):
     company_website = models.URLField(blank=True, verbose_name="Web stranica")
     company_logo = models.ImageField(upload_to='company/', blank=True, null=True, verbose_name="Logo tvrtke")
     
-    vat_number = models.CharField(max_length=20, blank=True, verbose_name="OIB/VAT broj")
+    vat_number = models.CharField(max_length=20, blank=True, verbose_name="OIB")
+    vat_id = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="PDV identifikacijski broj",
+    )
+    vat_registration_status = models.CharField(
+        max_length=20,
+        choices=VatRegistrationStatus.choices,
+        default=VatRegistrationStatus.REGISTERED,
+        verbose_name="Status u sustavu PDV-a",
+    )
     tax_number = models.CharField(max_length=20, blank=True, verbose_name="Porezni broj")
     registration_number = models.CharField(max_length=20, blank=True, verbose_name="Matični broj")
     tax_office = models.ForeignKey(
@@ -86,6 +103,20 @@ class CompanySettings(TenantMixin, models.Model):
 
     def __str__(self):
         return self.company_name
+
+    @property
+    def input_vat_deductible(self) -> bool:
+        return self.vat_registration_status == VatRegistrationStatus.REGISTERED
+
+    def clean(self):
+        super().clean()
+        from settings.vat_profile import validate_company_vat_profile
+
+        validate_company_vat_profile(
+            oib=self.vat_number,
+            vat_id=self.vat_id,
+            status=self.vat_registration_status,
+        )
 
     @property
     def formatted_street(self) -> str:

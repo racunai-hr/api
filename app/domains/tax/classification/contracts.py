@@ -131,6 +131,7 @@ class TaxDocumentInput:
     description: str
     period_year: int
     period_month: int
+    input_vat_deductible: bool
     input_hash: str
 
 

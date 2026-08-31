@@ -147,7 +147,7 @@ def _row(
     outputs: list[str] = ['pdv']
     if box in {'101', '103'}:
         outputs.append('zp')
-    if box in {'207', '612'}:
+    if box in {'207', '210'}:
         outputs.append('pdv_s')
     outputs.append('control_ira' if direction == Direction.OUTPUT else 'control_ura')
     return ProposedLedgerRow(
@@ -364,17 +364,34 @@ def _classify_expense(
         if document.has_linked_journal_entry:
             return _empty(document, Outcome.NOT_TAX_RELEVANT, 'eu_expense_posted_via_journal', warnings)
         if document.base_amount > 0:
+            vat_rc = rc_vat_from_base(document.base_amount, Decimal('25.00'))
+            rows = [
+                _row(
+                    document,
+                    box='210',
+                    rule_code='EXP_EU_SERVICES_210',
+                    base=document.base_amount,
+                    tax=vat_rc,
+                ),
+            ]
+            if document.input_vat_deductible:
+                rows.append(
+                    _row(
+                        document,
+                        box='306',
+                        rule_code='EXP_EU_SERVICES_306',
+                        base=document.base_amount,
+                        tax=vat_rc,
+                    )
+                )
+                rule_code = 'EXP_EU_SERVICES_210_306'
+            else:
+                rule_code = 'EXP_EU_SERVICES_210'
             return _classified(
                 document,
-                (_row(
-                    document,
-                    box='614',
-                    rule_code='EXP_EU_614',
-                    base=document.base_amount,
-                    tax=Decimal('0.00'),
-                ),),
-                reason='eu_expense_placeholder',
-                rule_code='EXP_EU_614',
+                tuple(rows),
+                reason='eu_received_services',
+                rule_code=rule_code,
                 warnings=warnings,
             )
 
