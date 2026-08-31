@@ -237,6 +237,12 @@ SPECTACULAR_SETTINGS = {
     'PREPROCESSING_HOOKS': [
         'config.openapi_hooks.preprocess_exclude_non_contract',
     ],
+    # Two serializers name the field "kind" with different choice sets.
+    # Without overrides spectacular emits Kind130Enum/Kind748Enum and --fail-on-warn.
+    'ENUM_NAME_OVERRIDES': {
+        'KindEnum': ['invoice', 'expense', 'deposit', 'official'],
+        'CostCenterKindEnum': ['location', 'object', 'overhead', 'group'],
+    },
 }
 
 # Register OpenApiAuthenticationExtension subclasses (requires drf-spectacular).

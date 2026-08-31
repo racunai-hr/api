@@ -1522,6 +1522,139 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/cost-centers/:
+    get:
+      operationId: finance_cost_centers_list
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCenterList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: finance_cost_centers_create
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostCenterWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CostCenterWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CostCenterWriteRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCenter'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/cost-centers/{id}/:
+    patch:
+      operationId: finance_cost_centers_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCostCenterPatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCostCenterPatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCostCenterPatchRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCenter'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/deposits/:
     get:
       operationId: finance_deposits_list
@@ -2785,6 +2918,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/DepositConflict'
           description: ''
+  /api/finance/reports/cost-centers/:
+    get:
+      operationId: finance_cost_centers_report
+      parameters:
+      - in: query
+        name: cumulative
+        schema:
+          type: boolean
+      - in: query
+        name: month
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: year
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCenterReport'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/partners/:
     get:
       operationId: partners_list
@@ -4898,6 +5083,9 @@ components:
         expense_account_id:
           type: integer
           nullable: true
+        cost_center_id:
+          type: integer
+          nullable: true
         remember_category_for_partner:
           type: boolean
     ConfirmationResult:
@@ -5030,6 +5218,192 @@ components:
           type: boolean
         is_active:
           type: boolean
+    CostCenter:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        kind:
+          $ref: '#/components/schemas/CostCenterKindEnum'
+        is_active:
+          type: boolean
+        is_bookable:
+          type: boolean
+        notes:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+        parent:
+          allOf:
+          - $ref: '#/components/schemas/CostCenterRef'
+          nullable: true
+      required:
+      - code
+      - id
+      - is_active
+      - is_bookable
+      - kind
+      - name
+      - notes
+      - parent
+      - parent_id
+    CostCenterKindEnum:
+      enum:
+      - location
+      - object
+      - overhead
+      - group
+      type: string
+      description: |-
+        * `location` - location
+        * `object` - object
+        * `overhead` - overhead
+        * `group` - group
+    CostCenterList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CostCenter'
+      required:
+      - count
+      - results
+    CostCenterRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        is_active:
+          type: boolean
+        is_bookable:
+          type: boolean
+        parent_id:
+          type: integer
+          nullable: true
+      required:
+      - code
+      - id
+      - name
+    CostCenterReport:
+      type: object
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+        cumulative:
+          type: boolean
+        total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        assigned_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        unassigned_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/CostCenterReportRow'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CostCenterReportRow'
+      required:
+      - assigned_total
+      - cumulative
+      - groups
+      - month
+      - results
+      - total
+      - unassigned_total
+      - year
+    CostCenterReportAccount:
+      type: object
+      properties:
+        account_code:
+          type: string
+        account_name:
+          type: string
+        account_class:
+          type: string
+        amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - account_class
+      - account_code
+      - account_name
+      - amount
+    CostCenterReportRow:
+      type: object
+      properties:
+        cost_center_id:
+          type: integer
+          nullable: true
+        code:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+        parent_code:
+          type: string
+          nullable: true
+        total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CostCenterReportAccount'
+      required:
+      - code
+      - cost_center_id
+      - kind
+      - name
+      - parent_id
+      - total
+    CostCenterWriteRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        kind:
+          $ref: '#/components/schemas/CostCenterKindEnum'
+        parent_id:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+        is_active:
+          type: boolean
+      required:
+      - code
+      - kind
+      - name
     CreateDepositRequest:
       type: object
       properties:
@@ -5085,6 +5459,9 @@ components:
           type: integer
           nullable: true
         posting_profile_id:
+          type: integer
+          nullable: true
+        cost_center_id:
           type: integer
           nullable: true
         notes:
@@ -5839,10 +6216,14 @@ components:
         approved_by_id:
           type: integer
           nullable: true
+        cost_center_id:
+          type: integer
+          nullable: true
       required:
       - amount
       - approved_by_id
       - category_id
+      - cost_center_id
       - currency
       - due_date
       - expense_account_id
@@ -5869,9 +6250,14 @@ components:
           allOf:
           - $ref: '#/components/schemas/ExpenseCategoryAccountRef'
           nullable: true
+        default_cost_center:
+          type: object
+          additionalProperties: {}
+          nullable: true
       required:
       - code
       - default_account
+      - default_cost_center
       - id
       - is_active
       - name
@@ -6587,9 +6973,14 @@ components:
         credit:
           type: string
           description: Decimal as string, e.g. "1100.00"
+        cost_center:
+          allOf:
+          - $ref: '#/components/schemas/CostCenterRef'
+          nullable: true
       required:
       - account_code
       - account_name
+      - cost_center
       - credit
       - debit
       - description
@@ -6783,6 +7174,10 @@ components:
         posting_profile_id:
           type: integer
           nullable: true
+        cost_center:
+          type: object
+          additionalProperties: {}
+          nullable: true
         posting_profile_code:
           type: string
           nullable: true
@@ -6797,6 +7192,7 @@ components:
       required:
       - amount
       - content_type
+      - cost_center
       - created_at
       - currency
       - document_number
@@ -7600,10 +7996,31 @@ components:
           type: boolean
         is_active:
           type: boolean
+    PatchedCostCenterPatchRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        kind:
+          $ref: '#/components/schemas/CostCenterKindEnum'
+        parent_id:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+        is_active:
+          type: boolean
     PatchedExpenseCategoryPatchRequest:
       type: object
       properties:
         default_account_id:
+          type: integer
+          nullable: true
+        default_cost_center_id:
           type: integer
           nullable: true
     PatchedExpenseDraftPatchRequest:
@@ -7612,6 +8029,9 @@ components:
         category_id:
           type: integer
         expense_account_id:
+          type: integer
+          nullable: true
+        cost_center_id:
           type: integer
           nullable: true
     PatchedPartnerBankAccountWriteRequest:
@@ -8100,11 +8520,21 @@ components:
           $ref: '#/components/schemas/AccountRef'
         credit:
           $ref: '#/components/schemas/AccountRef'
+        debit_cost_center:
+          allOf:
+          - $ref: '#/components/schemas/CostCenterRef'
+          nullable: true
+        credit_cost_center:
+          allOf:
+          - $ref: '#/components/schemas/CostCenterRef'
+          nullable: true
       required:
       - amount
       - amount_field
       - credit
+      - credit_cost_center
       - debit
+      - debit_cost_center
       - description
     PrivateFundsClaim:
       type: object
