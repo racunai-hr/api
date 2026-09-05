@@ -1,6 +1,8 @@
 from django.urls import path
 
 from domains.purchasing.api.views import (
+    EracunInboundImportView,
+    EracunInboxRefreshView,
     ExpenseCategoryDetailView,
     ExpenseCategoryListView,
     ExpenseEracunRejectionView,
@@ -58,6 +60,16 @@ urlpatterns = [
         'purchasing/expense-categories/<int:pk>/',
         ExpenseCategoryDetailView.as_view(),
         name='purchasing-expense-category-detail',
+    ),
+    path(
+        'purchasing/eracun/inbound-import/',
+        EracunInboundImportView.as_view(),
+        name='purchasing-eracun-inbound-import',
+    ),
+    path(
+        'purchasing/eracun/inbox-refresh/',
+        EracunInboxRefreshView.as_view(),
+        name='purchasing-eracun-inbox-refresh',
     ),
     path(
         'purchasing/expenses/<int:pk>/eracun-rejection/',

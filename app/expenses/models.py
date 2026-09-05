@@ -113,6 +113,9 @@ class ExpenseSource(models.TextChoices):
     F1_CSV = 'f1_csv', 'F1 CSV'
     OCR = 'ocr', 'OCR'
     EMAIL = 'email', 'E-mail'
+    # Business ingest path for inbound eRačun. Provider (SUPER/AS4) lives in the
+    # integration link, never here — legacy 'super' rows stay valid.
+    ERACUN = 'eracun', 'eRačun'
 
 
 class ExpenseAccountSource(models.TextChoices):

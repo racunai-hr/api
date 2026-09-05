@@ -316,6 +316,10 @@ MPS_SERVICE_URL = env('MPS_SERVICE_URL', default='http://racunai_mps:8000')
 GATEWAY_JWT_SECRET = env('GATEWAY_JWT_SECRET', default='')
 GATEWAY_JWT_ISS = env('GATEWAY_JWT_ISS', default='racunai-api')
 GATEWAY_JWT_AUD = env('GATEWAY_JWT_AUD', default='racunai-intermediary')
+# Safety guard: inbound eRačun sync writes Expense rows from live provider data.
+# Off by default — enable only where that write is wanted.
+ERACUN_INBOUND_SYNC_ENABLED = env.bool('ERACUN_INBOUND_SYNC_ENABLED', default=False)
+ERACUN_INBOUND_IMPORT_LIMIT = env.int('ERACUN_INBOUND_IMPORT_LIMIT', default=25)
 FISCAL_CIS_ENV = env('FISCAL_CIS_ENV', default='demo')
 FISCAL_CIS_ENDPOINT = env('FISCAL_CIS_ENDPOINT', default='')
 FISCAL_CIS_VERIFY_SSL = env.bool('FISCAL_CIS_VERIFY_SSL', default=False)

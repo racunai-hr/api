@@ -88,6 +88,8 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('post', '/api/purchasing/invoices/import/{id}/discard/'),
         ('get', '/api/purchasing/expense-categories/'),
         ('patch', '/api/purchasing/expense-categories/{id}/'),
+        ('post', '/api/purchasing/eracun/inbound-import/'),
+        ('post', '/api/purchasing/eracun/inbox-refresh/'),
         ('post', '/api/purchasing/expenses/{id}/eracun-rejection/'),
         ('get', '/api/tax/pdv/periods/'),
         ('get', '/api/tax/pdv/periods/{period}/'),
@@ -208,6 +210,8 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     'purchasing-invoice-import-discard': ('post', '/api/purchasing/invoices/import/{id}/discard/'),
     'purchasing-expense-category-list': ('get', '/api/purchasing/expense-categories/'),
     'purchasing-expense-category-detail': ('patch', '/api/purchasing/expense-categories/{id}/'),
+    'purchasing-eracun-inbound-import': ('post', '/api/purchasing/eracun/inbound-import/'),
+    'purchasing-eracun-inbox-refresh': ('post', '/api/purchasing/eracun/inbox-refresh/'),
     'purchasing-expense-eracun-rejection': (
         'post',
         '/api/purchasing/expenses/{id}/eracun-rejection/',

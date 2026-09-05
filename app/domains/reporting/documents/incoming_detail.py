@@ -107,7 +107,10 @@ def build_supplier_block(partner, parsed: ParsedInvoice | None, rel) -> dict:
 def build_document_meta(document, parsed: ParsedInvoice | None, *, source: str | None) -> dict:
     source_label = None
     fmt = None
-    if source == 'super':
+    if source == 'eracun':
+        source_label = 'eRačun'
+        fmt = 'UBL'
+    elif source == 'super':
         source_label = 'SUPER eRačun'
         fmt = 'UBL'
     elif source == 'as4':

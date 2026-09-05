@@ -142,6 +142,27 @@ class EracunRejectionResponseSerializer(serializers.Serializer):
     lifecycle = EracunRejectionLifecycleSerializer()
 
 
+class EracunImportErrorSerializer(serializers.Serializer):
+    invoice_guid = serializers.CharField(required=False)
+    document_id = serializers.CharField(required=False)
+    detail = serializers.CharField()
+
+
+class EracunInboundImportResponseSerializer(serializers.Serializer):
+    scanned = serializers.IntegerField()
+    imported = serializers.IntegerField()
+    skipped = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    remaining_importable = serializers.IntegerField()
+    errors = EracunImportErrorSerializer(many=True)
+
+
+class EracunInboxRefreshResponseSerializer(serializers.Serializer):
+    reconciliation_id = serializers.CharField(allow_blank=True)
+    status = serializers.CharField(allow_blank=True)
+    detail = serializers.CharField(allow_blank=True)
+
+
 class ExpenseCategoryAccountRefSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     code = serializers.CharField()

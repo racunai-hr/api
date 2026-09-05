@@ -1,7 +1,11 @@
+from datetime import date
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
+
+from expenses.models import ExpenseSource
 
 from fiscal_gateway.client.as4_client import As4ApplicationResponseResult
 from fiscal_gateway.client.domibus_push import parse_domibus_push
@@ -55,3 +59,19 @@ class TestInboundExpenseCreation:
         expense = Expense.all_objects.filter(tenant=tenant, pk=link.object_id).first()
         assert expense is not None
         assert expense.receipt_number == '13062026-TP-5054'
+
+        # Regression guard for the shared UBL helper extraction: the AS4 path keeps its
+        # own numbering prefix, its default business source and its own link row.
+        assert expense.expense_number == 'AS4-13062026-TP-5054'
+        assert expense.source == ExpenseSource.MANUAL
+        assert expense.status == 'draft'
+        assert expense.expense_date == date(2026, 6, 13)
+        assert expense.due_date == date(2026, 6, 14)
+        assert expense.amount == Decimal('238.00')
+        assert expense.tax_amount == Decimal('38.00')
+        assert expense.currency == 'EUR'
+        assert expense.description == 'Proizvod A; Proizvod B'
+        assert expense.supplier.tax_number == '11528564544'
+        assert link.supplier_oib == '11528564544'
+        assert link.recipient_oib == '99999999994'
+        assert link.ubl_xml

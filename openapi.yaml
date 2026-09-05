@@ -3584,6 +3584,119 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/eracun/inbound-import/:
+    post:
+      operationId: purchasing_eracun_inbound_import
+      description: Import gateway inbox documents into draft expenses. No provider
+        round-trip.
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EracunInboundImportResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+  /api/purchasing/eracun/inbox-refresh/:
+    post:
+      operationId: purchasing_eracun_inbox_refresh
+      description: Ask the gateway to reconcile against the provider. Imports nothing.
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      tags:
+      - purchasing
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EracunInboxRefreshResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
   /api/purchasing/expense-categories/:
     get:
       operationId: purchasing_expense_categories_list
@@ -6124,6 +6237,54 @@ components:
       - as4_status
       - message_id
       - source
+    EracunImportError:
+      type: object
+      properties:
+        invoice_guid:
+          type: string
+        document_id:
+          type: string
+        detail:
+          type: string
+      required:
+      - detail
+    EracunInboundImportResponse:
+      type: object
+      properties:
+        scanned:
+          type: integer
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        failed:
+          type: integer
+        remaining_importable:
+          type: integer
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/EracunImportError'
+      required:
+      - errors
+      - failed
+      - imported
+      - remaining_importable
+      - scanned
+      - skipped
+    EracunInboxRefreshResponse:
+      type: object
+      properties:
+        reconciliation_id:
+          type: string
+        status:
+          type: string
+        detail:
+          type: string
+      required:
+      - detail
+      - reconciliation_id
+      - status
     EracunRejectionEReporting:
       type: object
       properties:

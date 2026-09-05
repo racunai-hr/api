@@ -18,6 +18,8 @@ from domains.purchasing.api.permissions import TenantPurchasingWritePermission
 from domains.purchasing.api.schema import (
     ConfirmInvoiceImportSerializer,
     CreatePartnerFromImportSerializer,
+    EracunInboundImportResponseSerializer,
+    EracunInboxRefreshResponseSerializer,
     EracunRejectionRequestSerializer,
     EracunRejectionResponseSerializer,
     ExpenseCategoryListSerializer,
@@ -42,6 +44,11 @@ from domains.purchasing.services.invoice_import import (
     submit_invoice_import,
 )
 from expenses.models import Expense
+from integrations.services.inbound_eracun_sync import (
+    EracunSyncError,
+    import_available_inbound_eracun,
+    refresh_inbound_inbox,
+)
 from integrations.services.inbound_rejection import InboundRejectionError, submit_eracun_rejection
 
 
@@ -322,6 +329,70 @@ class ExpenseCategoryDetailView(_PurchasingApiView):
             if getattr(exc, 'message_dict', None):
                 return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EracunInboundImportView(_PurchasingApiView):
+    """Import gateway inbox documents into draft expenses. No provider round-trip."""
+
+    http_method_names = ['post', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_eracun_inbound_import',
+        request=None,
+        responses={
+            200: EracunInboundImportResponseSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+            502: PurchasingConflictSerializer,
+            503: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request):
+        tenant = _require_tenant(request)
+        try:
+            body = import_available_inbound_eracun(tenant)
+        except EracunSyncError as exc:
+            return Response({'code': exc.code, 'detail': exc.detail}, status=exc.http_status)
+        return Response(body, status=status.HTTP_200_OK)
+
+
+class EracunInboxRefreshView(_PurchasingApiView):
+    """Ask the gateway to reconcile against the provider. Imports nothing."""
+
+    http_method_names = ['post', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_eracun_inbox_refresh',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=None,
+        responses={
+            200: EracunInboxRefreshResponseSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+            502: PurchasingConflictSerializer,
+            503: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request):
+        tenant = _require_tenant(request)
+        idempotency_key = _require_idempotency_key(request)
+        try:
+            body = refresh_inbound_inbox(tenant, idempotency_key=idempotency_key)
+        except EracunSyncError as exc:
+            return Response({'code': exc.code, 'detail': exc.detail}, status=exc.http_status)
+        return Response(body, status=status.HTTP_200_OK)
 
 
 class ExpenseEracunRejectionView(_PurchasingApiView):

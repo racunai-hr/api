@@ -43,6 +43,18 @@ class GatewayV1Client:
     def get_inbound_document(self, document_id: str) -> dict:
         return self._request('GET', f'/v1/inbound/documents/{document_id}').json()
 
+    def get_inbound_ubl(self, document_id: str) -> str:
+        return self._request('GET', f'/v1/inbound/documents/{document_id}/ubl').text
+
+    def start_reconciliation(self, taxpayer_oib: str, *, idempotency_key: str) -> dict:
+        """Pull provider inbox into the gateway. Gateway runs it inside the POST."""
+        return self._request(
+            'POST',
+            f'/v1/taxpayers/{taxpayer_oib}/reconciliations',
+            headers={'Idempotency-Key': idempotency_key},
+            scope='gateway.write',
+        ).json()
+
     def list_inbound_documents(
         self,
         taxpayer_oib: str,

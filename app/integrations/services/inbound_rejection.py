@@ -45,7 +45,7 @@ class RejectAction:
     unavailable_code: str | None
 
 
-def _taxpayer_oib(tenant) -> str | None:
+def taxpayer_oib_for_tenant(tenant) -> str | None:
     company = CompanySettings.all_objects.filter(tenant=tenant).first()
     if company is None:
         return None
@@ -181,7 +181,7 @@ def _sync_rejection_capability(
         or link.gateway_document_id is None
     ):
         return link
-    taxpayer_oib = link.taxpayer_oib or _taxpayer_oib(link.tenant)
+    taxpayer_oib = link.taxpayer_oib or taxpayer_oib_for_tenant(link.tenant)
     if not taxpayer_oib:
         return link
     gw = client or GatewayV1Client(taxpayer_oib=taxpayer_oib, timeout=5)
@@ -260,7 +260,7 @@ def resolve_gateway_document(
     if not provider_ref:
         return None
 
-    taxpayer_oib = _taxpayer_oib(expense.tenant)
+    taxpayer_oib = taxpayer_oib_for_tenant(expense.tenant)
     if not taxpayer_oib:
         return None
 
@@ -406,7 +406,7 @@ def submit_eracun_rejection(
     if isinstance(attempt, dict):
         return attempt
 
-    taxpayer_oib = link.taxpayer_oib or _taxpayer_oib(expense.tenant)
+    taxpayer_oib = link.taxpayer_oib or taxpayer_oib_for_tenant(expense.tenant)
     gw = client or GatewayV1Client(taxpayer_oib=taxpayer_oib)
     try:
         _status_code, body = gw.reject_e_reporting(
