@@ -12,7 +12,13 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from accounting.models import Deposit, JournalEntry, SubledgerItem, VATLedgerEntry
+from accounting.models import (
+    Deposit,
+    JournalEntry,
+    PrivateFundsClaim,
+    SubledgerItem,
+    VATLedgerEntry,
+)
 from accounting.services.chart import provision_tenant_chart
 from accounting.services.posting import get_or_create_fiscal_period, resolve_account
 from accounting.services.rrif_import import import_rrif_chart
@@ -20,7 +26,8 @@ from banking.models import BankStatement, BankTransaction
 from domains.finance.services.deposits import create_deposit, post_deposit
 from domains.finance.services.subledger import create_subledger_item, get_subledger_item_for_source
 from expenses.models import Expense, ExpenseCategory
-from partners.models import Partner
+from invoices.models import Invoice
+from partners.models import Partner, PartnerBankAccount
 from payments.models import BankAccount
 from tenants.models import Tenant, TenantMembership
 
@@ -395,6 +402,339 @@ class BankReconcileOpenItemTests(TestCase):
         self.assertEqual(
             JournalEntry.all_objects.filter(description__contains='[deposit_returned:').count(),
             0,
+        )
+
+    def _journal(self, number: str):
+        return JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number=number,
+            entry_date=date(2026, 8, 1),
+            status='posted',
+            description=f'[fixture] {number}',
+            is_auto=True,
+            fiscal_period=get_or_create_fiscal_period(self.tenant, date(2026, 8, 1)),
+            created_by=self.owner,
+        )
+
+    def _partner(self, name: str, suffix: str):
+        return Partner.all_objects.create(
+            tenant=self.tenant,
+            name=name,
+            tax_number='',
+            vat_number=f'DE{suffix}',
+            partner_type='supplier',
+            status='active',
+            address='X',
+            city='Zagreb',
+            postal_code='10000',
+            country_code='HR',
+        )
+
+    def _payable_expense(self, *, partner, amount, due_date, expense_number, entry_number):
+        expense = Expense.all_objects.create(
+            tenant=self.tenant,
+            supplier=partner,
+            category=self.category,
+            expense_number=expense_number,
+            expense_date=date(2026, 8, 1),
+            amount=Decimal(amount),
+            tax_amount=Decimal('0'),
+            currency='EUR',
+            status='approved',
+            settlement_method='business_account',
+            description='Score fixture',
+            created_by=self.owner,
+        )
+        create_subledger_item(
+            self.tenant,
+            partner=partner,
+            direction='payable',
+            source=expense,
+            journal_entry=self._journal(entry_number),
+            amount=Decimal(amount),
+            due_date=due_date,
+        )
+        return get_subledger_item_for_source(self.tenant, expense), expense
+
+    def _payable_claim(self, *, partner, amount, due_date, number, reference, entry_number):
+        related, _ = self._payable_expense(
+            partner=partner,
+            amount=amount,
+            due_date=due_date,
+            expense_number=f'EXP-{number}',
+            entry_number=f'{entry_number}-REL',
+        )
+        claim = PrivateFundsClaim.all_objects.create(
+            tenant=self.tenant,
+            number=number,
+            claim_type=PrivateFundsClaim.CLAIM_SUPPLIER_PAYMENT,
+            partner=partner,
+            amount=Decimal(amount),
+            currency='EUR',
+            claim_date=date(2026, 8, 1),
+            status=PrivateFundsClaim.STATUS_POSTED,
+            reference=reference,
+            related_content_type=ContentType.objects.get_for_model(related.source),
+            related_object_id=related.source_object_id,
+            created_by=self.owner,
+        )
+        create_subledger_item(
+            self.tenant,
+            partner=partner,
+            direction='payable',
+            source=claim,
+            journal_entry=self._journal(entry_number),
+            amount=Decimal(amount),
+            due_date=due_date,
+        )
+        return get_subledger_item_for_source(self.tenant, claim), claim
+
+    def _row_for(self, results, item_id):
+        return next(row for row in results if row['item_id'] == item_id)
+
+    def test_exact_amount_ranks_above_larger_open_item(self):
+        partner = self._partner('Score Partner Alpha', '111111111')
+        exact, _ = self._payable_expense(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 20),
+            expense_number='EXP-EXACT',
+            entry_number='202608-SCR-1',
+        )
+        larger, _ = self._payable_expense(
+            partner=partner,
+            amount='200.00',
+            due_date=date(2026, 8, 1),
+            expense_number='EXP-LARGE',
+            entry_number='202608-SCR-2',
+        )
+        tx = self._debit_tx('82.95')
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = [row['item_id'] for row in response.data['results']]
+        self.assertEqual(ids[0], exact.pk)
+        self.assertIn(larger.pk, ids)
+        self.assertGreater(
+            self._row_for(response.data['results'], exact.pk)['match_score'],
+            self._row_for(response.data['results'], larger.pk)['match_score'],
+        )
+
+    def test_amount_and_due_near_ranks_first_but_not_recommended(self):
+        partner = self._partner('Score Partner Beta', '222222222')
+        item, _ = self._payable_expense(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            expense_number='EXP-GATE',
+            entry_number='202608-SCR-3',
+        )
+        tx = self._debit_tx('82.95')
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertEqual(response.status_code, 200, response.data)
+        row = response.data['results'][0]
+        self.assertEqual(row['item_id'], item.pk)
+        self.assertEqual(row['match_reasons'], ['amount_exact', 'due_near'])
+        self.assertFalse(row['recommended'])
+
+    def test_reference_match_from_source_reference_activates_recommended(self):
+        partner = self._partner('Score Partner Gamma', '333333333')
+        item, _ = self._payable_claim(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            number='PFC-SCORE-1',
+            reference='123456789',
+            entry_number='202608-SCR-4',
+        )
+        tx = self._debit_tx('82.95')
+        before = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        row = self._row_for(before.data['results'], item.pk)
+        self.assertNotIn('reference_match', row['match_reasons'])
+        self.assertFalse(row['recommended'])
+        score_before = row['match_score']
+
+        tx.reference = 'HR00 123456789'
+        tx.save(update_fields=['reference'])
+        after = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        row = self._row_for(after.data['results'], item.pk)
+        self.assertIn('reference_match', row['match_reasons'])
+        self.assertTrue(row['recommended'])
+        self.assertEqual(row['match_score'], score_before + 30)
+
+    def test_reference_match_ignores_source_label_and_short_digits(self):
+        partner = self._partner('Score Partner Delta', '444444444')
+        labeled, _ = self._payable_claim(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            number='PFC-202608-0004',
+            reference='',
+            entry_number='202608-SCR-5',
+        )
+        short_ref, _ = self._payable_claim(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 19),
+            number='PFC-SCORE-SHORT',
+            reference='0004',
+            entry_number='202608-SCR-6',
+        )
+        tx = self._debit_tx('82.95')
+        tx.reference = '0004'
+        tx.save(update_fields=['reference'])
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        labeled_row = self._row_for(response.data['results'], labeled.pk)
+        short_row = self._row_for(response.data['results'], short_ref.pk)
+        self.assertNotIn('reference_match', labeled_row['match_reasons'])
+        self.assertNotIn('reference_match', short_row['match_reasons'])
+
+    def test_invoice_and_expense_never_get_reference_match(self):
+        partner = self._partner('Score Partner Epsilon', '555555555')
+        expense_item, expense = self._payable_expense(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            expense_number='EXP-123456',
+            entry_number='202608-SCR-7',
+        )
+        invoice = Invoice.all_objects.create(
+            tenant=self.tenant,
+            company_to=partner,
+            invoice_number='2026-0099',
+            issue_date=date(2026, 8, 1),
+            due_date=date(2026, 8, 18),
+            status='sent',
+            total_amount=Decimal('82.95'),
+            created_by=self.owner,
+        )
+        create_subledger_item(
+            self.tenant,
+            partner=partner,
+            direction='receivable',
+            source=invoice,
+            journal_entry=self._journal('202608-SCR-8'),
+            amount=Decimal('82.95'),
+            due_date=date(2026, 8, 18),
+        )
+        invoice_item = get_subledger_item_for_source(self.tenant, invoice)
+        debit = self._debit_tx('82.95')
+        debit.reference = '123456'
+        debit.save(update_fields=['reference'])
+        debit_rows = self.client.get(f'/api/banking/transactions/{debit.pk}/open-item-candidates/')
+        self.assertNotIn(
+            'reference_match',
+            self._row_for(debit_rows.data['results'], expense_item.pk)['match_reasons'],
+        )
+        credit = self._credit_tx('82.95')
+        credit.reference = '20260099'
+        credit.save(update_fields=['reference'])
+        credit_rows = self.client.get(f'/api/banking/transactions/{credit.pk}/open-item-candidates/')
+        self.assertNotIn(
+            'reference_match',
+            self._row_for(credit_rows.data['results'], invoice_item.pk)['match_reasons'],
+        )
+        self.assertEqual(expense.expense_number, 'EXP-123456')
+
+    def test_iban_match_is_exact_active_only(self):
+        partner = self._partner('Score Partner Zeta', '666666666')
+        item, _ = self._payable_expense(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            expense_number='EXP-IBAN',
+            entry_number='202608-SCR-9',
+        )
+        PartnerBankAccount.objects.create(
+            partner=partner,
+            bank_name='OTP',
+            iban='HR1111111111111111111',
+            is_active=True,
+        )
+        PartnerBankAccount.objects.create(
+            partner=partner,
+            bank_name='Inactive',
+            iban='HR2222222222222222222',
+            is_active=False,
+        )
+        tx = self._debit_tx('82.95')
+        tx.counterparty_iban = 'HR11 1111 1111 1111 1111 1'
+        tx.save(update_fields=['counterparty_iban'])
+        exact = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        row = self._row_for(exact.data['results'], item.pk)
+        self.assertIn('iban_match', row['match_reasons'])
+        self.assertTrue(row['recommended'])
+
+        tx.counterparty_iban = 'HR9999991111111111111'
+        tx.save(update_fields=['counterparty_iban'])
+        suffix = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertNotIn(
+            'iban_match',
+            self._row_for(suffix.data['results'], item.pk)['match_reasons'],
+        )
+
+        tx.counterparty_iban = 'HR2222222222222222222'
+        tx.save(update_fields=['counterparty_iban'])
+        inactive = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertNotIn(
+            'iban_match',
+            self._row_for(inactive.data['results'], item.pk)['match_reasons'],
+        )
+
+    def test_partner_name_strong_requires_two_tokens_or_full_name(self):
+        strong_partner = self._partner('Adriatic Logistics d.o.o.', '777777777')
+        weak_partner = self._partner('Hotel Adriatic', '888888888')
+        strong_item, _ = self._payable_expense(
+            partner=strong_partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            expense_number='EXP-NAME-S',
+            entry_number='202608-SCR-10',
+        )
+        weak_item, _ = self._payable_expense(
+            partner=weak_partner,
+            amount='82.95',
+            due_date=date(2026, 8, 19),
+            expense_number='EXP-NAME-W',
+            entry_number='202608-SCR-11',
+        )
+        tx = self._debit_tx('82.95')
+        tx.counterparty_name = 'Adriatic Logistics'
+        tx.save(update_fields=['counterparty_name'])
+        strong = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        strong_row = self._row_for(strong.data['results'], strong_item.pk)
+        self.assertIn('partner_name_match', strong_row['match_reasons'])
+        self.assertNotIn('single_name_token_match', strong_row['match_reasons'])
+        self.assertTrue(strong_row['recommended'])
+
+        tx.counterparty_name = 'Adriatic Split'
+        tx.save(update_fields=['counterparty_name'])
+        weak = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        weak_row = self._row_for(weak.data['results'], weak_item.pk)
+        self.assertEqual(
+            [reason for reason in weak_row['match_reasons'] if 'name' in reason],
+            ['single_name_token_match'],
+        )
+        self.assertFalse(weak_row['recommended'])
+
+    def test_description_match_ranks_but_does_not_recommend(self):
+        partner = self._partner('Score Partner Eta', '999999999')
+        item, _ = self._payable_expense(
+            partner=partner,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            expense_number='T-2026-0011',
+            entry_number='202608-SCR-12',
+        )
+        tx = self._debit_tx('82.95')
+        tx.description = 'Uplata T-2026-0011 prema računu'
+        tx.save(update_fields=['description'])
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        row = response.data['results'][0]
+        self.assertEqual(row['item_id'], item.pk)
+        self.assertIn('description_match', row['match_reasons'])
+        self.assertFalse(row['recommended'])
+        self.assertFalse(
+            {'reference_match', 'iban_match', 'partner_name_match'} & set(row['match_reasons'])
         )
 
 

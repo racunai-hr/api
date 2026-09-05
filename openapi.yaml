@@ -7435,14 +7435,25 @@ components:
           nullable: true
         action_label:
           type: string
+        match_score:
+          type: integer
+        match_reasons:
+          type: array
+          items:
+            type: string
+        recommended:
+          type: boolean
       required:
       - action_label
       - direction
       - due_date
       - item_id
+      - match_reasons
+      - match_score
       - open_amount
       - partner_id
       - partner_name
+      - recommended
       - source_id
       - source_label
       - source_type

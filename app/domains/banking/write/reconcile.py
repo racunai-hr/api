@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 from django.db import transaction
@@ -46,6 +47,108 @@ def _action_label(source_type: str, direction: str) -> str:
     return 'Zatvori obvezu'
 
 
+STRONG_IDENTITY_REASONS = frozenset({'reference_match', 'iban_match', 'partner_name_match'})
+
+_LEGAL_FORM_RE = re.compile(
+    r'\b(?:j\.?\s*d\.?\s*o\.?\s*o\.?|d\.?\s*o\.?\s*o\.?|d\.?\s*d\.?|jdoo|doo|dd)\b',
+    re.IGNORECASE,
+)
+_NON_ALNUM_RE = re.compile(r'[^0-9a-zA-ZčćžšđČĆŽŠĐ]+', re.UNICODE)
+_NAME_STOP_WORDS = frozenset({
+    'trade',
+    'servis',
+    'service',
+    'transport',
+    'hotel',
+    'auto',
+    'group',
+    'holding',
+})
+_CANDIDATE_SCAN_LIMIT = 300
+_CANDIDATE_RESULT_LIMIT = 50
+_SCORE_CAP = 100
+_RECOMMENDED_MIN_SCORE = 60
+
+
+def _digits_only(value: str | None) -> str:
+    return re.sub(r'\D', '', value or '')
+
+
+def _normalize_iban(value: str | None) -> str:
+    return re.sub(r'\s+', '', value or '').upper()
+
+
+def _normalize_text(value: str | None) -> str:
+    return ' '.join(_NON_ALNUM_RE.sub(' ', value or '').casefold().split())
+
+
+def _normalize_name(value: str | None) -> str:
+    stripped = _LEGAL_FORM_RE.sub(' ', value or '')
+    return _normalize_text(stripped)
+
+
+def _significant_name_tokens(normalized: str) -> set[str]:
+    return {token for token in normalized.split() if len(token) >= 5 and token not in _NAME_STOP_WORDS}
+
+
+def _score_candidate(bank_tx, item, source, source_label: str, amount: Decimal) -> tuple[int, list[str]]:
+    reasons: list[str] = []
+    score = 0
+
+    if item.open_amount == amount:
+        score += 50
+        reasons.append('amount_exact')
+
+    source_ref = _digits_only(getattr(source, 'reference', None) if source is not None else None)
+    bank_ref = _digits_only(bank_tx.reference)
+    if source_ref and len(source_ref) >= 6 and (source_ref == bank_ref or bank_ref.endswith(source_ref)):
+        score += 30
+        reasons.append('reference_match')
+
+    bank_iban = _normalize_iban(bank_tx.counterparty_iban)
+    if bank_iban and item.partner_id:
+        partner_ibans = {
+            _normalize_iban(account.iban)
+            for account in item.partner.bank_accounts.all()
+            if account.is_active
+        }
+        if bank_iban in partner_ibans:
+            score += 25
+            reasons.append('iban_match')
+
+    label = _normalize_text(source_label)
+    description = _normalize_text(bank_tx.description)
+    if label and len(label) >= 6 and label in description:
+        score += 15
+        reasons.append('description_match')
+
+    partner_name = _normalize_name(item.partner.name if item.partner_id else '')
+    counterparty_name = _normalize_name(bank_tx.counterparty_name)
+    if partner_name and counterparty_name:
+        if partner_name == counterparty_name:
+            score += 15
+            reasons.append('partner_name_match')
+        else:
+            shared = _significant_name_tokens(partner_name) & _significant_name_tokens(counterparty_name)
+            if len(shared) >= 2:
+                score += 15
+                reasons.append('partner_name_match')
+            elif len(shared) == 1:
+                score += 5
+                reasons.append('single_name_token_match')
+
+    if item.due_date and bank_tx.transaction_date:
+        if abs((item.due_date - bank_tx.transaction_date).days) <= 30:
+            score += 5
+            reasons.append('due_near')
+
+    return min(score, _SCORE_CAP), reasons
+
+
+def _is_recommended(score: int, reasons: list[str]) -> bool:
+    return score >= _RECOMMENDED_MIN_SCORE and bool(STRONG_IDENTITY_REASONS & set(reasons))
+
+
 def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = None) -> dict:
     bank_tx = (
         BankTransaction.all_objects.filter(tenant=tenant, pk=transaction_id)
@@ -64,6 +167,7 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
             direction=direction,
         )
         .select_related('partner', 'source_content_type')
+        .prefetch_related('partner__bank_accounts')
         .order_by('due_date', 'id')
     )
     if q:
@@ -75,8 +179,8 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
                 | Q(partner__vat_number__icontains=term)
             )
 
-    results = []
-    for item in qs[:80]:
+    scored = []
+    for item in qs[:_CANDIDATE_SCAN_LIMIT]:
         source_type = item.source_content_type.model if item.source_content_type_id else ''
         if source_type == 'deposit':
             if bank_tx.transaction_type != 'credit' or item.open_amount != amount:
@@ -86,20 +190,32 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
                 continue
         else:
             continue
-        results.append({
+        source = item.source
+        source_label = _subledger_source_label(item)
+        match_score, match_reasons = _score_candidate(
+            bank_tx, item, source, source_label, amount
+        )
+        scored.append({
             'item_id': item.pk,
             'partner_id': item.partner_id,
             'partner_name': item.partner.name if item.partner_id else '',
             'direction': item.direction,
             'source_type': source_type,
             'source_id': item.source_object_id,
-            'source_label': _subledger_source_label(item),
+            'source_label': source_label,
             'open_amount': f'{item.open_amount:.2f}',
             'due_date': item.due_date.isoformat() if item.due_date else None,
             'action_label': _action_label(source_type, item.direction),
+            'match_score': match_score,
+            'match_reasons': match_reasons,
+            'recommended': _is_recommended(match_score, match_reasons),
+            '_sort_due': item.due_date,
         })
-        if len(results) >= 50:
-            break
+    scored.sort(key=lambda row: (-row['match_score'], row['_sort_due'], row['item_id']))
+    results = []
+    for row in scored[:_CANDIDATE_RESULT_LIMIT]:
+        row.pop('_sort_due', None)
+        results.append(row)
     return {'count': len(results), 'results': results}
 
 

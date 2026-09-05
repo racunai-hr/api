@@ -219,6 +219,9 @@ class OpenItemCandidateSerializer(serializers.Serializer):
     open_amount = money_field()
     due_date = serializers.CharField(allow_null=True)
     action_label = serializers.CharField()
+    match_score = serializers.IntegerField()
+    match_reasons = serializers.ListField(child=serializers.CharField())
+    recommended = serializers.BooleanField()
 
 
 class OpenItemCandidateListSerializer(serializers.Serializer):
