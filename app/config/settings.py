@@ -35,6 +35,8 @@ TENANT_LEGACY_HOST_MAP = {
     'erp.finestar.hr': 'finestar',
 }
 TENANT_DEFAULT_SLUG = env('TENANT_DEFAULT_SLUG', default='')
+# Local develop only: honour X-Tenant-Slug when Host cannot carry the tenant.
+TENANT_ALLOW_HEADER_OVERRIDE = env.bool('TENANT_ALLOW_HEADER_OVERRIDE', default=False)
 TENANT_SESSION_KEY = 'active_tenant_id'
 TENANT_INVITATION_EXPIRY_DAYS = 7
 TENANT_TRAEFIK_DYNAMIC_PATH = env(
@@ -273,9 +275,11 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://[\w-]+\.racunai\.hr$",
 ]
 # Browser preflight for JWT banking writes sends Idempotency-Key.
+# x-tenant-slug is the local-dev tenant adapter (see TENANT_ALLOW_HEADER_OVERRIDE).
 CORS_ALLOW_HEADERS = (
     *default_headers,
     "idempotency-key",
+    "x-tenant-slug",
 )
 # Keep short so allow-headers fixes are not stuck in browser preflight cache for a day.
 CORS_PREFLIGHT_MAX_AGE = 600

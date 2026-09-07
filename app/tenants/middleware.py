@@ -5,6 +5,7 @@ from . import context
 from . import user_context
 from .resolution import (
     get_cached_custom_domains,
+    header_tenant_override,
     is_platform_admin_host,
     normalize_host,
     resolve_platform_tenant,
@@ -91,7 +92,12 @@ class TenantMiddleware:
         elif request.is_platform_admin:
             tenant = resolve_platform_tenant(request)
         else:
-            tenant = resolve_tenant_from_host(host)
+            header_present, header_tenant = header_tenant_override(request)
+            if header_present:
+                # Header is authoritative: typo or inactive tenant = 404.
+                tenant = header_tenant
+            else:
+                tenant = resolve_tenant_from_host(host)
             if tenant is None:
                 raise Http404('Tenant nije pronađen.')
 

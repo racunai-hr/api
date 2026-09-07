@@ -120,6 +120,12 @@ class PartnersApiTests(TestCase):
         response = client.get('/api/partners/')
         self.assertEqual(response.status_code, 404)
 
+    @override_settings(DEBUG=True, TENANT_ALLOW_HEADER_OVERRIDE=True)
+    def test_header_slug_without_membership_returns_404(self):
+        client = self._client(self.owner)
+        response = client.get('/api/partners/', HTTP_X_TENANT_SLUG='partners2')
+        self.assertEqual(response.status_code, 404)
+
     def test_default_list_is_active_only(self):
         client = self._client(self.viewer)
         response = client.get('/api/partners/')
