@@ -46,6 +46,7 @@ from accounting.services.tax_forms.pdv_s.validation import (
 logger = logging.getLogger(__name__)
 
 _METADATA_NS = 'http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0'
+_SIGNATURE_NS = 'http://www.w3.org/2000/09/xmldsig#'
 
 _ALLOWED_NON_XML_EXTENSIONS = frozenset({
     '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip', '.txt',
@@ -89,6 +90,16 @@ def _xml_document_uuid(xml_bytes: bytes) -> UUID | None:
         return None
 
 
+def _xml_has_enveloped_signature(xml_bytes: bytes) -> bool:
+    """True when the form root has a ds:Signature child.
+
+    ePorezna "Preuzmi XML" after portal submission is typically ObrazacPDV/PDV-S/ZP
+    without the XAdES envelope — namespaces are declared, Signature is omitted.
+    """
+    root = etree.fromstring(xml_bytes)
+    return bool(root.findall(f'{{{_SIGNATURE_NS}}}Signature'))
+
+
 def _is_xml_attachment(file_obj) -> bool:
     name = getattr(file_obj, 'name', '') or ''
     content_type = getattr(file_obj, 'content_type', '') or ''
@@ -109,13 +120,20 @@ def _hash_from_xml_bytes(document_type: str, xml_bytes: bytes) -> str:
         from accounting.services.submission.protocol import zp_payload_hash_from_xml
 
         return zp_payload_hash_from_xml(xml_bytes)
+    if document_type == TaxDocumentType.TZ2:
+        from accounting.services.submission.protocol import tz2_payload_hash_from_xml
+
+        return tz2_payload_hash_from_xml(xml_bytes)
     raise ValueError(f'Nepodržana XML validacija za tip {document_type}')
 
 
 def _validate_pdv_xml(xml_bytes: bytes, *, document, period) -> ValidationResult:
     result = ValidationResult(valid=True)
     try:
-        validate_pdv_obrazac_xml(xml_bytes, signed=True)
+        validate_pdv_obrazac_xml(
+            xml_bytes,
+            signed=_xml_has_enveloped_signature(xml_bytes),
+        )
     except PdvSchemaValidationError as exc:
         result.valid = False
         result.errors.append(str(exc))
@@ -159,7 +177,10 @@ def _validate_pdv_xml(xml_bytes: bytes, *, document, period) -> ValidationResult
 def _validate_pdv_s_xml(xml_bytes: bytes, *, period) -> ValidationResult:
     result = ValidationResult(valid=True)
     try:
-        validate_pdv_s_xml(xml_bytes, signed=True)
+        validate_pdv_s_xml(
+            xml_bytes,
+            signed=_xml_has_enveloped_signature(xml_bytes),
+        )
     except PdvSSchemaValidationError as exc:
         result.valid = False
         result.errors.append(str(exc))
@@ -194,7 +215,10 @@ def _validate_zp_xml(xml_bytes: bytes, *, document, period) -> ValidationResult:
 
     result = ValidationResult(valid=True)
     try:
-        validate_zp_xml(xml_bytes, signed=True)
+        validate_zp_xml(
+            xml_bytes,
+            signed=_xml_has_enveloped_signature(xml_bytes),
+        )
     except ZpSchemaValidationError as exc:
         result.valid = False
         result.errors.append(str(exc))
@@ -223,6 +247,65 @@ def _validate_zp_xml(xml_bytes: bytes, *, document, period) -> ValidationResult:
 
         imported_hash = payload_hash(parsed)
         if imported_hash != document.get_payload_hash():
+            result.warnings.append(
+                'Hash XML-a ne odgovara hashu drafta u ERP-u — provjerite verziju obrasca.',
+            )
+
+    xml_doc_uuid = _xml_document_uuid(xml_bytes)
+    if xml_doc_uuid is not None:
+        result.warnings.append(
+            f'Metapodaci XML Identifikator={xml_doc_uuid} — ne koristi se kao portal UUID.',
+        )
+
+    return result
+
+
+def _validate_tz2_xml(xml_bytes: bytes, *, document, period) -> ValidationResult:
+    from settings.models import CompanySettings
+
+    from accounting.services.tax_forms.tz2.canonical import payload_hash
+    from accounting.services.tax_forms.tz2.parse import parse_tz2_xml
+    from accounting.services.tax_forms.tz2.validation import (
+        Tz2SchemaValidationError,
+        validate_tz2_xml,
+    )
+
+    result = ValidationResult(valid=True)
+    try:
+        validate_tz2_xml(
+            xml_bytes,
+            signed=_xml_has_enveloped_signature(xml_bytes),
+        )
+    except Tz2SchemaValidationError as exc:
+        result.valid = False
+        result.errors.append(str(exc))
+        return result
+
+    try:
+        parsed = parse_tz2_xml(xml_bytes)
+    except Exception as exc:
+        result.valid = False
+        result.errors.append(str(exc))
+        return result
+
+    tax_year = getattr(document, 'tax_year', None) or getattr(period, 'year', None)
+    if parsed.period_from.year != tax_year or parsed.period_to.year != tax_year:
+        result.valid = False
+        result.errors.append(
+            f'XML razdoblje {parsed.period_from.year}–{parsed.period_to.year} '
+            f'ne odgovara TZ 2 godini {tax_year}.',
+        )
+
+    settings = CompanySettings.all_objects.filter(tenant=period.tenant).first()
+    if settings and parsed.taxpayer.oib != settings.vat_number:
+        result.valid = False
+        result.errors.append(
+            f'OIB u XML-u ({parsed.taxpayer.oib}) ne odgovara OIB-u tvrtke '
+            f'({settings.vat_number}).',
+        )
+
+    if getattr(document, 'payload_hash', None):
+        if payload_hash(parsed) != document.get_payload_hash():
             result.warnings.append(
                 'Hash XML-a ne odgovara hashu drafta u ERP-u — provjerite verziju obrasca.',
             )
@@ -313,6 +396,8 @@ class SubmissionService:
                 result = _validate_pdv_s_xml(xml_bytes, period=period)
             elif document_type == TaxDocumentType.ZP:
                 result = _validate_zp_xml(xml_bytes, document=document, period=period)
+            elif document_type == TaxDocumentType.TZ2:
+                result = _validate_tz2_xml(xml_bytes, document=document, period=period)
             else:
                 return ValidationResult(
                     valid=False,

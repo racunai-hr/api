@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns="http://e-porezna.porezna-uprava.hr/sheme/zahtjevi/ObrazacTZ2/v1-0" xmlns:sig="http://www.w3.org/2000/09/xmldsig#" xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://e-porezna.porezna-uprava.hr/sheme/zahtjevi/ObrazacTZ2/v1-0" elementFormDefault="unqualified" attributeFormDefault="unqualified" version="1.0" id="ObrazacTZ2sPotpisom-v1-0" xml:lang="hr-HR">
+  <xsd:annotation>
+    <xsd:documentation>XML shema potpisanog TZ-2 obrasca</xsd:documentation>
+  </xsd:annotation>
+  <xsd:import namespace="http://www.w3.org/2000/09/xmldsig#" schemaLocation="xmldsig-core-schema.xsd"/>
+  <xsd:import namespace="http://uri.etsi.org/01903/v1.3.2#" schemaLocation="XAdES.xsd"/>
+  <xsd:import namespace="http://e-porezna.porezna-uprava.hr/sheme/VanjskaOmotnica/v1-0" schemaLocation="VanjskaOmotnica.xsd"/>
+
+  <xsd:include schemaLocation="ObrazacTZ2tipovi-v1-0.xsd"/>
+  <xsd:element name="ObrazacTZ2" type="sObrazacTZ2sPotpisom"/>
+  <xsd:complexType name="sObrazacTZ2sPotpisom" mixed="false">
+    <xsd:complexContent mixed="false">
+      <xsd:extension base="sObrazacTZ2">
+        <xsd:sequence>
+          <xsd:element ref="sig:Signature"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>

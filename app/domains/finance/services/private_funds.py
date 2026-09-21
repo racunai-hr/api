@@ -121,6 +121,12 @@ def ensure_partner_ante_vrcan(*, tenant, user=None) -> Partner:
             )
         else:
             updates = []
+            if partner.name != ANTE_NAME:
+                partner.name = ANTE_NAME
+                updates.append('name')
+            if partner.short_name != 'Ante':
+                partner.short_name = 'Ante'
+                updates.append('short_name')
             if partner.tax_number != oib:
                 partner.tax_number = oib
                 updates.append('tax_number')

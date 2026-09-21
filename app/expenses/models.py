@@ -445,7 +445,12 @@ class Expense(TenantMixin, models.Model):
 
 
 class ExpenseLine(TenantMixin, models.Model):
-    """Stavka ulaznog dokumenta. Činjenice s isprave; ne utječe na AP/JE header tok."""
+    """Stavka ulaznog dokumenta. Činjenice s isprave.
+
+    AP (2201) i pretporez ostaju na headeru. Ako sve stavke imaju knjiživo
+    ``posting_account`` i zbroj neto/PDV/bruto = header, ``expense_approved``
+    emitira jedan debit po stavci (neto i pretporez).
+    """
 
     expense = models.ForeignKey(
         Expense,
@@ -475,6 +480,15 @@ class ExpenseLine(TenantMixin, models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name='Iznos s PDV-om',
+    )
+    posting_account = models.ForeignKey(
+        'accounting.ChartOfAccounts',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expense_line_posting_accounts',
+        verbose_name='Konto stavke',
+        help_text='Konto knjiženja za ovu stavku. NULL = header konto (postojeći tok).',
     )
     vehicle_line_kind = models.CharField(
         max_length=64,
@@ -530,13 +544,39 @@ class ExpenseLine(TenantMixin, models.Model):
             raise ValidationError({
                 'tenant': 'Tenant stavke mora biti isti kao tenant troška.',
             })
+        if self.posting_account_id:
+            account = self.posting_account
+            if account.tenant_id != expense_tenant_id:
+                raise ValidationError({'posting_account': 'Konto ne pripada istom tenantu.'})
+            if not account.is_active or not account.is_postable:
+                raise ValidationError({'posting_account': 'Konto mora biti aktivno i knjiživo.'})
 
     def save(self, *args, **kwargs):
         if self.vehicle_line_kind == '':
             self.vehicle_line_kind = None
         if self.expense_id:
             self.tenant_id = self.expense.tenant_id
+        self._reject_locked_account_changes(kwargs.get('update_fields'))
         super().save(*args, **kwargs)
+
+    def _reject_locked_account_changes(self, update_fields) -> None:
+        if not self.pk or not self.expense_id:
+            return
+        if self.expense.status == 'draft':
+            return
+        if update_fields is not None:
+            names = set(update_fields)
+            if 'posting_account' not in names and 'posting_account_id' not in names:
+                return
+        previous = (
+            type(self).all_objects.filter(pk=self.pk).values('posting_account_id').first()
+        )
+        if previous is None:
+            return
+        if previous['posting_account_id'] != self.posting_account_id:
+            raise ValidationError({
+                'posting_account': 'Konto stavke se ne može mijenjati nakon odobrenja.',
+            })
 
 
 class ExpenseAttachment(TenantMixin, models.Model):

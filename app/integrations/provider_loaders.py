@@ -115,8 +115,20 @@ def _load_otp_payment(integration_config: IntegrationConfig):
     return OtpProviderConfig(connection)
 
 
+def _load_pondi_eracun(integration_config: IntegrationConfig):
+    class PondiProviderConfig:
+        def __init__(self, config: IntegrationConfig):
+            self.tenant = config.tenant
+            self.integration_config = config
+            self.is_active = config.is_active
+            self.provider = IntegrationProvider.PONDI
+
+    return PondiProviderConfig(integration_config)
+
+
 _LOADERS = {
     (IntegrationType.ERACUN, IntegrationProvider.DIRECT): _load_direct_eracun,
+    (IntegrationType.ERACUN, IntegrationProvider.PONDI): _load_pondi_eracun,
     (IntegrationType.FISCALIZATION, IntegrationProvider.CIS): _load_cis_fiscalization,
     (IntegrationType.FISCALIZATION, IntegrationProvider.FISKAL_PLATFORM): _load_fiskal_platform_fiscalization,
     (IntegrationType.PAYMENT, IntegrationProvider.OTP): _load_otp_payment,

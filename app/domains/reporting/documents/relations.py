@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Prefetch
 
 from accounting.models import (
     Deposit,
@@ -20,7 +21,7 @@ from accounting.models import (
 )
 from banking.models import BankTransaction
 from banking.provider_models import PaymentOrder
-from expenses.models import Expense, ExpenseAttachment
+from expenses.models import Expense, ExpenseAttachment, ExpenseLine
 from fiscal_gateway.models import As4DocumentLink, FiscalSubmissionLog
 from integrations.models import IntegrationOutboxMessage
 from invoices.models import Invoice, InvoiceItem
@@ -54,6 +55,11 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         exp.pk: exp
         for exp in Expense.all_objects.filter(tenant=tenant, pk__in=incoming_ids).select_related(
             'supplier', 'created_by', 'category',
+        ).prefetch_related(
+            Prefetch(
+                'lines',
+                queryset=ExpenseLine.all_objects.select_related('posting_account').order_by('position'),
+            ),
         )
     }
     deposits = {

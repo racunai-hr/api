@@ -52,7 +52,7 @@ from domains.reporting.documents.projection import (
     operational_outgoing,
     vat_amount_check,
 )
-from expenses.models import Expense, ExpenseAttachment, ExpenseCategory
+from expenses.models import Expense, ExpenseAttachment, ExpenseCategory, ExpenseLine
 from invoices.models import Invoice, InvoiceItem
 from partners.models import Partner, PartnerBankAccount
 from payments.models import BankAccount
@@ -1506,6 +1506,23 @@ class DocumentReadModelTests(TestCase):
         self.assertFalse(detail['pdf_available'])
         self.assertIsNone(detail['totals']['prepaid'])
         self.assertEqual(detail['supplier']['id'], expense.supplier_id)
+
+    def test_incoming_detail_exposes_expense_lines_with_account(self):
+        expense = self._expense(amount=Decimal('130.00'), tax_amount=Decimal('26.00'))
+        line = ExpenseLine.all_objects.create(
+            expense=expense,
+            position=1,
+            description='ENC nadoplata',
+            net_amount=Decimal('80.00'),
+            vat_amount=Decimal('20.00'),
+            gross_amount=Decimal('100.00'),
+        )
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(len(detail['lines']), 1)
+        self.assertEqual(detail['lines'][0]['id'], line.pk)
+        self.assertEqual(detail['lines'][0]['name'], 'ENC nadoplata')
+        self.assertEqual(detail['lines'][0]['net_amount'], '80.00')
+        self.assertIsNone(detail['lines'][0]['posting_account'])
 
     def test_incoming_detail_cross_tenant_is_404(self):
         expense = self._expense()

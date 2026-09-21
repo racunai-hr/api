@@ -10,12 +10,12 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from accounting.models import ChartOfAccounts, JournalEntryLine
+from accounting.models import ChartOfAccounts, CostCenter, CostCenterKind, JournalEntryLine
 from accounting.services.chart import provision_tenant_chart
 from accounting.services.posting import build_document_posting_plan, ensure_default_posting_rules, post_document
 from accounting.services.rrif_import import import_rrif_chart
 from domains.finance.services.expenses import posting_preview, serialize_document_posting_plan
-from expenses.models import Expense, ExpenseAccountSource, ExpenseCategory, ExpenseSource
+from expenses.models import Expense, ExpenseAccountSource, ExpenseCategory, ExpenseLine, ExpenseSource
 from partners.models import Partner
 from tenants.models import Tenant, TenantMembership
 
@@ -61,6 +61,15 @@ class ExpensePostingApiTests(TestCase):
         )
         cls.account_4100 = ChartOfAccounts.all_objects.get(tenant=cls.tenant, account_code='4100')
         cls.account_4123 = ChartOfAccounts.all_objects.get(tenant=cls.tenant, account_code='4123')
+        cls.account_1909 = ChartOfAccounts.all_objects.get(tenant=cls.tenant, account_code='1909')
+        cls.account_1900 = ChartOfAccounts.all_objects.get(tenant=cls.tenant, account_code='1900')
+        cls.account_4040 = ChartOfAccounts.all_objects.get(tenant=cls.tenant, account_code='4040')
+        cls.kitchen = CostCenter.all_objects.create(
+            tenant=cls.tenant,
+            code='110',
+            name='Kuhinja',
+            kind=CostCenterKind.LOCATION,
+        )
 
     def setUp(self):
         self.client = self._client(self.owner)
@@ -264,3 +273,150 @@ class ExpensePostingApiTests(TestCase):
         self.assertEqual(account.pk, self.account_4123.pk)
         self.assertEqual(source, 'manual_override')
         self.assertEqual(category.pk, self.telekom.pk)
+
+    def _hac_lines(self, expense, *, prepaid_account=None, device_account=None):
+        ExpenseLine.all_objects.create(
+            expense=expense,
+            position=1,
+            description='ENC nadoplata',
+            net_amount=Decimal('80.00'),
+            vat_amount=Decimal('20.00'),
+            gross_amount=Decimal('100.00'),
+            posting_account=prepaid_account,
+        )
+        ExpenseLine.all_objects.create(
+            expense=expense,
+            position=2,
+            description='ENC uređaj',
+            net_amount=Decimal('24.00'),
+            vat_amount=Decimal('6.00'),
+            gross_amount=Decimal('30.00'),
+            posting_account=device_account,
+        )
+
+    def test_header_only_lines_without_accounts_keep_single_net_debit(self):
+        expense = self._expense(
+            category=self.telekom,
+            amount=Decimal('130.00'),
+            tax_amount=Decimal('26.00'),
+        )
+        self._hac_lines(expense)
+        preview = self.client.get(f'/api/finance/expenses/{expense.pk}/posting-preview/')
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.data['can_approve'])
+        net = [line for line in preview.data['lines'] if line['amount_field'] == 'net_amount']
+        self.assertEqual(len(net), 1)
+        self.assertEqual(net[0]['debit']['code'], '4100')
+        self.assertEqual(net[0]['amount'], '104.00')
+
+    def test_split_net_debits_prepaid_and_small_inventory(self):
+        expense = self._expense(
+            category=self.telekom,
+            amount=Decimal('130.00'),
+            tax_amount=Decimal('26.00'),
+            cost_center=self.kitchen,
+        )
+        self._hac_lines(
+            expense,
+            prepaid_account=self.account_1909,
+            device_account=self.account_4040,
+        )
+        preview = self.client.get(f'/api/finance/expenses/{expense.pk}/posting-preview/')
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.data['can_approve'])
+        net = [line for line in preview.data['lines'] if line['amount_field'] == 'net_amount']
+        tax = [line for line in preview.data['lines'] if line['amount_field'] == 'tax_amount']
+        self.assertEqual(
+            [(line['debit']['code'], line['amount']) for line in net],
+            [('1909', '80.00'), ('4040', '24.00')],
+        )
+        self.assertIsNone(net[0]['debit_cost_center'])
+        self.assertEqual(net[1]['debit_cost_center']['code'], '110')
+        self.assertEqual(
+            [(line['debit']['code'], line['amount']) for line in tax],
+            [('1400', '20.00'), ('1400', '6.00')],
+        )
+        self.assertEqual(net[0]['credit']['code'], tax[0]['credit']['code'])
+
+        entry = post_document(self.tenant, expense, 'expense_approved', self.owner)
+        posted = list(
+            JournalEntryLine.objects.filter(journal_entry=entry).order_by('id').values_list(
+                'account__account_code', 'debit_amount', 'credit_amount', 'cost_center_id',
+            )
+        )
+        planned = []
+        for line in preview.data['lines']:
+            debit_cc = line['debit_cost_center']['id'] if line['debit_cost_center'] else None
+            credit_cc = line['credit_cost_center']['id'] if line['credit_cost_center'] else None
+            planned.append((line['debit']['code'], Decimal(line['amount']), Decimal('0'), debit_cc))
+            planned.append((line['credit']['code'], Decimal('0'), Decimal(line['amount']), credit_cc))
+        self.assertEqual(posted, planned)
+
+    def test_patch_line_accounts_and_mixed_blocks_approve(self):
+        expense = self._expense(amount=Decimal('130.00'), tax_amount=Decimal('26.00'))
+        self._hac_lines(expense)
+        line = expense.lines.get(position=1)
+        patched = self.client.patch(
+            f'/api/finance/expenses/{expense.pk}/',
+            {'line_accounts': [{'position': 1, 'posting_account_id': self.account_1909.pk}]},
+            format='json',
+        )
+        self.assertEqual(patched.status_code, 200)
+        line.refresh_from_db()
+        self.assertEqual(line.posting_account_id, self.account_1909.pk)
+        preview = self.client.get(f'/api/finance/expenses/{expense.pk}/posting-preview/')
+        self.assertEqual(preview.status_code, 200)
+        self.assertFalse(preview.data['can_approve'])
+        self.assertIn('Sve stavke moraju imati konto', ' '.join(preview.data['warnings']))
+        approved = self.client.post(f'/api/finance/expenses/{expense.pk}/approve/')
+        self.assertEqual(approved.status_code, 400)
+        self.assertEqual(approved.data['code'], 'mixed_line_accounts')
+
+    def test_split_three_enc_lines_vat_per_line(self):
+        expense = self._expense(
+            category=self.telekom,
+            amount=Decimal('130.00'),
+            tax_amount=Decimal('26.00'),
+            cost_center=self.kitchen,
+        )
+        ExpenseLine.all_objects.create(
+            expense=expense,
+            position=1,
+            description='Uplata iznosa - ENC za kat. I',
+            net_amount=Decimal('80.00'),
+            vat_amount=Decimal('20.00'),
+            gross_amount=Decimal('100.00'),
+            posting_account=self.account_1900,
+        )
+        ExpenseLine.all_objects.create(
+            expense=expense,
+            position=2,
+            description='UREDAJ ENC - KOMPLET Prepaid, za kat. I',
+            net_amount=Decimal('12.00'),
+            vat_amount=Decimal('3.00'),
+            gross_amount=Decimal('15.00'),
+            posting_account=self.account_4040,
+        )
+        ExpenseLine.all_objects.create(
+            expense=expense,
+            position=3,
+            description='UREDAJ ENC - KOMPLET Prepaid, za kat. I',
+            net_amount=Decimal('12.00'),
+            vat_amount=Decimal('3.00'),
+            gross_amount=Decimal('15.00'),
+            posting_account=self.account_4040,
+        )
+        preview = self.client.get(f'/api/finance/expenses/{expense.pk}/posting-preview/')
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.data['can_approve'])
+        net = [line for line in preview.data['lines'] if line['amount_field'] == 'net_amount']
+        tax = [line for line in preview.data['lines'] if line['amount_field'] == 'tax_amount']
+        self.assertEqual(
+            [(line['debit']['code'], line['amount']) for line in net],
+            [('1900', '80.00'), ('4040', '12.00'), ('4040', '12.00')],
+        )
+        self.assertEqual(
+            [(line['debit']['code'], line['amount']) for line in tax],
+            [('1400', '20.00'), ('1400', '3.00'), ('1400', '3.00')],
+        )
+        self.assertIsNone(net[0]['debit_cost_center'])

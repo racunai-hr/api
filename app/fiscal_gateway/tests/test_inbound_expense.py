@@ -6,6 +6,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from expenses.models import ExpenseSource
+from partners.models import Partner
 
 from fiscal_gateway.client.as4_client import As4ApplicationResponseResult
 from fiscal_gateway.client.domibus_push import parse_domibus_push
@@ -75,3 +76,60 @@ class TestInboundExpenseCreation:
         assert link.supplier_oib == '11528564544'
         assert link.recipient_oib == '99999999994'
         assert link.ubl_xml
+
+    @patch('fiscal_gateway.services.inbound_as4.submit_application_response_via_domibus')
+    def test_handle_push_does_not_rename_existing_partner(self, mock_submit, settings):
+        settings.DOMIBUS_AP_OIB = '99999999994'
+        mock_submit.return_value = As4ApplicationResponseResult(
+            message_id='resp-002@racunai.hr',
+            domibus_response='<ok/>',
+        )
+
+        tenant = Tenant.objects.create(slug='as4-inbound-ante', name='AS4 Inbound Ante')
+        CompanySettings.all_objects.create(
+            tenant=tenant,
+            company_name='Test Co',
+            company_address='Ulica 1',
+            street='Ulica',
+            house_number='1',
+            postal_code='10000',
+            city='Zagreb',
+            country='HR',
+            company_phone='0912345678',
+            company_email='test@test.hr',
+            vat_number='99999999994',
+        )
+        User = get_user_model()
+        User.objects.create_superuser('admin-ante', 'admin-ante@test.hr', 'pass')
+        existing = Partner.all_objects.create(
+            tenant=tenant,
+            name='Ante Vrcan',
+            short_name='Ante',
+            tax_number='11528564544',
+            partner_type='other',
+            status='active',
+            address='Gärtnerstraße 44',
+            city='Hanau',
+            postal_code='63452',
+            country_code='HR',
+        )
+
+        payload = _wrap_invoice_sbdh(INVOICE_XML.read_bytes())
+        message = parse_domibus_push(_sample_push_soap(payload, customer_oib='99999999994'))
+        result = handle_inbound_push(message)
+
+        assert result.accepted is True
+        existing.refresh_from_db()
+        assert existing.name == 'Ante Vrcan'
+        assert existing.partner_type == 'other'
+        from expenses.models import Expense
+        from fiscal_gateway.models import As4DocumentLink
+
+        link = As4DocumentLink.all_objects.filter(
+            tenant=tenant,
+            direction=As4DocumentLink.DIRECTION_INBOUND,
+            message_id=message.message_id,
+        ).first()
+        assert link is not None
+        expense = Expense.all_objects.get(tenant=tenant, pk=link.object_id)
+        assert expense.supplier_id == existing.pk

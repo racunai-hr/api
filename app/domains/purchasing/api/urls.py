@@ -7,6 +7,7 @@ from domains.purchasing.api.views import (
     ExpenseCategoryListView,
     ExpenseEracunRejectionView,
     InvoiceImportApplyPartnerUpdatesView,
+    InvoiceImportApplySupplierView,
     InvoiceImportConfirmView,
     InvoiceImportCreatePartnerView,
     InvoiceImportCreateView,
@@ -35,6 +36,11 @@ urlpatterns = [
         'purchasing/invoices/import/<int:pk>/create-partner/',
         InvoiceImportCreatePartnerView.as_view(),
         name='purchasing-invoice-import-create-partner',
+    ),
+    path(
+        'purchasing/invoices/import/<int:pk>/apply-supplier/',
+        InvoiceImportApplySupplierView.as_view(),
+        name='purchasing-invoice-import-apply-supplier',
     ),
     path(
         'purchasing/invoices/import/<int:pk>/apply-partner-updates/',

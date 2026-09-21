@@ -72,6 +72,34 @@ DEFAULT_POSTING_RULES = [
         'condition': {'min_tax': '0.01'},
     },
     {
+        'name': 'Odobren trošak — EU usluge RC bez pretporeza',
+        'document_type': 'expense_approved',
+        'debit_account_code': '4120',
+        'credit_account_code': '24032',
+        'amount_field': 'eu_rc_vat',
+        'priority': 30,
+        'use_analytic': False,
+        'condition': {
+            'posting_profile': ['opex'],
+            'eu_service_reverse_charge': True,
+            'input_vat_deductible': False,
+        },
+    },
+    {
+        'name': 'Odobren trošak — EU usluge RC pretporez',
+        'document_type': 'expense_approved',
+        'debit_account_code': '14032',
+        'credit_account_code': '24032',
+        'amount_field': 'eu_rc_vat',
+        'priority': 31,
+        'use_analytic': False,
+        'condition': {
+            'posting_profile': ['opex'],
+            'eu_service_reverse_charge': True,
+            'input_vat_deductible': True,
+        },
+    },
+    {
         'name': 'Odobren trošak — nabava imovine / dobavljač',
         'document_type': 'expense_approved',
         'debit_account_code': '0373',
@@ -327,7 +355,8 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
     Preview and ``post_document`` must call this same function.
     """
     from domains.finance.services.account_resolver import (
-        is_expense_net_amount_rule,
+        classify_expense_line_allocation,
+        is_expense_cost_amount_rule,
         resolve_expense_account,
     )
     from domains.finance.services.cost_center_resolver import apply_cost_center, resolve_cost_center
@@ -338,6 +367,12 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
     warnings: list[str] = []
     expense_account = None
     account_source = None
+    expense_account_resolution = None
+    line_allocation = None
+    if document_type == 'expense_approved':
+        line_allocation = classify_expense_line_allocation(source)
+        if line_allocation.warning:
+            warnings.append(line_allocation.warning)
 
     for rule in rules:
         amount = _get_amount(source, rule.amount_field)
@@ -350,18 +385,69 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
             rule, source, tenant, document_type,
         )
 
-        if is_expense_net_amount_rule(document_type, rule):
-            resolved = resolve_expense_account(source, rule)
-            debit_account = resolved.account
-            expense_account = resolved.account
-            account_source = resolved.source
-            if resolved.warning:
-                warnings.append(resolved.warning)
+        if is_expense_cost_amount_rule(document_type, rule):
+            if expense_account_resolution is None:
+                expense_account_resolution = resolve_expense_account(source, rule)
+                if expense_account_resolution.warning:
+                    warnings.append(expense_account_resolution.warning)
+            expense_account = expense_account_resolution.account
+            account_source = expense_account_resolution.source
+            credit_account = resolve_account(tenant, credit_code)
+            resolved_cc = resolve_cost_center(source)
+            if line_allocation.kind == 'split' and rule.amount_field == 'net_amount':
+                for item in line_allocation.lines:
+                    if Decimal(item.net_amount) <= Decimal('0'):
+                        continue
+                    debit_account = item.posting_account
+                    description = rule.name
+                    if item.description:
+                        description = f'{rule.name} — {item.description}'
+                    lines.append(
+                        PostingPlanLine(
+                            debit_account=debit_account,
+                            credit_account=credit_account,
+                            amount=Decimal(item.net_amount),
+                            description=description,
+                            debit_analytic=debit_analytic,
+                            credit_analytic=credit_analytic,
+                            amount_field=rule.amount_field,
+                            debit_cost_center=apply_cost_center(debit_account, resolved_cc),
+                            credit_cost_center=apply_cost_center(credit_account, resolved_cc),
+                        )
+                    )
+                continue
+            debit_account = expense_account_resolution.account
         else:
             debit_account = resolve_account(tenant, debit_code)
+            credit_account = resolve_account(tenant, credit_code)
+            resolved_cc = resolve_cost_center(source)
+            if (
+                line_allocation is not None
+                and line_allocation.kind == 'split'
+                and rule.amount_field == 'tax_amount'
+            ):
+                for item in line_allocation.lines:
+                    vat = Decimal(item.vat_amount)
+                    if vat <= Decimal('0'):
+                        continue
+                    description = rule.name
+                    if item.description:
+                        description = f'{rule.name} — {item.description}'
+                    lines.append(
+                        PostingPlanLine(
+                            debit_account=debit_account,
+                            credit_account=credit_account,
+                            amount=vat,
+                            description=description,
+                            debit_analytic=debit_analytic,
+                            credit_analytic=credit_analytic,
+                            amount_field=rule.amount_field,
+                            debit_cost_center=apply_cost_center(debit_account, resolved_cc),
+                            credit_cost_center=apply_cost_center(credit_account, resolved_cc),
+                        )
+                    )
+                continue
 
-        credit_account = resolve_account(tenant, credit_code)
-        resolved_cc = resolve_cost_center(source)
         lines.append(
             PostingPlanLine(
                 debit_account=debit_account,
@@ -407,17 +493,28 @@ def resolve_account(tenant, code: str) -> ChartOfAccounts:
     return account
 
 
+def _expense_net_amount(source) -> Decimal:
+    if hasattr(source, 'amount') and not hasattr(source, 'subtotal'):
+        tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
+        return Decimal(source.amount) - tax
+    subtotal = getattr(source, 'subtotal', None)
+    if subtotal is not None:
+        return Decimal(subtotal)
+    total = Decimal(getattr(source, 'total_amount', 0) or getattr(source, 'amount', 0) or 0)
+    tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
+    return total - tax
+
+
 def _get_amount(source, field: str) -> Decimal:
     if field == 'net_amount':
-        if hasattr(source, 'amount') and not hasattr(source, 'subtotal'):
-            tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
-            return Decimal(source.amount) - tax
-        subtotal = getattr(source, 'subtotal', None)
-        if subtotal is not None:
-            return Decimal(subtotal)
-        total = Decimal(getattr(source, 'total_amount', 0) or getattr(source, 'amount', 0) or 0)
-        tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
-        return total - tax
+        return _expense_net_amount(source)
+    if field == 'eu_rc_vat':
+        net = _expense_net_amount(source)
+        if net <= Decimal('0'):
+            return Decimal('0.00')
+        from accounting.services.tax_forms.pdv.mapping import rc_vat_from_base
+
+        return rc_vat_from_base(net, Decimal('25.00'))
     if field == 'total_amount' and hasattr(source, 'amount') and not hasattr(source, 'total_amount'):
         return Decimal(source.amount)
     value = getattr(source, field, Decimal('0')) or Decimal('0')
@@ -465,7 +562,42 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
         if source_profile != ExpensePostingProfile.OPEX:
             return False
 
+    if condition.get('eu_service_reverse_charge'):
+        if source is None or not hasattr(source, 'supplier'):
+            return False
+        from accounting.services.tax_forms.pdv.mapping import (
+            is_eu_goods_acquisition,
+            is_eu_supplier,
+        )
+
+        supplier = getattr(source, 'supplier', None)
+        tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
+        net = _expense_net_amount(source)
+        if not is_eu_supplier(supplier) or tax != Decimal('0'):
+            return False
+        if is_eu_goods_acquisition(
+            supplier,
+            vat_amount=tax,
+            base_amount=net,
+            description=getattr(source, 'description', '') or '',
+        ):
+            return False
+        required_deductible = condition.get('input_vat_deductible')
+        if required_deductible is not None:
+            if bool(required_deductible) != _source_input_vat_deductible(source):
+                return False
+
     return True
+
+
+def _source_input_vat_deductible(source) -> bool:
+    from settings.models import CompanySettings
+
+    tenant_id = getattr(source, 'tenant_id', None)
+    if tenant_id is None:
+        return False
+    settings = CompanySettings.all_objects.filter(tenant_id=tenant_id).first()
+    return bool(settings and settings.input_vat_deductible)
 
 
 def _next_entry_number(tenant, entry_date) -> str:
@@ -689,7 +821,13 @@ def post_document(
     if plan is None:
         return None
 
-    desc = description or f"{marker} {source}"
+    if description:
+        desc = description
+    else:
+        desc = f"{marker} {source}"
+        receipt = (getattr(source, 'receipt_number', '') or '').strip()
+        if receipt:
+            desc = f'{desc} Račun: {receipt}'
     entry = JournalEntry.all_objects.create(
         tenant=tenant,
         entry_number=_next_entry_number(tenant, entry_date),

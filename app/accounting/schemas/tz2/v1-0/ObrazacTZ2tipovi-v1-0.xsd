@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns="http://e-porezna.porezna-uprava.hr/sheme/zahtjevi/ObrazacTZ2/v1-0" xmlns:meta="http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0" xmlns:ispostave="http://e-porezna.porezna-uprava.hr/sheme/temeljno/SifrarnikIspostave/v1-0" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:temeljni="http://e-porezna.porezna-uprava.hr/sheme/TemeljniTipovi/v2-1" targetNamespace="http://e-porezna.porezna-uprava.hr/sheme/zahtjevi/ObrazacTZ2/v1-0" elementFormDefault="qualified" version="1.0" id="ObrazacTZ2tipovi-v1-0" xml:lang="hr-HR">
+  <xsd:annotation>
+    <xsd:documentation>XML shema sadrži tipove koji definiraju sadržaj TZ-2 obrasca</xsd:documentation>
+  </xsd:annotation>
+  <xsd:import namespace="http://e-porezna.porezna-uprava.hr/sheme/TemeljniTipovi/v2-1" schemaLocation="TemeljniTipovi-v2-1.xsd"/>
+  <xsd:import namespace="http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0" schemaLocation="ObrazacTZ2metapodaci-v1-0.xsd"/>
+  <xsd:complexType name="sObrazacTZ2">
+    <xsd:annotation>
+      <xsd:documentation>Struktura TZ-2 obrasca</xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element ref="meta:Metapodaci"/>
+      <xsd:element name="Zaglavlje" type="sZaglavlje">
+        <xsd:annotation>
+          <xsd:documentation>Zaglavlje obrasca</xsd:documentation>
+        </xsd:annotation>
+        <xsd:unique name="OIB">
+          <xsd:selector xpath="Obveznik | ObracunSastavio/PoslovniSubjekt"/>
+          <xsd:field xpath="OIB"/>
+        </xsd:unique>
+      </xsd:element>
+      <xsd:element name="Tijelo" type="sTijelo">
+        <xsd:annotation>
+          <xsd:documentation>Tijelo obrasca</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="verzijaSheme" use="required" fixed="1.0"/>
+  </xsd:complexType>
+  <xsd:complexType name="sZaglavlje">
+    <xsd:annotation>
+      <xsd:documentation>Zaglavlje obrasca</xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="Obveznik" type="sPoslovniSubjektProsirenoOpcina">
+        <xsd:annotation>
+          <xsd:documentation>Podaci o poslovnom subjektu za koji se podnosi obrazac</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Razdoblje" type="sRazdoblje">
+        <xsd:annotation>
+          <xsd:documentation>Razdoblje za koji se podnosi obrazac</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <!--<xsd:element name="PodrucniUred" type="tPodrucniUred">
+        <xsd:annotation>
+          <xsd:documentation>Područni ured poreznog obveznika</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Ispostava" type="temeljni:tIspostava">
+        <xsd:annotation>
+          <xsd:documentation>Ispostava u kojoj se podnosi obrazac</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>-->
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="sPoslovniSubjektProsirenoOpcina">
+    <xsd:annotation>
+      <xsd:documentation>Podaci o poslovnom subjektu, prošireno s šifrom djelatnosti i adresom</xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+        <xsd:sequence>
+          <xsd:element name="Ime" type="temeljni:tOgraniceniZnakovniNizMin2Max128">
+            <xsd:annotation>
+              <xsd:documentation>Ime ili naziv poslovnog subjekta</xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element name="Prezime" type="temeljni:tOgraniceniZnakovniNizMin2Max128">
+            <xsd:annotation>
+              <xsd:documentation>Prezime poslovnog subjekta</xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+        </xsd:sequence>
+      <xsd:element name="OIB" type="temeljni:tOIB">
+        <xsd:annotation>
+          <xsd:documentation>OIB poslovnog subjekta</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Adresa" type="sAdresa">
+        <xsd:annotation>
+          <xsd:documentation>Adresa</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="sAdresa">
+    <xsd:annotation>
+      <xsd:documentation>Adresa</xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="SifraOpcine" type="temeljni:tSifraOpcine">
+        <xsd:annotation>
+          <xsd:documentation>Šifra općine</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Mjesto" type="temeljni:tOgraniceniZnakovniNizMin2Max128">
+        <xsd:annotation>
+          <xsd:documentation>Naziv mjesta</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Ulica" type="temeljni:tOgraniceniZnakovniNizMin2Max128">
+        <xsd:annotation>
+          <xsd:documentation>Naziv ulice</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Broj" type="temeljni:tAdresaBroj">
+        <xsd:annotation>
+          <xsd:documentation>Kućni broj</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="sRazdoblje">
+    <xsd:annotation>
+      <xsd:documentation>Struktura razdoblja (vremenski period)</xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="DatumOd" type="xsd:date">
+        <xsd:annotation>
+          <xsd:documentation>Početni datum</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="DatumDo" type="xsd:date">
+        <xsd:annotation>
+          <xsd:documentation>Završni datum</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="sTijelo">
+    <xsd:annotation>
+      <xsd:documentation>Tijelo obrasca</xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="Podatak01" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Krevet u sobi, apartmanu ili kući za odmor - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak02" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Krevet u sobi, apartmanu ili kući za odmor - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak03" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Krevet u sobi, apartmanu ili kući za odmor - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak04" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Pomoćni krevet u sobi, apartmanu ili kući za odmor - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak05" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Pomoćni krevet u sobi, apartmanu ili kući za odmor - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak06" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Pomoćni krevet u sobi, apartmanu ili kući za odmor - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak07" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u kampu i kamp odmorištu - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak08" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u kampu i kamp odmorištu - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak09" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u kampu i kamp odmorištu - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak10" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u objektu za robinzonski smještaj - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak11" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u objektu za robinzonski smještaj - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak12" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u objektu za robinzonski smještaj - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak13" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Krevet u sobi, apartmanu ili kući za odmor na OPG-u - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak14" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Krevet u sobi, apartmanu ili kući za odmor na OPG-u - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak15" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Krevet u sobi, apartmanu ili kući za odmor na OPG-u - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak16" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Pomoćni krevet u sobi, apartmanu ili kući za odmor na OPG-u - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak17" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Pomoćni krevet u sobi, apartmanu ili kući za odmor na OPG-u - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak18" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Pomoćni krevet u sobi, apartmanu ili kući za odmor na OPG-u - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak19" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u kampu i kamp odmorištu na OPG-u - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak20" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u kampu i kamp odmorištu na OPG-u - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak21" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u kampu i kamp odmorištu na OPG-u - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak22" type="tBroj">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u objektu za robinzonski smještaj na OPG-u - BROJ</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak23" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u objektu za robinzonski smještaj na OPG-u - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak24" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Smještajna jedinica u objektu za robinzonski smještaj na OPG-u - UKUPNO</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak25" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>UKUPNO OBRAČUNANI IZNOS – članak 8. stavak 3. Zakona (r. br. 1. + r. br. 2. + r. br. 3. + r. br . 4. + r. br. 5. + r. br. 6.)</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak26" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Umanjenje članarine na područjima općina i gradova – potpomognutim područjima I. razvojne skupine</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak27" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Umanjenje članarine na područjima općina i gradova – potpomognutim područjima II. razvojne skupine</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak28" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Umanjenje članarine na područjima općina i gradova – potpomognutim područjima III. razvojne skupine</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak29" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>Umanjenje članarine na područjima općina i gradova – potpomognutim područjima IV. razvojne skupine</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak30" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>UKUPNO UMANJENJE NA POTPOMOGNUTIM PODRUČJIMA – članak 8 stavak 4. Zakona (r. br. 8. + r. br. 9. + r. br. 10. + r. br. 11.)</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak31" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>OBRAČUNANI IZNOS NAKON UMANJENJA (r. br. 7. - r. br. 12.)</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak32" type="tOznakaDaNe" minOccurs="0">
+        <xsd:annotation>
+          <xsd:documentation>NAČIN PLAĆANJA – članak 11. stavak 3. Zakona - JEDNOKRATNA UPLATA iznos iz r. br. 13. - DA/NE</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak33" type="temeljni:tDecimal15-2" minOccurs="0">
+        <xsd:annotation>
+          <xsd:documentation>NAČIN PLAĆANJA – članak 11. stavak 3. Zakona - JEDNOKRATNA UPLATA iznos iz r. br. 13. - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak34" type="tOznakaDaNe" minOccurs="0">
+        <xsd:annotation>
+          <xsd:documentation>NAČIN PLAĆANJA – članak 11. stavak 3. Zakona - OBROČNO PLAĆANJE iznos iz r. br. 13. / 3 - DA/NE</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak35" type="temeljni:tDecimal15-2" minOccurs="0">
+        <xsd:annotation>
+          <xsd:documentation>NAČIN PLAĆANJA – članak 11. stavak 3. Zakona - OBROČNO PLAĆANJE iznos iz r. br. 13. / 3 - IZNOS</xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Podatak36" type="temeljni:tDecimal15-2">
+        <xsd:annotation>
+          <xsd:documentation>
+            UKUPAN IZNOS PRIMITKA IZ EVIDENCIJE PROMETA (Obrazac EP) – članak 13.
+            stavak 4. Pravilnik o paušalnom oporezivanju djelatnosti iznajmljivanja i organiziranja
+            smještaja u turizmu
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:simpleType name="tDecimal16-5">
+    <xsd:annotation>
+      <xsd:documentation>Decimalni broj u formatu 16.5 (16 znamenki ukupno uključivši do pet decimalna mjesta)</xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:decimal">
+      <xsd:totalDigits value="16"/>
+      <xsd:fractionDigits value="5"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!--<xsd:simpleType name="tPodrucniUred">
+    <xsd:annotation>
+      <xsd:documentation>Područni ured (numeričko polje u duljini 4 znamenke)</xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:token">
+      <xsd:pattern value="\d{4}"/>
+    </xsd:restriction>
+  </xsd:simpleType>-->
+  <xsd:simpleType name="tOznakaDaNe">
+    <xsd:annotation>
+      <xsd:documentation>Checkbox za jednokratnu uplatu/obročno plaćanje - Da/Ne</xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string">
+      <xsd:enumeration value="0"/>
+      <xsd:enumeration value="1"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="tBroj">
+    <xsd:annotation>
+      <xsd:documentation>Broj</xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:integer">
+    </xsd:restriction>
+  </xsd:simpleType>
+</xsd:schema>

@@ -315,6 +315,13 @@ class LineClassificationSerializer(serializers.Serializer):
     code = serializers.CharField(allow_null=True)
 
 
+class IncomingLineAccountSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    active = serializers.BooleanField()
+
+
 class IncomingLineSerializer(serializers.Serializer):
     position = serializers.IntegerField()
     classification = LineClassificationSerializer(allow_null=True)
@@ -327,6 +334,8 @@ class IncomingLineSerializer(serializers.Serializer):
     net_amount = serializers.CharField(allow_null=True)
     vat_amount = serializers.CharField(allow_null=True)
     gross_amount = serializers.CharField(allow_null=True)
+    id = serializers.IntegerField(allow_null=True, required=False)
+    posting_account = IncomingLineAccountSerializer(allow_null=True, required=False)
 
 
 class IncomingChargeSerializer(serializers.Serializer):

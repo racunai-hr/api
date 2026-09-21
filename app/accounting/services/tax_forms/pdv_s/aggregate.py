@@ -13,7 +13,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from accounting.models import JournalEntryLine, VATLedgerEntry, VATPeriod
 from accounting.services.tax_forms.pdv.build import _taxpayer_for_period, accountant_for_tenant
-from accounting.services.tax_forms.pdv.mapping import _EU_VAT_NUMBER_PREFIXES
+from accounting.services.tax_forms.pdv.mapping import _EU_VAT_NUMBER_PREFIXES, partner_eu_vat_id
 from accounting.services.tax_forms.pdv_s.payload import PdvSPayload, PdvSPreparedBy, PdvSRow, PdvSTaxpayer
 from expenses.data.manual_supplier_map import MANUAL_SUPPLIER_MAP
 from expenses.models import Expense
@@ -45,8 +45,23 @@ def split_eu_vat_id(tax_number: str) -> tuple[str, str]:
     return country_code, normalized[2:]
 
 
+def _supplier_key_from_partner(supplier) -> _SupplierKey | None:
+    if supplier is None:
+        return None
+    vat = partner_eu_vat_id(supplier)
+    if not vat:
+        return None
+    country_code, pdv_id = split_eu_vat_id(vat)
+    return _SupplierKey(country_code=country_code, pdv_id=pdv_id)
+
+
 def _resolve_supplier_key_from_journal_line(line: JournalEntryLine) -> _SupplierKey | None:
     entry = line.journal_entry
+    source = getattr(entry, 'source', None)
+    key = _supplier_key_from_partner(getattr(source, 'supplier', None))
+    if key is not None:
+        return key
+
     description = entry.description or ''
     match = _INVOICE_NUMBER_RE.search(description)
     if match:
@@ -60,10 +75,9 @@ def _resolve_supplier_key_from_journal_line(line: JournalEntryLine) -> _Supplier
                 tenant=entry.tenant,
                 expense_number=invoice_ref,
             ).select_related('supplier').first()
-        supplier = expense.supplier if expense else None
-        if supplier is not None and supplier.tax_number:
-            country_code, pdv_id = split_eu_vat_id(supplier.tax_number)
-            return _SupplierKey(country_code=country_code, pdv_id=pdv_id)
+        key = _supplier_key_from_partner(expense.supplier if expense else None)
+        if key is not None:
+            return key
 
         for vat_id, info in MANUAL_SUPPLIER_MAP.items():
             if not vat_id[:2].isalpha():

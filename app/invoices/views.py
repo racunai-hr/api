@@ -4,10 +4,9 @@ from django.template.loader import render_to_string
 
 from invoices.services.pdf import (
     company_logo_uri,
-    generate_barcode_base64,
+    invoice_document_context,
     render_invoice_pdf_bytes,
 )
-from settings.models import CompanySettings
 
 from .models import Invoice
 
@@ -17,17 +16,10 @@ _company_logo_uri = company_logo_uri
 
 def invoice_detail(request, pk):
     invoice = get_object_or_404(Invoice.objects.select_related('responsible_person'), pk=pk)
-    company = CompanySettings.objects.filter(tenant=invoice.tenant).first()
-    barcode_data = generate_barcode_base64(invoice.invoice_number)
-    context = {
-        'invoice': invoice,
-        'company': company,
-        'responsible_person': invoice.responsible_person,
-        'barcode_data': barcode_data,
-        'company_logo_uri': company_logo_uri(company),
-        'request': request,
-    }
-    html = render_to_string('invoices/invoice_detail.html', context)
+    html = render_to_string(
+        'invoices/invoice_detail.html',
+        invoice_document_context(request, invoice),
+    )
     return HttpResponse(html)
 
 

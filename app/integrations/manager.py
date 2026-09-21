@@ -106,10 +106,12 @@ class IntegrationManager:
                 )
             raise
 
-        fiscal = IntegrationManager._get_fiscal_connector(
-            invoice.tenant,
-            environment=environment,
-        )
+        fiscal = None
+        if eracun_config.provider != IntegrationProvider.PONDI:
+            fiscal = IntegrationManager._get_fiscal_connector(
+                invoice.tenant,
+                environment=environment,
+            )
         if fiscal:
             fiscal_provider = IntegrationManager._resolve_fiscal_provider(invoice.tenant, environment)
             try:

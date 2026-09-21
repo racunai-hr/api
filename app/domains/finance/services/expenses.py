@@ -9,6 +9,7 @@ from django.http import Http404
 
 from accounting.services.posting import build_document_posting_plan, post_document
 from domains.finance.services.account_resolver import (
+    classify_expense_line_allocation,
     load_postable_account,
     load_tenant_category,
 )
@@ -76,6 +77,7 @@ def serialize_document_posting_plan(expense: Expense, plan) -> dict:
     """
     category = getattr(expense, 'category', None)
     resolved_account = plan.expense_account if plan is not None else expense.expense_account
+    allocation = classify_expense_line_allocation(expense)
     lines = []
     if plan is not None:
         for line in plan.lines:
@@ -88,17 +90,21 @@ def serialize_document_posting_plan(expense: Expense, plan) -> dict:
                 'debit_cost_center': cost_center_ref(line.debit_cost_center),
                 'credit_cost_center': cost_center_ref(line.credit_cost_center),
             })
+    warnings = list(plan.warnings) if plan is not None else []
+    if allocation.warning and allocation.warning not in warnings:
+        warnings.append(allocation.warning)
     return {
         'category': (
             {'id': category.pk, 'name': category.name} if category is not None else None
         ),
         'expense_account': _account_ref(resolved_account),
         'account_source': plan.account_source if plan is not None else expense.expense_account_source,
-        'warnings': list(plan.warnings) if plan is not None else [],
+        'warnings': warnings,
         'can_approve': (
             expense.status == 'draft'
             and expense.supplier_id is not None
             and plan is not None
+            and allocation.kind != 'blocked'
         ),
         'lines': lines,
     }
@@ -108,6 +114,7 @@ def posting_preview(*, tenant, expense_id: int) -> dict:
     expense = (
         Expense.all_objects.filter(tenant=tenant, pk=expense_id)
         .select_related('category', 'category__default_account', 'expense_account', 'supplier')
+        .prefetch_related('lines__posting_account')
         .first()
     )
     if expense is None:
@@ -124,6 +131,7 @@ def update_draft_expense_posting(
     category_id=_OMIT,
     expense_account_id=_OMIT,
     cost_center_id=_OMIT,
+    line_accounts=_OMIT,
 ) -> dict:
     expense = (
         Expense.all_objects.select_for_update(of=('self',))
@@ -138,10 +146,15 @@ def update_draft_expense_posting(
             'not_draft',
             'Vrsta troška i konto mogu se mijenjati samo dok je nalog u nacrtu.',
         )
-    if category_id is _OMIT and expense_account_id is _OMIT and cost_center_id is _OMIT:
+    if (
+        category_id is _OMIT
+        and expense_account_id is _OMIT
+        and cost_center_id is _OMIT
+        and line_accounts is _OMIT
+    ):
         raise ExpenseApproveBadRequest(
             'empty_patch',
-            'Potrebna je category_id, expense_account_id ili cost_center_id.',
+            'Potrebna je category_id, expense_account_id, cost_center_id ili line_accounts.',
         )
 
     if category_id is not _OMIT:
@@ -171,8 +184,42 @@ def update_draft_expense_posting(
     if cost_center_id is not _OMIT:
         update_fields.append('cost_center')
     expense.save(update_fields=list(dict.fromkeys(update_fields)))
+
+    if line_accounts is not _OMIT:
+        _apply_line_accounts(tenant=tenant, expense=expense, line_accounts=line_accounts)
+
     expense.refresh_from_db()
     return expense_dto(expense)
+
+
+def _apply_line_accounts(*, tenant, expense, line_accounts) -> None:
+    from expenses.models import ExpenseLine
+
+    if not isinstance(line_accounts, list) or not line_accounts:
+        raise ExpenseApproveBadRequest('empty_patch', 'line_accounts ne smije biti prazan.')
+    seen = set()
+    for item in line_accounts:
+        line_id = item.get('position')
+        if line_id in seen:
+            raise ExpenseApproveBadRequest('duplicate_line', 'Ista stavka ne smije se slati dvaput.')
+        seen.add(line_id)
+        line = (
+            ExpenseLine.all_objects.select_for_update(of=('self',))
+            .filter(tenant=tenant, expense=expense, position=line_id)
+            .first()
+        )
+        if line is None:
+            raise ExpenseApproveBadRequest('unknown_line', 'Stavka nije pronađena na ovom nalogu.')
+        account_id = item.get('posting_account_id')
+        if account_id is None:
+            line.posting_account = None
+        else:
+            line.posting_account = load_postable_account(
+                tenant,
+                int(account_id),
+                field='line_accounts',
+            )
+        line.save(update_fields=['posting_account', 'updated_at'])
 
 
 @transaction.atomic
@@ -222,6 +269,13 @@ def approve_expense_for_posting(
 
     if expense.supplier_id is None:
         raise ExpenseApproveBadRequest('missing_supplier', 'Trošak nema dobavljača.')
+
+    allocation = classify_expense_line_allocation(expense)
+    if allocation.kind == 'blocked':
+        raise ExpenseApproveBadRequest(
+            allocation.code or 'line_accounts',
+            allocation.warning or 'Raspodjela stavki nije spremna za knjiženje.',
+        )
 
     post_document(tenant, expense, 'expense_approved', user)
     expense.refresh_from_db()

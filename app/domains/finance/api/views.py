@@ -692,6 +692,8 @@ class ExpenseDraftPatchView(_FinanceWriteApiView):
             kwargs['expense_account_id'] = ser.validated_data['expense_account_id']
         if 'cost_center_id' in ser.validated_data:
             kwargs['cost_center_id'] = ser.validated_data['cost_center_id']
+        if 'line_accounts' in ser.validated_data:
+            kwargs['line_accounts'] = ser.validated_data['line_accounts']
         try:
             return Response(
                 update_draft_expense_posting(

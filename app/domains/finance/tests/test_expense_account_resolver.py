@@ -19,6 +19,7 @@ from accounting.services.posting import (
 from accounting.services.rrif_import import import_rrif_chart
 from domains.finance.services.account_resolver import (
     ExpenseAccountResolutionError,
+    is_expense_cost_amount_rule,
     resolve_expense_account,
 )
 from domains.finance.services.posting_suggestions import (
@@ -186,6 +187,28 @@ class ExpenseAccountResolverTests(TestCase):
         tax = [line for line in plan.lines if line.amount_field == 'tax_amount']
         self.assertEqual(net[0].debit_account.account_code, '4100')
         self.assertEqual(tax[0].debit_account.account_code, '4120')
+
+    def test_nondeductible_eu_rc_is_resolved_as_expense_cost(self):
+        nondeductible_rule = PostingRule.all_objects.get(
+            tenant=self.tenant,
+            document_type='expense_approved',
+            amount_field='eu_rc_vat',
+            condition__input_vat_deductible=False,
+        )
+        deductible_rule = PostingRule.all_objects.get(
+            tenant=self.tenant,
+            document_type='expense_approved',
+            amount_field='eu_rc_vat',
+            condition__input_vat_deductible=True,
+        )
+
+        self.assertTrue(is_expense_cost_amount_rule('expense_approved', nondeductible_rule))
+        self.assertFalse(is_expense_cost_amount_rule('expense_approved', deductible_rule))
+        resolved = resolve_expense_account(
+            self._expense(category=self.telekom),
+            nondeductible_rule,
+        )
+        self.assertEqual(resolved.account.account_code, '4100')
 
     def test_asset_purchase_keeps_rule_account_not_category(self):
         expense = self._expense(

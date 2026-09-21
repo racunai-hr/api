@@ -30,8 +30,25 @@ class SupplierExtractedSerializer(serializers.Serializer):
     iban = serializers.CharField(allow_blank=True)
 
 
+class PartyCandidateSerializer(SupplierExtractedSerializer):
+    role = serializers.CharField()
+    is_own_company = serializers.BooleanField()
+    suspected_own_company = serializers.BooleanField()
+    blank = serializers.BooleanField()
+
+
+class AllocatedOcrLineSerializer(serializers.Serializer):
+    position = serializers.IntegerField()
+    description = serializers.CharField()
+    net_amount = serializers.CharField()
+    vat_amount = serializers.CharField()
+    gross_amount = serializers.CharField()
+
+
 class ExtractedInvoiceSerializer(serializers.Serializer):
     supplier = SupplierExtractedSerializer()
+    issuer = SupplierExtractedSerializer()
+    buyer = SupplierExtractedSerializer()
     invoice_number = serializers.CharField(allow_blank=True)
     issue_date = serializers.CharField(allow_blank=True)
     due_date = serializers.CharField(allow_null=True, required=False)
@@ -42,6 +59,7 @@ class ExtractedInvoiceSerializer(serializers.Serializer):
     iban = serializers.CharField(allow_blank=True)
     vat_breakdown = serializers.ListField(child=serializers.DictField(), required=False)
     line_items = serializers.ListField(child=serializers.DictField(), required=False)
+    allocated_lines = AllocatedOcrLineSerializer(many=True, required=False)
 
 
 class PartnerMatchSerializer(serializers.Serializer):
@@ -60,6 +78,14 @@ class DuplicateSerializer(serializers.Serializer):
     detail = serializers.DictField()
 
 
+class DirectionSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    supplier_source = serializers.CharField(allow_blank=True)
+    override_required = serializers.BooleanField()
+    unresolved = serializers.BooleanField()
+    party_candidates = PartyCandidateSerializer(many=True)
+
+
 class IncomingInvoiceImportSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     status = serializers.CharField()
@@ -72,6 +98,7 @@ class IncomingInvoiceImportSerializer(serializers.Serializer):
     ocr_schema_version = serializers.CharField(allow_blank=True)
     ocr_extracted_at = serializers.CharField(allow_null=True)
     extracted = ExtractedInvoiceSerializer()
+    direction = DirectionSerializer()
     warnings = serializers.ListField(child=serializers.CharField())
     partner = PartnerMatchSerializer()
     duplicate = DuplicateSerializer()
@@ -96,6 +123,11 @@ class CreatePartnerFromImportSerializer(serializers.Serializer):
     vat_number = serializers.CharField(required=False, allow_blank=True)
 
 
+class ConfirmLineAccountSerializer(serializers.Serializer):
+    position = serializers.IntegerField(min_value=1)
+    posting_account_id = serializers.IntegerField(allow_null=True)
+
+
 class ConfirmInvoiceImportSerializer(serializers.Serializer):
     invoice_number = serializers.CharField(required=False)
     issue_date = serializers.CharField(required=False)
@@ -111,6 +143,13 @@ class ConfirmInvoiceImportSerializer(serializers.Serializer):
     expense_account_id = serializers.IntegerField(required=False, allow_null=True)
     cost_center_id = serializers.IntegerField(required=False, allow_null=True)
     remember_category_for_partner = serializers.BooleanField(required=False)
+    direction_override = serializers.BooleanField(required=False)
+    line_accounts = ConfirmLineAccountSerializer(many=True, required=False)
+
+
+class ApplySupplierSerializer(serializers.Serializer):
+    source = serializers.ChoiceField(choices=['issuer', 'buyer', 'manual'])
+    supplier = serializers.DictField(required=False)
 
 
 class EracunRejectionRequestSerializer(serializers.Serializer):

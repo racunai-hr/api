@@ -1,0 +1,22 @@
+# TZ2 fixture scenarios — index
+
+scenarios:
+  - id: official_example
+    description: Službeni primjer.xml iz ePorezna TZ 2 paketa
+    has_expected_payload: true
+    expect_validation_error: false
+
+  - id: empty
+    description: Nula-obrazac (svi Podatak = 0)
+    has_expected_payload: true
+    expect_validation_error: false
+
+  - id: alma_2026
+    description: Alma Čižmić 2026 — 10 osnovnih / 0 pomoćnih, EP 17360.00, obročno
+    has_expected_payload: true
+    expect_validation_error: false
+
+  - id: missing_last_name
+    description: Ime bez prezimena — validation error
+    has_expected_payload: false
+    expect_validation_error: true

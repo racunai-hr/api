@@ -55,7 +55,27 @@ DIRECT_PROFILES: dict[tuple[str, str], ProviderProfile] = {
     ),
 }
 
-ALL_PROFILES = {**SUPER_PROFILES, **CIS_PROFILES, **DIRECT_PROFILES}
+def _pondi_profile(environment: str) -> ProviderProfile:
+    from django.conf import settings
+
+    mps = getattr(settings, 'MPS_SERVICE_URL', '')
+    return ProviderProfile(
+        api_base_url='https://eracun.eposlovanje.hr',
+        auth_scheme='api_key',
+        mps_service_url=mps,
+    )
+
+
+PONDI_PROFILES: dict[tuple[str, str], ProviderProfile] = {
+    (IntegrationProvider.PONDI, IntegrationEnvironment.PRODUCTION): _pondi_profile(
+        IntegrationEnvironment.PRODUCTION
+    ),
+    (IntegrationProvider.PONDI, IntegrationEnvironment.TEST): _pondi_profile(
+        IntegrationEnvironment.TEST
+    ),
+}
+
+ALL_PROFILES = {**SUPER_PROFILES, **CIS_PROFILES, **DIRECT_PROFILES, **PONDI_PROFILES}
 
 
 def get_provider_profile(provider: str, environment: str) -> ProviderProfile | None:

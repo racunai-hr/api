@@ -38,6 +38,7 @@ _APRIL_SIGNED_PDV = (
     / 'submitted_april_2026.xml'
 )
 _METADATA_NS = 'http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0'
+_SIGNATURE_NS = 'http://www.w3.org/2000/09/xmldsig#'
 
 
 def _rewrite_signed_pdv_xml(*, oib: str, period_from: str, period_to: str) -> bytes:
@@ -51,6 +52,13 @@ def _rewrite_signed_pdv_xml(*, oib: str, period_from: str, period_to: str) -> by
 def _xml_document_uuid(xml_bytes: bytes) -> str:
     identifier = etree.fromstring(xml_bytes).find(f'.//{{{_METADATA_NS}}}Identifikator')
     return identifier.text.strip()
+
+
+def _strip_enveloped_signatures(xml_bytes: bytes) -> bytes:
+    root = etree.fromstring(xml_bytes)
+    for signature in root.findall(f'{{{_SIGNATURE_NS}}}Signature'):
+        root.remove(signature)
+    return etree.tostring(root, xml_declaration=True, encoding='UTF-8')
 
 
 @override_settings(
@@ -318,6 +326,38 @@ class PdvWorkflowApiTests(TestCase):
         self.assertEqual(workspace['return_status'], 'submitted')
         self.assertTrue(workspace['has_confirmation'])
         self.assertEqual(workspace['event_uuid'], data['event_uuid'])
+
+    def test_pdv_submit_accepts_unsigned_eporezna_download(self):
+        client = self._auth_client()
+        draft = client.post('/api/tax/pdv/periods/2026-08/draft/')
+        self.assertEqual(draft.status_code, 201)
+
+        xml_bytes = _strip_enveloped_signatures(
+            _rewrite_signed_pdv_xml(
+                oib='12345678901',
+                period_from='2026-08-01',
+                period_to='2026-08-31',
+            ),
+        )
+        self.assertNotIn(b'SignatureValue', xml_bytes)
+
+        submitted = client.post(
+            '/api/tax/pdv/periods/2026-08/submit/',
+            {
+                'return_version': 1,
+                'submitted_xml': SimpleUploadedFile(
+                    'PDV_12345678901_20260801-20260831.xml',
+                    xml_bytes,
+                    content_type='application/xml',
+                ),
+            },
+            format='multipart',
+        )
+        self.assertEqual(submitted.status_code, 200, submitted.content)
+        data = submitted.json()
+        self.assertTrue(data['has_confirmation'])
+        event = SubmissionEvent.all_objects.get(event_uuid=data['event_uuid'])
+        self.assertTrue(event.confirmation_attachment)
 
     def test_pdv_submit_rejects_wrong_period_xml_without_marking_submitted(self):
         client = self._auth_client()

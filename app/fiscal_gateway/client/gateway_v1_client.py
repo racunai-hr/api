@@ -46,6 +46,9 @@ class GatewayV1Client:
     def get_inbound_ubl(self, document_id: str) -> str:
         return self._request('GET', f'/v1/inbound/documents/{document_id}/ubl').text
 
+    def get_outbound_ubl(self, document_id: str) -> str:
+        return self._request('GET', f'/v1/outbound/documents/{document_id}/ubl').text
+
     def start_reconciliation(self, taxpayer_oib: str, *, idempotency_key: str) -> dict:
         """Pull provider inbox into the gateway. Gateway runs it inside the POST."""
         return self._request(
@@ -71,6 +74,22 @@ class GatewayV1Client:
             params=params,
         ).json()
 
+    def list_outbound_documents(
+        self,
+        taxpayer_oib: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+    ) -> dict:
+        params: dict[str, Any] = {'limit': limit}
+        if cursor:
+            params['cursor'] = cursor
+        return self._request(
+            'GET',
+            f'/v1/taxpayers/{taxpayer_oib}/outbound/documents',
+            params=params,
+        ).json()
+
     def provider_capabilities(self, provider: str, *, taxpayer_oib: str | None = None) -> dict:
         params = {}
         if taxpayer_oib:
@@ -79,6 +98,30 @@ class GatewayV1Client:
             'GET',
             f'/v1/providers/{provider}/capabilities',
             params=params or None,
+        ).json()
+
+    def send_outbound_document(
+        self,
+        *,
+        taxpayer_oib: str,
+        document_type: str,
+        ubl: str,
+        document_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        document_id = document_id or str(uuid.uuid4())
+        return self._request(
+            'POST',
+            '/v1/outbound/documents',
+            json={
+                'document_id': document_id,
+                'taxpayer_oib': taxpayer_oib,
+                'direction': 'OUTBOUND',
+                'document_type': document_type,
+                'ubl': ubl,
+            },
+            headers={'Idempotency-Key': idempotency_key or str(uuid.uuid4())},
+            scope='gateway.write',
         ).json()
 
     def reject_e_reporting(

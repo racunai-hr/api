@@ -50,6 +50,7 @@ from .models import (
     VATReturn,
     VATReturnStatus,
     ZPReturn,
+    TZ2Return,
 )
 from accounting.services.submission.events import get_submission_events
 from accounting.services.submission.service import AttachConfirmationError, SubmissionService
@@ -1682,6 +1683,30 @@ class VATLedgerEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
                 request,
                 VATLedgerEntry.all_objects.filter(pk__in=locked_pks),
             )
+
+
+@admin.register(TZ2Return)
+class TZ2ReturnAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('tax_year', 'version', 'payload_hash', 'created_at')
+    list_filter = ('tax_year',)
+    search_fields = ('payload_hash',)
+    readonly_fields = (
+        'tax_year',
+        'version',
+        'schema_version',
+        'mapping_version',
+        'payload_snapshot',
+        'payload_hash',
+        'payload_json',
+        'xml_unsigned',
+        'xml_submitted',
+        'unsigned_xml_sha256',
+        'prepared_by',
+        'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 
 from . import admin_subledger  # noqa: E402, F401 — SubledgerItem admin registracija

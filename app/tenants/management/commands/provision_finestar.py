@@ -38,6 +38,7 @@ FINE_STAR_EXPENSE_CATEGORIES = [
     ('Software licence', '41491'),          # Usluga najma softvera
     ('Telekomunikacije', '4100'),           # Troškovi telefona, interneta i sl.
     ('Uredski materijal', '4010'),          # Uredski materijal
+    ('Sitni inventar / računalni pribor', '4040'),  # Troškovi uredskog sitnog inventara
     ('Bankovne usluge / platni promet', '4650'),  # Troškovi platnog prometa
     ('Ostalo', '41996'),                    # Troškovi ostalih usluga
 ]

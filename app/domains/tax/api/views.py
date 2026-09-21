@@ -33,6 +33,8 @@ from domains.tax.api.schema import (
     PdvSSubmitRequestSerializer,
     PdvSubmitRequestSerializer,
     SubmissionResultSerializer,
+    Tz2SaveRequestSerializer,
+    Tz2YearSerializer,
 )
 from domains.tax.read.service import (
     get_vat_period,
@@ -54,6 +56,8 @@ from domains.tax.write.service import (
     submit_pdv_period,
     submit_pdv_s_period,
 )
+from domains.tax.read.tz2 import tz2_year_dto
+from domains.tax.write.tz2 import parse_tax_year, save_tz2_year, submit_tz2_year, tz2_xml_bytes
 
 
 def _require_tenant(request):
@@ -425,6 +429,108 @@ class SubmissionConfirmationView(TaxWriteApiView):
                 event_uuid,
                 file_obj,
                 uploaded_by=request.user,
+            )
+        except TaxNotFound:
+            raise Http404() from None
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        except TaxConflict as exc:
+            return _error_response(exc, status.HTTP_409_CONFLICT)
+        return Response(payload)
+
+
+class Tz2YearView(TaxApiView):
+    http_method_names = ['get', 'put', 'head', 'options']
+
+    def get_permissions(self):
+        if self.request.method == 'PUT':
+            return [IsAuthenticated(), TenantTaxWritePermission()]
+        return super().get_permissions()
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_tz2_year_retrieve',
+        responses={200: Tz2YearSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, year):
+        tenant = _require_tenant(request)
+        tax_year = parse_tax_year(year)
+        return Response(tz2_year_dto(tenant, tax_year))
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_tz2_year_save',
+        request=Tz2SaveRequestSerializer,
+        responses={
+            200: Tz2YearSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def put(self, request, year):
+        tenant = _require_tenant(request)
+        tax_year = parse_tax_year(year)
+        try:
+            save_tz2_year(tenant, tax_year, request.data)
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        return Response(tz2_year_dto(tenant, tax_year))
+
+
+class Tz2YearXmlView(TaxExportApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_tz2_year_xml',
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.BINARY, description='Unsigned Obrazac TZ 2 XML'),
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, year):
+        tenant = _require_tenant(request)
+        tax_year = parse_tax_year(year)
+        try:
+            xml_bytes, filename = tz2_xml_bytes(tenant, tax_year)
+        except TaxNotFound:
+            raise Http404() from None
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        response = HttpResponse(xml_bytes, content_type='application/xml')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class Tz2YearSubmitView(TaxWriteApiView):
+    http_method_names = ['post', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_tz2_year_submit',
+        request=PdvSSubmitRequestSerializer,
+        responses={
+            200: SubmissionResultSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, year):
+        tenant = _require_tenant(request)
+        tax_year = parse_tax_year(year)
+        try:
+            identifier, submitted_at = _parse_submit_common(request.data)
+            payload = submit_tz2_year(
+                tenant,
+                tax_year,
+                user=request.user,
+                eporezna_identifier=identifier,
+                submitted_at=submitted_at,
             )
         except TaxNotFound:
             raise Http404() from None

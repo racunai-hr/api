@@ -113,3 +113,10 @@ def zp_payload_hash_from_xml(xml_bytes: bytes) -> str:
 
     parsed = parse_zp_xml(xml_bytes)
     return zp_payload_hash_from_aggregate(parsed)
+
+
+def tz2_payload_hash_from_xml(xml_bytes: bytes) -> str:
+    from accounting.services.tax_forms.tz2.canonical import payload_hash
+    from accounting.services.tax_forms.tz2.parse import parse_tz2_xml
+
+    return payload_hash(parse_tz2_xml(xml_bytes))

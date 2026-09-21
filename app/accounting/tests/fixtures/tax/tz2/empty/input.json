@@ -1,0 +1,18 @@
+{
+  "tax_year": 2026,
+  "first_name": "ALMA",
+  "last_name": "ČIZMIĆ",
+  "oib": "20501805574",
+  "municipality_code": "500",
+  "city": "VODICE",
+  "street": "ULICA BRIBIRSKIH KNEZOVA",
+  "house_number": "9",
+  "prepared_by_first_name": "ANTE",
+  "prepared_by_last_name": "VRCAN",
+  "room_beds": 0,
+  "aux_beds": 0,
+  "payment_installments": false,
+  "ep_receipts": "0.00",
+  "room_bed_rate": "0.00",
+  "aux_bed_rate": "0.00"
+}

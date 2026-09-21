@@ -511,6 +511,11 @@ def _classify_journal(
             rate = journal_line_vat_rate(account)
             vat = document.credit_amount
             base = Decimal('0.00') if box == '207' else pretporez_base_from_vat(vat, rate)
+        elif box == '210' and document.credit_amount > 0:
+            rate = journal_line_vat_rate(account)
+            vat = document.credit_amount
+            ap_base = _sibling_supplier_credit_amount(document)
+            base = ap_base if ap_base is not None else pretporez_base_from_vat(vat, rate)
         elif document.debit_amount > 0:
             vat = document.debit_amount
             rate = journal_line_vat_rate(account)
@@ -536,6 +541,26 @@ def _classify_journal(
             rule_code='UNMAPPED_TAX_ACCOUNT_NO_LONGER_SKIPPED',
         )
     return _empty(document, Outcome.NOT_TAX_RELEVANT, 'non_tax_journal_account', warnings)
+
+
+def _sibling_supplier_credit_amount(document: TaxDocumentInput) -> Decimal | None:
+    """AP credit on the same JE (2201 / 2201-Pxxxxx) is the invoice net for box 210."""
+    entry_id = document.source_document_id
+    if not entry_id:
+        return None
+    from accounting.models import JournalEntryLine
+
+    amounts = []
+    for line in JournalEntryLine.objects.filter(
+        journal_entry_id=entry_id,
+        credit_amount__gt=0,
+    ).select_related('account'):
+        code = (line.account.account_code or '').strip()
+        if code == '2201' or code.startswith('2201-'):
+            amounts.append(Decimal(line.credit_amount))
+    if len(amounts) == 1:
+        return amounts[0]
+    return None
 
 
 def reconcile_rc_bases(rows: tuple[ProposedLedgerRow, ...]) -> tuple[ProposedLedgerRow, ...]:

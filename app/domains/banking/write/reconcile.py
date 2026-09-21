@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from decimal import Decimal
 
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
@@ -68,6 +70,8 @@ _CANDIDATE_SCAN_LIMIT = 300
 _CANDIDATE_RESULT_LIMIT = 50
 _SCORE_CAP = 100
 _RECOMMENDED_MIN_SCORE = 60
+_UNPOSTED_EXPENSE_STATUSES = ('draft', 'submitted', 'approved')
+_SORT_DATE_LAST = date(9999, 12, 31)
 
 
 def _digits_only(value: str | None) -> str:
@@ -149,6 +153,50 @@ def _is_recommended(score: int, reasons: list[str]) -> bool:
     return score >= _RECOMMENDED_MIN_SCORE and bool(STRONG_IDENTITY_REASONS & set(reasons))
 
 
+def _is_likely_candidate(row: dict) -> bool:
+    return bool(row.get('recommended') or 'amount_exact' in (row.get('match_reasons') or []))
+
+
+class _ScoreTarget:
+    def __init__(self, *, open_amount, partner, due_date):
+        self.open_amount = open_amount
+        self.partner = partner
+        self.partner_id = partner.pk if partner is not None else None
+        self.due_date = due_date
+
+
+def _candidate_row(
+    *,
+    item_id,
+    partner,
+    direction: str,
+    source_type: str,
+    source_id: int,
+    source_label: str,
+    open_amount,
+    due_date,
+    match_score: int,
+    match_reasons: list[str],
+    action_label: str,
+) -> dict:
+    return {
+        'item_id': item_id,
+        'partner_id': partner.pk if partner is not None else None,
+        'partner_name': partner.name if partner is not None else '',
+        'direction': direction,
+        'source_type': source_type,
+        'source_id': source_id,
+        'source_label': source_label,
+        'open_amount': f'{open_amount:.2f}',
+        'due_date': due_date.isoformat() if due_date else None,
+        'action_label': action_label,
+        'match_score': match_score,
+        'match_reasons': match_reasons,
+        'recommended': _is_recommended(match_score, match_reasons),
+        '_sort_due': due_date,
+    }
+
+
 def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = None) -> dict:
     bank_tx = (
         BankTransaction.all_objects.filter(tenant=tenant, pk=transaction_id)
@@ -195,28 +243,107 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
         match_score, match_reasons = _score_candidate(
             bank_tx, item, source, source_label, amount
         )
-        scored.append({
-            'item_id': item.pk,
-            'partner_id': item.partner_id,
-            'partner_name': item.partner.name if item.partner_id else '',
-            'direction': item.direction,
-            'source_type': source_type,
-            'source_id': item.source_object_id,
-            'source_label': source_label,
-            'open_amount': f'{item.open_amount:.2f}',
-            'due_date': item.due_date.isoformat() if item.due_date else None,
-            'action_label': _action_label(source_type, item.direction),
-            'match_score': match_score,
-            'match_reasons': match_reasons,
-            'recommended': _is_recommended(match_score, match_reasons),
-            '_sort_due': item.due_date,
-        })
-    scored.sort(key=lambda row: (-row['match_score'], row['_sort_due'], row['item_id']))
+        scored.append(
+            _candidate_row(
+                item_id=item.pk,
+                partner=item.partner,
+                direction=item.direction,
+                source_type=source_type,
+                source_id=item.source_object_id,
+                source_label=source_label,
+                open_amount=item.open_amount,
+                due_date=item.due_date,
+                match_score=match_score,
+                match_reasons=match_reasons,
+                action_label=_action_label(source_type, item.direction),
+            )
+        )
+    _append_unposted_expense_candidates(
+        scored,
+        tenant=tenant,
+        bank_tx=bank_tx,
+        amount=amount,
+        direction=direction,
+        q=q,
+    )
+    scored.sort(
+        key=lambda row: (
+            -row['match_score'],
+            row['_sort_due'] or _SORT_DATE_LAST,
+            row['item_id'] is None,
+            row['item_id'] or 0,
+            row['source_id'],
+        )
+    )
+    if not (q or '').strip() and any(_is_likely_candidate(row) for row in scored):
+        scored = [row for row in scored if _is_likely_candidate(row)]
     results = []
     for row in scored[:_CANDIDATE_RESULT_LIMIT]:
         row.pop('_sort_due', None)
         results.append(row)
     return {'count': len(results), 'results': results}
+
+
+def _append_unposted_expense_candidates(
+    scored: list,
+    *,
+    tenant,
+    bank_tx,
+    amount: Decimal,
+    direction: str,
+    q: str | None,
+) -> None:
+    if direction != 'payable':
+        return
+    expense_ct = ContentType.objects.get_for_model(Expense)
+    posted_ids = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        source_content_type=expense_ct,
+    ).values('source_object_id')
+    qs = (
+        Expense.all_objects.filter(
+            tenant=tenant,
+            status__in=_UNPOSTED_EXPENSE_STATUSES,
+        )
+        .exclude(pk__in=posted_ids)
+        .select_related('supplier')
+        .prefetch_related('supplier__bank_accounts')
+        .order_by('due_date', 'expense_date', 'id')
+    )
+    term = (q or '').strip()
+    if term:
+        qs = qs.filter(
+            Q(supplier__name__icontains=term)
+            | Q(supplier__tax_number__icontains=term)
+            | Q(supplier__vat_number__icontains=term)
+            | Q(expense_number__icontains=term)
+        )
+    for expense in qs[:_CANDIDATE_SCAN_LIMIT]:
+        open_amount = Decimal(expense.amount).quantize(Decimal('0.01'))
+        if open_amount < amount:
+            continue
+        partner = expense.supplier
+        due_date = expense.due_date or expense.expense_date
+        target = _ScoreTarget(open_amount=open_amount, partner=partner, due_date=due_date)
+        source_label = expense.expense_number
+        match_score, match_reasons = _score_candidate(
+            bank_tx, target, expense, source_label, amount
+        )
+        scored.append(
+            _candidate_row(
+                item_id=None,
+                partner=partner,
+                direction='payable',
+                source_type='expense',
+                source_id=expense.pk,
+                source_label=source_label,
+                open_amount=open_amount,
+                due_date=due_date,
+                match_score=match_score,
+                match_reasons=match_reasons,
+                action_label='Otvori dokument',
+            )
+        )
 
 
 def reconcile_open_item_api(

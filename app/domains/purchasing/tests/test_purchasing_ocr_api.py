@@ -19,7 +19,53 @@ from domains.purchasing.services.invoice_import import execute_invoice_import
 from expenses.models import Expense, ExpenseCategory, IncomingInvoiceImport
 from expenses.tests.partner_helpers import create_supplier_partner
 from partners.models import Partner
+from settings.models import CompanySettings
 from tenants.models import Tenant, TenantMembership
+
+HAC_PARTY = {
+    'name': 'Hrvatske autoceste d.o.o.',
+    'oib': '57500462912',
+    'vat_number': '',
+    'address': 'Šiška 1',
+    'city': 'Zagreb',
+    'postal_code': '10000',
+    'country': 'HR',
+    'iban': '',
+}
+
+FINE_STAR_PARTY = {
+    'name': 'FINE STAR DOO',
+    'oib': '36619131370',
+    'vat_number': '',
+    'address': 'BANA JOSIPA JELAČIĆA 58',
+    'city': 'ŠIBENIK',
+    'postal_code': '22000',
+    'country': 'HR',
+    'iban': '',
+}
+
+
+def _invoice_payload(*, issuer, buyer, **extra):
+    payload = {
+        'issuer': issuer,
+        'buyer': buyer,
+        'invoice_number': extra.get('invoice_number', '1432082-608-600'),
+        'issue_date': extra.get('issue_date', '2026-09-18'),
+        'due_date': extra.get('due_date', '2026-09-18'),
+        'currency': 'EUR',
+        'net_amount': extra.get('net_amount', '104.00'),
+        'tax_amount': extra.get('tax_amount', '26.00'),
+        'total_amount': extra.get('total_amount', '130.00'),
+        'iban': extra.get('iban', ''),
+        'vat_breakdown': [{'rate': '25.00', 'base': '104.00', 'amount': '26.00'}],
+        'line_items': extra.get(
+            'line_items',
+            [{'description': 'Cestarina', 'quantity': '1', 'unit_price': '104.00', 'amount': '104.00'}],
+        ),
+        'warnings': [],
+    }
+    return payload
+
 
 HOST = 'ocr.racunai.hr'
 OTHER_HOST = 'ocr2.racunai.hr'
@@ -186,6 +232,12 @@ class PurchasingOcrApiTests(TestCase):
         self.assertEqual(expense.amount, Decimal('125.00'))
         self.assertEqual(expense.category.name, 'Ostalo')
         self.assertIsNone(expense.expense_account_id)
+        lines = list(expense.lines.all())
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0].description, 'Diesel Class Plus')
+        self.assertEqual(lines[0].net_amount, Decimal('100.00'))
+        self.assertEqual(lines[0].vat_amount, Decimal('25.00'))
+        self.assertIsNone(lines[0].posting_account_id)
         ct = ContentType.objects.get_for_model(Expense)
         self.assertFalse(
             JournalEntry.all_objects.filter(
@@ -514,6 +566,361 @@ class PurchasingOcrApiTests(TestCase):
         with patch('domains.purchasing.services.invoice_import.get_extraction_provider') as provider:
             execute_invoice_import(run_id)
             provider.assert_not_called()
+
+    def _company(self, **kwargs):
+        defaults = {
+            'tenant': self.tenant,
+            'company_name': 'Fine Star d.o.o.',
+            'company_address': 'Ulica 1',
+            'street': 'Ulica',
+            'house_number': '1',
+            'postal_code': '22000',
+            'city': 'Šibenik',
+            'country': 'HR',
+            'company_phone': '091',
+            'company_email': 'info@finestar.hr',
+            'vat_number': '36619131370',
+            'vat_id': 'HR36619131370',
+        }
+        defaults.update(kwargs)
+        return CompanySettings.all_objects.create(**defaults)
+
+    def test_retry_from_discarded_and_extracted(self):
+        created = self._create_import(key='retry-discard')
+        import_id = created.data['id']
+        self.assertEqual(created.data['status'], 'extracted')
+        discarded = self.client.post(f'/api/purchasing/invoices/import/{import_id}/discard/')
+        self.assertEqual(discarded.status_code, 200)
+        with patch(
+            'domains.purchasing.services.invoice_import.enqueue_invoice_import',
+            side_effect=self._eager_enqueue,
+        ):
+            retried = self.client.post(f'/api/purchasing/invoices/import/{import_id}/retry/')
+        self.assertEqual(retried.status_code, 200)
+        self.assertEqual(retried.data['status'], 'extracted')
+        with patch(
+            'domains.purchasing.services.invoice_import.enqueue_invoice_import',
+            side_effect=self._eager_enqueue,
+        ):
+            again = self.client.post(f'/api/purchasing/invoices/import/{import_id}/retry/')
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.data['status'], 'extracted')
+
+    def test_hac_buyer_oib_is_case_4(self):
+        self._company()
+        payload = _invoice_payload(issuer=HAC_PARTY, buyer=FINE_STAR_PARTY)
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=payload):
+            response = self._create_import(key='hac-oib')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data['direction']['code'], 'ok')
+        self.assertEqual(response.data['extracted']['supplier']['name'], HAC_PARTY['name'])
+        self.assertEqual(response.data['extracted']['supplier']['oib'], '57500462912')
+        self.assertFalse(response.data['direction']['unresolved'])
+
+    def test_hac_name_only_buyer_is_case_5(self):
+        self._company()
+        buyer = {**FINE_STAR_PARTY, 'oib': '', 'vat_number': ''}
+        payload = _invoice_payload(issuer=HAC_PARTY, buyer=buyer)
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=payload):
+            response = self._create_import(key='hac-name')
+        self.assertEqual(response.data['direction']['code'], 'tenant_not_on_document')
+        self.assertTrue(response.data['direction']['override_required'])
+        self.assertEqual(response.data['extracted']['supplier']['name'], HAC_PARTY['name'])
+        buyer_candidate = next(
+            row for row in response.data['direction']['party_candidates'] if row['role'] == 'buyer'
+        )
+        self.assertTrue(buyer_candidate['suspected_own_company'])
+        self.assertFalse(buyer_candidate['is_own_company'])
+        import_id = response.data['id']
+        created = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/create-partner/',
+            {
+                'name': HAC_PARTY['name'],
+                'tax_number': HAC_PARTY['oib'],
+                'address': 'A',
+                'city': 'Zagreb',
+                'postal_code': '10000',
+                'country_code': 'HR',
+            },
+            format='json',
+        )
+        self.assertEqual(created.status_code, 200)
+        blocked = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/confirm/',
+            {},
+            format='json',
+        )
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.data['code'], 'direction_override_required')
+        ok = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/confirm/',
+            {'direction_override': True},
+            format='json',
+        )
+        self.assertEqual(ok.status_code, 200)
+
+    def test_swapped_issuer_oib_does_not_auto_swap(self):
+        self._company()
+        payload = _invoice_payload(issuer=FINE_STAR_PARTY, buyer=HAC_PARTY)
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=payload):
+            response = self._create_import(key='swapped-oib')
+        self.assertEqual(response.data['direction']['code'], 'suspected_wrong_document_direction')
+        self.assertTrue(response.data['direction']['unresolved'])
+        self.assertEqual(response.data['extracted']['supplier']['name'], '')
+        import_id = response.data['id']
+        blocked = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/confirm/',
+            {},
+            format='json',
+        )
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.data['code'], 'direction_unresolved')
+        own = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/apply-supplier/',
+            {'source': 'issuer'},
+            format='json',
+        )
+        self.assertEqual(own.status_code, 400)
+        self.assertEqual(own.data['code'], 'own_company_supplier')
+        applied = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/apply-supplier/',
+            {'source': 'buyer'},
+            format='json',
+        )
+        self.assertEqual(applied.status_code, 200)
+        self.assertEqual(applied.data['extracted']['supplier']['name'], HAC_PARTY['name'])
+        self.assertEqual(applied.data['direction']['supplier_source'], 'buyer')
+        self.assertFalse(applied.data['direction']['unresolved'])
+
+    def test_create_partner_rejects_own_oib_not_name(self):
+        self._company()
+        response = self._create_import(key='own-oib')
+        import_id = response.data['id']
+        own = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/create-partner/',
+            {
+                'name': 'Netko drugi',
+                'tax_number': '36619131370',
+                'address': 'A',
+                'city': 'Zagreb',
+                'postal_code': '10000',
+                'country_code': 'HR',
+            },
+            format='json',
+        )
+        self.assertEqual(own.status_code, 400)
+        self.assertEqual(own.data['code'], 'own_company_supplier')
+        named = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/create-partner/',
+            {
+                'name': 'FINE STAR DOO',
+                'tax_number': '27759560625',
+                'address': 'A',
+                'city': 'Zagreb',
+                'postal_code': '10000',
+                'country_code': 'HR',
+            },
+            format='json',
+        )
+        self.assertEqual(named.status_code, 200)
+
+    def test_confirm_rejects_matched_own_company_partner(self):
+        self._company(vat_number='27759560625', vat_id='HR27759560625')
+        partner = create_supplier_partner(
+            tenant=self.tenant,
+            name='INA',
+            tax_number='27759560625',
+            address='A',
+            city='Zagreb',
+            postal_code='10000',
+        )
+        payload = _invoice_payload(
+            issuer={
+                'name': 'INA d.d.',
+                'oib': '11111111111',
+                'vat_number': '',
+                'address': 'A',
+                'city': 'Zagreb',
+                'postal_code': '10000',
+                'country': 'HR',
+                'iban': '',
+            },
+            buyer=FINE_STAR_PARTY,
+        )
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=payload):
+            response = self._create_import(key='confirm-own')
+        import_id = response.data['id']
+        run = IncomingInvoiceImport.all_objects.get(pk=import_id)
+        run.matched_partner = partner
+        run.partner_match = IncomingInvoiceImport.MATCH_EXACT_OIB
+        run.save(update_fields=['matched_partner', 'partner_match'])
+        blocked = self.client.post(
+            f'/api/purchasing/invoices/import/{import_id}/confirm/',
+            {'direction_override': True},
+            format='json',
+        )
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.data['code'], 'own_company_supplier')
+
+    def _postable_accounts(self):
+        from accounting.models import AccountType, ChartOfAccounts
+
+        account_type, _ = AccountType.all_objects.get_or_create(
+            tenant=self.tenant,
+            name='asset',
+            defaults={'description': ''},
+        )
+        prepaid, _ = ChartOfAccounts.all_objects.get_or_create(
+            tenant=self.tenant,
+            account_code='1900',
+            defaults={
+                'account_name': 'Unaprijed plaćeni troškovi održavanja',
+                'account_type': account_type,
+                'account_class': '1',
+                'is_postable': True,
+                'is_active': True,
+            },
+        )
+        inventory, _ = ChartOfAccounts.all_objects.get_or_create(
+            tenant=self.tenant,
+            account_code='4040',
+            defaults={
+                'account_name': 'Sitni inventar',
+                'account_type': account_type,
+                'account_class': '4',
+                'is_postable': True,
+                'is_active': True,
+            },
+        )
+        return prepaid, inventory
+
+    def _hac_enc_payload(self):
+        return _invoice_payload(
+            issuer=HAC_PARTY,
+            buyer=FINE_STAR_PARTY,
+            invoice_number='1432082-608-600',
+            line_items=[
+                {
+                    'amount': '100.00',
+                    'quantity': '1',
+                    'unit_price': '127.78',
+                    'description': 'Uplata iznosa - ENC za kat. I',
+                },
+                {
+                    'amount': '15.00',
+                    'quantity': '1',
+                    'unit_price': '15.00',
+                    'description': 'UREDAJ ENC - KOMPLET Prepaid, za kat. I',
+                },
+                {
+                    'amount': '15.00',
+                    'quantity': '1',
+                    'unit_price': '15.00',
+                    'description': 'UREDAJ ENC - KOMPLET Prepaid, za kat. I',
+                },
+            ],
+        )
+
+    def test_extract_exposes_allocated_ocr_lines(self):
+        payload = self._hac_enc_payload()
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=payload):
+            response = self._create_import(key='alloc-lines')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(
+            response.data['extracted']['allocated_lines'],
+            [
+                {
+                    'position': 1,
+                    'description': 'Uplata iznosa - ENC za kat. I',
+                    'net_amount': '80.00',
+                    'vat_amount': '20.00',
+                    'gross_amount': '100.00',
+                },
+                {
+                    'position': 2,
+                    'description': 'UREDAJ ENC - KOMPLET Prepaid, za kat. I',
+                    'net_amount': '12.00',
+                    'vat_amount': '3.00',
+                    'gross_amount': '15.00',
+                },
+                {
+                    'position': 3,
+                    'description': 'UREDAJ ENC - KOMPLET Prepaid, za kat. I',
+                    'net_amount': '12.00',
+                    'vat_amount': '3.00',
+                    'gross_amount': '15.00',
+                },
+            ],
+        )
+
+    def _confirm_hac_enc(self, *, key, line_accounts, extra=None):
+        create_supplier_partner(
+            tenant=self.tenant,
+            name=HAC_PARTY['name'],
+            tax_number=HAC_PARTY['oib'],
+            address=HAC_PARTY['address'],
+            city=HAC_PARTY['city'],
+            postal_code=HAC_PARTY['postal_code'],
+        )
+        payload = self._hac_enc_payload()
+        with self.settings(PURCHASING_OCR_FAKE_PAYLOAD=payload):
+            response = self._create_import(key=key)
+        body = {'line_accounts': line_accounts, **(extra or {})}
+        return self.client.post(
+            f"/api/purchasing/invoices/import/{response.data['id']}/confirm/",
+            body,
+            format='json',
+        )
+
+    def test_confirm_persists_three_lines_with_posting_accounts(self):
+        prepaid, inventory = self._postable_accounts()
+        confirmed = self._confirm_hac_enc(
+            key='hac-split-confirm',
+            line_accounts=[
+                {'position': 1, 'posting_account_id': prepaid.pk},
+                {'position': 2, 'posting_account_id': inventory.pk},
+                {'position': 3, 'posting_account_id': inventory.pk},
+            ],
+        )
+        self.assertEqual(confirmed.status_code, 200, getattr(confirmed, 'data', confirmed.content))
+        expense = Expense.all_objects.get(pk=confirmed.data['confirmed_expense_id'])
+        lines = list(expense.lines.all())
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(
+            [(row.position, row.net_amount, row.vat_amount, row.posting_account.account_code) for row in lines],
+            [
+                (1, Decimal('80.00'), Decimal('20.00'), '1900'),
+                (2, Decimal('12.00'), Decimal('3.00'), '4040'),
+                (3, Decimal('12.00'), Decimal('3.00'), '4040'),
+            ],
+        )
+
+    def test_confirm_mixed_line_accounts_is_400(self):
+        prepaid, _inventory = self._postable_accounts()
+        blocked = self._confirm_hac_enc(
+            key='hac-mixed-confirm',
+            line_accounts=[{'position': 1, 'posting_account_id': prepaid.pk}],
+        )
+        self.assertEqual(blocked.status_code, 400)
+        self.assertEqual(blocked.data['code'], 'mixed_line_accounts')
+        self.assertFalse(Expense.all_objects.filter(tenant=self.tenant, source='ocr').exists())
+
+    def test_confirm_all_empty_line_accounts_is_header_only(self):
+        confirmed = self._confirm_hac_enc(key='hac-header-confirm', line_accounts=[])
+        self.assertEqual(confirmed.status_code, 200, getattr(confirmed, 'data', confirmed.content))
+        expense = Expense.all_objects.get(pk=confirmed.data['confirmed_expense_id'])
+        lines = list(expense.lines.all())
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(all(row.posting_account_id is None for row in lines))
+
+    def test_confirm_line_allocation_mismatch_is_400(self):
+        with patch(
+            'domains.purchasing.services.confirm.allocated_rows_match_header',
+            return_value=False,
+        ):
+            blocked = self._confirm_hac_enc(key='hac-mismatch-confirm', line_accounts=[])
+        self.assertEqual(blocked.status_code, 400)
+        self.assertEqual(blocked.data['code'], 'line_allocation_mismatch')
 
 
 @override_settings(

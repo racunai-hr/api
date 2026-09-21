@@ -513,11 +513,106 @@ class BankReconcileOpenItemTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         ids = [row['item_id'] for row in response.data['results']]
         self.assertEqual(ids[0], exact.pk)
-        self.assertIn(larger.pk, ids)
-        self.assertGreater(
-            self._row_for(response.data['results'], exact.pk)['match_score'],
-            self._row_for(response.data['results'], larger.pk)['match_score'],
+        self.assertNotIn(larger.pk, ids)
+        self.assertTrue(all('amount_exact' in row['match_reasons'] or row['recommended'] for row in response.data['results']))
+
+    def _draft_expense(self, *, partner, amount, expense_number, expense_date=None, status='draft'):
+        return Expense.all_objects.create(
+            tenant=self.tenant,
+            supplier=partner,
+            category=self.category,
+            expense_number=expense_number,
+            expense_date=expense_date or date(2026, 8, 27),
+            amount=Decimal(amount),
+            tax_amount=Decimal('0'),
+            currency='EUR',
+            status=status,
+            settlement_method='business_account',
+            description='Unposted fixture',
+            created_by=self.owner,
         )
+
+    def test_unposted_expense_with_exact_amount_hides_weak_open_items(self):
+        supplier = self._partner('CVH Vodice', '101010101')
+        noise = self._partner('Test Kupac d.o.o.', '202020202')
+        expense = self._draft_expense(
+            partner=supplier,
+            amount='2.73',
+            expense_number='ERAC-28902-H120-5139',
+        )
+        claim_item, _ = self._payable_claim(
+            partner=noise,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            number='PFC-NOISE-1',
+            reference='',
+            entry_number='202608-SCR-UNP-1',
+        )
+        tx = self._debit_tx('2.73', tx_date=date(2026, 8, 27))
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertEqual(response.status_code, 200, response.data)
+        results = response.data['results']
+        self.assertEqual(len(results), 1)
+        row = results[0]
+        self.assertIsNone(row['item_id'])
+        self.assertEqual(row['source_type'], 'expense')
+        self.assertEqual(row['source_id'], expense.pk)
+        self.assertEqual(row['source_label'], 'ERAC-28902-H120-5139')
+        self.assertEqual(row['action_label'], 'Otvori dokument')
+        self.assertIn('amount_exact', row['match_reasons'])
+        self.assertFalse(row['recommended'])
+        self.assertNotIn(claim_item.pk, [r['item_id'] for r in results])
+
+    def test_search_keeps_weak_candidates_when_exact_match_exists(self):
+        supplier = self._partner('Exact Draft Supplier', '303030303')
+        noise = self._partner('Visible On Search', '404040404')
+        self._draft_expense(
+            partner=supplier,
+            amount='2.73',
+            expense_number='EXP-DRAFT-SEARCH',
+        )
+        claim_item, _ = self._payable_claim(
+            partner=noise,
+            amount='82.95',
+            due_date=date(2026, 8, 18),
+            number='PFC-SEARCH-1',
+            reference='',
+            entry_number='202608-SCR-UNP-2',
+        )
+        tx = self._debit_tx('2.73')
+        hidden = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertNotIn(claim_item.pk, [row['item_id'] for row in hidden.data['results']])
+        searched = self.client.get(
+            f'/api/banking/transactions/{tx.pk}/open-item-candidates/',
+            {'q': 'Visible On Search'},
+        )
+        self.assertIn(claim_item.pk, [row['item_id'] for row in searched.data['results']])
+
+    def test_posted_expense_is_not_duplicated_as_document_candidate(self):
+        partner = self._partner('Posted Once', '505050505')
+        item, expense = self._payable_expense(
+            partner=partner,
+            amount='12.50',
+            due_date=date(2026, 8, 18),
+            expense_number='EXP-POSTED-ONCE',
+            entry_number='202608-SCR-UNP-3',
+        )
+        tx = self._debit_tx('12.50')
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        rows = [row for row in response.data['results'] if row['source_id'] == expense.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['item_id'], item.pk)
+        self.assertEqual(rows[0]['action_label'], 'Zatvori obvezu')
+
+    def test_paid_or_rejected_expense_is_not_a_candidate(self):
+        partner = self._partner('Closed Drafts', '606060606')
+        self._draft_expense(partner=partner, amount='3.10', expense_number='EXP-PAID-X', status='paid')
+        self._draft_expense(partner=partner, amount='3.10', expense_number='EXP-REJ-X', status='rejected')
+        tx = self._debit_tx('3.10')
+        response = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        labels = [row['source_label'] for row in response.data['results']]
+        self.assertNotIn('EXP-PAID-X', labels)
+        self.assertNotIn('EXP-REJ-X', labels)
 
     def test_amount_and_due_near_ranks_first_but_not_recommended(self):
         partner = self._partner('Score Partner Beta', '222222222')

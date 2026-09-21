@@ -115,11 +115,9 @@ def create_inbound_expense_from_ubl(
         ),
         name=parsed.supplier_name or '',
     )
-    if parsed.supplier_name and supplier.name != parsed.supplier_name:
-        supplier.name = parsed.supplier_name
-        if parsed.supplier_address and not supplier.address:
-            supplier.address = parsed.supplier_address
-        supplier.save(update_fields=['name', 'address'])
+    if parsed.supplier_address and not (supplier.address or '').strip():
+        supplier.address = parsed.supplier_address
+        supplier.save(update_fields=['address'])
 
     expense = Expense.all_objects.create(
         tenant=tenant,

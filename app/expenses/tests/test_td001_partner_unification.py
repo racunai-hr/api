@@ -58,6 +58,27 @@ class PartnerResolverTests(TestCase):
         partner.refresh_from_db()
         self.assertEqual(partner.partner_type, 'both')
 
+    def test_resolve_does_not_overwrite_existing_name(self):
+        existing = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='Ante Vrcan',
+            tax_number='11528564544',
+            partner_type='other',
+            status='active',
+            address='Gärtnerstraße 44',
+            city='Hanau',
+            postal_code='63452',
+        )
+        partner = resolve_partner(
+            tenant=self.tenant,
+            oib='11528564544',
+            name='Test Kupac d.o.o.',
+        )
+        self.assertEqual(partner.pk, existing.pk)
+        partner.refresh_from_db()
+        self.assertEqual(partner.name, 'Ante Vrcan')
+        self.assertEqual(partner.partner_type, 'other')
+
 
 class SupplierMigrationDedupeTests(TestCase):
     """Simulira logiku data migracije: OIB match, fallback po imenu."""
@@ -86,6 +107,7 @@ class SupplierMigrationDedupeTests(TestCase):
         self.assertEqual(resolved.pk, partner.pk)
         resolved.refresh_from_db()
         self.assertEqual(resolved.partner_type, 'both')
+        self.assertEqual(resolved.name, 'Existing Partner')
 
     def test_distinct_oibs_create_distinct_partners(self):
         Supplier.all_objects.create(tenant=self.tenant, name='A', tax_number='11111111111')

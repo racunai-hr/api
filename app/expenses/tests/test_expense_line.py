@@ -178,6 +178,26 @@ class ExpenseLineConstraintTests(TestCase):
         )
         self.assertEqual(classified.vehicle_line_kind, VehicleLineKind.UNCLASSIFIED)
 
+    def test_line_account_locked_after_approve(self):
+        from accounting.models import AccountType, ChartOfAccounts
+
+        account_type = AccountType.all_objects.create(tenant=self.tenant, name='expense')
+        account = ChartOfAccounts.all_objects.create(
+            tenant=self.tenant,
+            account_code='4040',
+            account_name='Sitni inventar',
+            account_type=account_type,
+            account_class='4',
+            is_postable=True,
+            is_active=True,
+        )
+        line = self._line(posting_account=account)
+        self.expense.status = 'approved'
+        self.expense.save(update_fields=['status'])
+        line.posting_account = None
+        with self.assertRaises(ValidationError):
+            line.save(update_fields=['posting_account'])
+
     def test_ordering_by_position(self):
         self._line(position=2, description='Druga')
         self._line(position=1, description='Prva')

@@ -413,10 +413,16 @@ class ExpensePostingPreviewSerializer(serializers.Serializer):
     lines = PostingPlanLineSerializer(many=True)
 
 
+class ExpenseLineAccountPatchSerializer(serializers.Serializer):
+    position = serializers.IntegerField(min_value=1)
+    posting_account_id = serializers.IntegerField(allow_null=True)
+
+
 class ExpenseDraftPatchSerializer(serializers.Serializer):
     category_id = serializers.IntegerField(required=False)
     expense_account_id = serializers.IntegerField(required=False, allow_null=True)
     cost_center_id = serializers.IntegerField(required=False, allow_null=True)
+    line_accounts = ExpenseLineAccountPatchSerializer(many=True, required=False)
 
 
 class CostCenterSerializer(serializers.Serializer):

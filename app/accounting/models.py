@@ -491,6 +491,7 @@ class PostingRule(TenantMixin, models.Model):
         ('total_amount', 'Ukupan iznos'),
         ('amount', 'Iznos'),
         ('net_amount', 'Neto iznos'),
+        ('eu_rc_vat', 'EU reverse-charge PDV'),
     ]
 
     name = models.CharField(max_length=100, verbose_name="Naziv pravila")
@@ -717,6 +718,13 @@ def zp_return_upload_to(instance, filename: str) -> str:
     )
 
 
+def tz2_return_upload_to(instance, filename: str) -> str:
+    return (
+        f'tz2_returns/{instance.tenant.slug}/'
+        f'{instance.tax_year}/v{instance.version}/{os.path.basename(filename)}'
+    )
+
+
 class ZPReturn(TenantMixin, models.Model):
     vat_period = models.ForeignKey(
         VATPeriod,
@@ -794,10 +802,92 @@ class ZPReturn(TenantMixin, models.Model):
         return self.payload_hash or None
 
 
+class Tz2PeriodAdapter:
+    """Duck-type period for SubmissionDocument — not a VATPeriod."""
+
+    def __init__(self, tenant, tax_year: int):
+        self.tenant = tenant
+        self.year = tax_year
+        self.month = 12
+
+
+class TZ2Return(TenantMixin, models.Model):
+    tax_year = models.PositiveSmallIntegerField(verbose_name='Porezna godina')
+    version = models.PositiveSmallIntegerField(verbose_name='Verzija')
+    schema_version = models.CharField(
+        max_length=10,
+        default='1.0',
+        verbose_name='Verzija sheme',
+    )
+    mapping_version = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name='Verzija mapiranja',
+    )
+    payload_snapshot = models.JSONField(verbose_name='Snapshot payloada')
+    payload_hash = models.CharField(max_length=64, verbose_name='Hash payloada')
+    payload_json = models.FileField(
+        upload_to=tz2_return_upload_to,
+        verbose_name='payload.json',
+    )
+    xml_unsigned = models.FileField(
+        upload_to=tz2_return_upload_to,
+        null=True,
+        blank=True,
+        verbose_name='Nepotpisani XML',
+    )
+    xml_submitted = models.FileField(
+        upload_to=tz2_return_upload_to,
+        null=True,
+        blank=True,
+        verbose_name='Predani XML',
+    )
+    unsigned_xml_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name='SHA256 nepotpisanog XML-a',
+    )
+    prepared_by = models.ForeignKey(
+        'settings.ResponsiblePerson',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tz2_returns_prepared',
+        verbose_name='Sastavio',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+
+    class Meta:
+        verbose_name = 'TZ 2 obrazac'
+        verbose_name_plural = 'TZ 2 obrasci'
+        ordering = ['-tax_year', '-version']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'tax_year', 'version'],
+                name='unique_tz2_return_version_per_year',
+            ),
+        ]
+
+    def __str__(self):
+        return f'TZ2 {self.tax_year} v{self.version}'
+
+    def get_period(self):
+        return Tz2PeriodAdapter(self.tenant, self.tax_year)
+
+    def get_display_name(self) -> str:
+        return str(self)
+
+    def get_version(self) -> int:
+        return self.version
+
+    def get_payload_hash(self) -> str | None:
+        return self.payload_hash or None
+
+
 class TaxDocumentType(models.TextChoices):
     PDV = 'pdv', 'Obrazac PDV'
     PDV_S = 'pdv_s', 'Obrazac PDV-S'
     ZP = 'zp', 'Obrazac ZP'
+    TZ2 = 'tz2', 'Obrazac TZ 2'
 
 
 class SubmissionDestination(models.TextChoices):
@@ -874,6 +964,7 @@ _CONTENT_TYPE_DOCUMENT_TYPE = {
     'vatreturn': TaxDocumentType.PDV,
     'pdvsreturn': TaxDocumentType.PDV_S,
     'zpreturn': TaxDocumentType.ZP,
+    'tz2return': TaxDocumentType.TZ2,
 }
 
 

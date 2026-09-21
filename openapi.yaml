@@ -4774,6 +4774,202 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Konflikt (idempotency / match target taken)
+  /api/tax/tz2/years/{year}/:
+    get:
+      operationId: tax_tz2_year_retrieve
+      parameters:
+      - in: path
+        name: year
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tz2Year'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    put:
+      operationId: tax_tz2_year_save
+      parameters:
+      - in: path
+        name: year
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tz2SaveRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Tz2SaveRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Tz2SaveRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tz2Year'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/tz2/years/{year}/submit/:
+    post:
+      operationId: tax_tz2_year_submit
+      parameters:
+      - in: path
+        name: year
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/tz2/years/{year}/xml/:
+    get:
+      operationId: tax_tz2_year_xml
+      parameters:
+      - in: path
+        name: year
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Unsigned Obrazac TZ 2 XML
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
 components:
   schemas:
     AccountRef:
@@ -7414,6 +7610,7 @@ components:
       properties:
         item_id:
           type: integer
+          nullable: true
         partner_id:
           type: integer
           nullable: true
@@ -9540,6 +9737,148 @@ components:
       - transaction_date
       - transaction_type
       - value_date
+    Tz2SaveRequestRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          minLength: 1
+        last_name:
+          type: string
+          minLength: 1
+        oib:
+          type: string
+          minLength: 1
+        municipality_code:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        street:
+          type: string
+          minLength: 1
+        house_number:
+          type: string
+          minLength: 1
+        room_beds:
+          type: integer
+        aux_beds:
+          type: integer
+        payment_installments:
+          type: boolean
+        ep_receipts:
+          type: string
+          minLength: 1
+        room_bed_rate:
+          type: string
+        aux_bed_rate:
+          type: string
+      required:
+      - aux_beds
+      - city
+      - ep_receipts
+      - first_name
+      - house_number
+      - last_name
+      - municipality_code
+      - oib
+      - payment_installments
+      - room_beds
+      - street
+    Tz2Year:
+      type: object
+      properties:
+        tax_year:
+          type: integer
+        version:
+          type: integer
+          nullable: true
+        persisted:
+          type: boolean
+        schema_version:
+          type: string
+        mapping_version:
+          type: integer
+        period_from:
+          type: string
+        period_to:
+          type: string
+        rates:
+          type: object
+          additionalProperties: {}
+        taxpayer:
+          type: object
+          additionalProperties: {}
+        room_beds:
+          type: integer
+        aux_beds:
+          type: integer
+        room_bed_rate:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        aux_bed_rate:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        room_bed_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        aux_bed_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_assessed:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        amount_after_discount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        payment_installments:
+          type: boolean
+        installment_flag:
+          type: string
+        installment_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        ep_receipts:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        event_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        current_submission:
+          allOf:
+          - $ref: '#/components/schemas/PdvSSubmission'
+          nullable: true
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdvSSubmission'
+      required:
+      - amount_after_discount
+      - aux_bed_rate
+      - aux_bed_total
+      - aux_beds
+      - current_submission
+      - ep_receipts
+      - event_uuid
+      - installment_amount
+      - installment_flag
+      - mapping_version
+      - payment_installments
+      - period_from
+      - period_to
+      - persisted
+      - rates
+      - room_bed_rate
+      - room_bed_total
+      - room_beds
+      - schema_version
+      - submissions
+      - tax_year
+      - taxpayer
+      - total_assessed
+      - version
     VatBlock:
       type: object
       properties:

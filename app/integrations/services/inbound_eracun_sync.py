@@ -19,6 +19,7 @@ from fiscal_gateway.services.inbound_expense import create_inbound_expense_from_
 from integrations.audit import log_audit_step, new_correlation_id
 from integrations.constants import IntegrationProvider, IntegrationType
 from integrations.models import IntegrationAuditLog
+from integrations.repository import IntegrationRepository
 from integrations.services.inbound_rejection import taxpayer_oib_for_tenant
 from super_integration.models import SuperDocumentLink
 
@@ -83,6 +84,13 @@ def _tenant_lock(tenant):
             cursor.execute('SELECT pg_advisory_unlock(%s, %s)', [_LOCK_NAMESPACE, int(tenant.pk)])
 
 
+def _audit_provider(tenant) -> str:
+    config = IntegrationRepository.resolve_eracun_config(tenant)
+    if config is not None:
+        return config.provider
+    return IntegrationProvider.SUPER
+
+
 def _invoice_guid(item: dict) -> str:
     refs = item.get('provider_refs') if isinstance(item.get('provider_refs'), dict) else {}
     return str(refs.get('invoice_guid') or '').strip()
@@ -144,6 +152,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
     cap = limit if limit is not None else getattr(settings, 'ERACUN_INBOUND_IMPORT_LIMIT', 25)
     cap = max(1, int(cap))
     correlation_id = new_correlation_id()
+    audit_provider = _audit_provider(tenant)
 
     with _tenant_lock(tenant):
         client = GatewayV1Client(taxpayer_oib=oib)
@@ -195,7 +204,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
                 status=IntegrationAuditLog.STATUS_SUCCESS,
                 correlation_id=correlation_id,
                 integration_type=IntegrationType.ERACUN,
-                provider=IntegrationProvider.SUPER,
+                provider=audit_provider,
                 detail={
                     'invoice_guid': guid,
                     'gateway_document_id': str(item.get('document_id') or ''),
@@ -220,7 +229,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
         ),
         correlation_id=correlation_id,
         integration_type=IntegrationType.ERACUN,
-        provider=IntegrationProvider.SUPER,
+        provider=audit_provider,
         detail={
             'scanned': len(items),
             'imported': imported,

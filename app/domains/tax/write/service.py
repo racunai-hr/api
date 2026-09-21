@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from django.db import transaction
 from django.utils import timezone
 
-from accounting.models import PDVSReturn, SubmissionEvent, VATPeriod, VATReturn
+from accounting.models import PDVSReturn, SubmissionEvent, TZ2Return, VATPeriod, VATReturn
 from accounting.services.submission.exceptions import (
     AttachConfirmationError,
     CreateSubmissionEventError,
@@ -184,6 +184,29 @@ def submit_pdv_s_period(
     return _submission_dto(event)
 
 
+def _is_tz2_xml_upload(file_obj) -> bool:
+    name = (getattr(file_obj, 'name', '') or '').lower()
+    return name.endswith('.xml')
+
+
+def _store_tz2_submitted_xml(document: TZ2Return, event: SubmissionEvent) -> None:
+    attachment = event.confirmation_attachment
+    if not attachment:
+        return
+    attachment.open('rb')
+    try:
+        content = attachment.read()
+    finally:
+        attachment.seek(0)
+    from django.core.files.base import ContentFile
+
+    document.xml_submitted.save(
+        f'TZ2_{document.tax_year}_submitted.xml',
+        ContentFile(content),
+        save=True,
+    )
+
+
 def attach_period_confirmation(tenant, event_uuid, file_obj, *, uploaded_by) -> dict:
     event = (
         SubmissionEvent.all_objects.filter(tenant=tenant, event_uuid=event_uuid)
@@ -192,7 +215,7 @@ def attach_period_confirmation(tenant, event_uuid, file_obj, *, uploaded_by) -> 
     if event is None:
         raise TaxNotFound()
     document = event.document
-    if not isinstance(document, (VATReturn, PDVSReturn)):
+    if not isinstance(document, (VATReturn, PDVSReturn, TZ2Return)):
         raise TaxNotFound()
     if file_obj is None:
         raise TaxBadRequest('confirmation file je obavezan.')
@@ -204,6 +227,8 @@ def attach_period_confirmation(tenant, event_uuid, file_obj, *, uploaded_by) -> 
         )
     except AttachConfirmationError as exc:
         raise TaxConflict(str(exc)) from exc
+    if isinstance(document, TZ2Return) and _is_tz2_xml_upload(file_obj):
+        _store_tz2_submitted_xml(document, event)
     return {
         'event_uuid': str(event.event_uuid),
         'has_confirmation': bool(event.confirmation_attachment),

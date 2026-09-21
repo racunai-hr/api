@@ -13,6 +13,9 @@ from domains.tax.api.views import (
     PdvSPeriodView,
     PdvSPeriodXmlView,
     SubmissionConfirmationView,
+    Tz2YearSubmitView,
+    Tz2YearView,
+    Tz2YearXmlView,
 )
 
 urlpatterns = [
@@ -66,6 +69,21 @@ urlpatterns = [
         'tax/pdv-s/periods/<str:period>/',
         PdvSPeriodView.as_view(),
         name='tax-pdv-s-period-detail',
+    ),
+    path(
+        'tax/tz2/years/<str:year>/xml/',
+        Tz2YearXmlView.as_view(),
+        name='tax-tz2-year-xml',
+    ),
+    path(
+        'tax/tz2/years/<str:year>/submit/',
+        Tz2YearSubmitView.as_view(),
+        name='tax-tz2-year-submit',
+    ),
+    path(
+        'tax/tz2/years/<str:year>/',
+        Tz2YearView.as_view(),
+        name='tax-tz2-year',
     ),
     path(
         'tax/submissions/<uuid:event_uuid>/confirmation/',

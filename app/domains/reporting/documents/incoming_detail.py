@@ -206,6 +206,40 @@ def build_lifecycle_status(
     }
 
 
+def _account_ref(account) -> dict | None:
+    if account is None:
+        return None
+    return {
+        'id': account.pk,
+        'code': account.account_code,
+        'name': account.account_name,
+        'active': account.is_active,
+    }
+
+
+def build_expense_lines_block(document) -> list[dict]:
+    rows = []
+    for line in document.lines.all():
+        rows.append(
+            {
+                'id': line.pk,
+                'position': line.position,
+                'classification': None,
+                'name': line.description,
+                'description': None,
+                'unit': None,
+                'quantity': None,
+                'unit_price': None,
+                'vat_rate': None,
+                'net_amount': _money_str(line.net_amount),
+                'vat_amount': _money_str(line.vat_amount),
+                'gross_amount': _money_str(line.gross_amount),
+                'posting_account': _account_ref(line.posting_account),
+            }
+        )
+    return rows
+
+
 def build_lines_block(parsed: ParsedInvoice | None) -> list[dict]:
     if not parsed:
         return []
@@ -219,6 +253,7 @@ def build_lines_block(parsed: ParsedInvoice | None) -> list[dict]:
             }
         rows.append(
             {
+                'id': None,
                 'position': line.position,
                 'classification': classif,
                 'name': line.name,
@@ -231,6 +266,7 @@ def build_lines_block(parsed: ParsedInvoice | None) -> list[dict]:
                 'net_amount': _money_str(line.line_extension_amount),
                 'vat_amount': None,
                 'gross_amount': None,
+                'posting_account': None,
             }
         )
     return rows
@@ -511,7 +547,8 @@ def enrich_incoming_detail_payload(
     payload['actions'] = {
         'reject': build_actions_reject_block(document),
     }
-    payload['lines'] = build_lines_block(parsed)
+    expense_lines = build_expense_lines_block(document)
+    payload['lines'] = expense_lines or build_lines_block(parsed)
     payload['charges'] = build_charges_block(parsed)
     payload['tax_summary'] = build_tax_summary_block(parsed)
     payload['totals'] = build_totals_block(document, parsed)

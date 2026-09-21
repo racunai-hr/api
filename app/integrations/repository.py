@@ -23,7 +23,17 @@ class IntegrationRepository:
         tenant,
         environment: str = IntegrationEnvironment.PRODUCTION,
     ) -> IntegrationConfig | None:
-        """Resolve eRačun integration — DIRECT only (M1.7: no SUPER routing)."""
+        """Resolve eRačun integration — Pondi (gateway) or DIRECT. Never SUPER."""
+        pondi_config = IntegrationConfig.all_objects.filter(
+            tenant=tenant,
+            integration_type=IntegrationType.ERACUN,
+            provider=IntegrationProvider.PONDI,
+            environment=environment,
+            is_active=True,
+        ).first()
+        if pondi_config is not None:
+            return pondi_config
+
         direct_config = IntegrationConfig.all_objects.filter(
             tenant=tenant,
             integration_type=IntegrationType.ERACUN,

@@ -29,7 +29,17 @@ from domains.purchasing.ai.extraction import (
     get_extraction_provider,
 )
 from domains.purchasing.ai.render import RenderError, render_invoice_pages
-from domains.purchasing.ai.schema import OCR_SCHEMA_VERSION
+from domains.purchasing.ai.schema import OCR_SCHEMA_VERSION, build_extract_prompt
+from domains.purchasing.services.direction import (
+    SOURCE_BUYER,
+    SOURCE_ISSUER,
+    SOURCE_MANUAL,
+    apply_direction_to_payload,
+    classify_document,
+    is_hard_own_company,
+    load_company_identity,
+    party_is_blank,
+)
 from domains.purchasing.services.dto import import_dto
 from domains.purchasing.services.exceptions import (
     IdempotencyKeyReused,
@@ -44,6 +54,7 @@ from domains.purchasing.services.matching import (
     match_partner,
     parse_iso_date,
     parse_money,
+    party_from_raw,
     require_country_code,
     supplier_from_payload,
 )
@@ -148,7 +159,7 @@ def _apply_business_duplicate(run: IncomingInvoiceImport, payload: dict) -> None
 def _extraction_warnings(payload: dict) -> list[str]:
     warnings: list[str] = []
     supplier = supplier_from_payload(payload)
-    if not supplier.get('oib'):
+    if not party_is_blank(supplier) and not supplier.get('oib') and not supplier.get('vat_number'):
         warnings.append('Porezni identifikator dobavljača nije pronađen.')
     raw_country = ''
     raw_supplier = payload.get('supplier') if isinstance(payload.get('supplier'), dict) else {}
@@ -174,6 +185,12 @@ def _extraction_warnings(payload: dict) -> list[str]:
 
 
 def _apply_partner_match(run: IncomingInvoiceImport, payload: dict) -> None:
+    if party_is_blank(supplier_from_payload(payload)):
+        run.matched_partner = None
+        run.partner_match = IncomingInvoiceImport.MATCH_MISSING
+        run.partner_candidate_id = None
+        run.partner_diff = []
+        return
     result = match_partner(tenant=run.tenant, payload=payload)
     run.matched_partner = result['partner']
     run.partner_match = result['kind']
@@ -300,7 +317,17 @@ def execute_invoice_import(run_id: int) -> IncomingInvoiceImport:
     try:
         content = run.original_file.read()
         pages = render_invoice_pages(content)
-        result = get_extraction_provider().extract(pages, filename=run.original_filename)
+        identity = load_company_identity(run.tenant)
+        prompt = build_extract_prompt(
+            company_name=identity.name,
+            oib=identity.oib,
+            vat_id=identity.vat_id,
+        )
+        result = get_extraction_provider().extract(
+            pages,
+            filename=run.original_filename,
+            prompt=prompt,
+        )
     except ExtractionTimeout as exc:
         return _fail_processing(run_id, str(exc) or 'OpenAI timeout')
     except InvalidExtraction as exc:
@@ -309,8 +336,9 @@ def execute_invoice_import(run_id: int) -> IncomingInvoiceImport:
         logger.exception('OCR extraction failed for import %s', run_id)
         return _fail_processing(run_id, str(exc)[:500] or exc.__class__.__name__)
 
-    payload = result.payload
+    payload, direction = apply_direction_to_payload(result.payload, identity)
     warnings = _extraction_warnings(payload)
+    warnings.extend(direction.warnings)
     now = timezone.now()
     with transaction.atomic():
         locked = (
@@ -340,17 +368,34 @@ def execute_invoice_import(run_id: int) -> IncomingInvoiceImport:
         return locked
 
 
+RETRYABLE_STATUSES = (
+    IncomingInvoiceImport.STATUS_FAILED,
+    IncomingInvoiceImport.STATUS_EXTRACTED,
+    IncomingInvoiceImport.STATUS_DISCARDED,
+)
+
+
 def retry_invoice_import(*, tenant, import_id: int) -> dict:
     run = _get_import(tenant, import_id)
-    if run.status != IncomingInvoiceImport.STATUS_FAILED:
-        raise InvalidImportStatus('Ponovni pokušaj je moguć samo nakon neuspjeha.')
-    IncomingInvoiceImport.all_objects.filter(pk=run.pk, status=IncomingInvoiceImport.STATUS_FAILED).update(
+    if run.status == IncomingInvoiceImport.STATUS_PROCESSING:
+        raise ImportProcessing()
+    if run.status not in RETRYABLE_STATUSES:
+        raise InvalidImportStatus('Ponovni OCR nije moguć u trenutnom statusu.')
+    updated = IncomingInvoiceImport.all_objects.filter(
+        pk=run.pk,
+        status__in=RETRYABLE_STATUSES,
+    ).update(
         status=IncomingInvoiceImport.STATUS_QUEUED,
         celery_task_id='',
         last_error='',
         started_at=None,
         finished_at=None,
     )
+    if updated != 1:
+        run.refresh_from_db()
+        if run.status == IncomingInvoiceImport.STATUS_PROCESSING:
+            raise ImportProcessing()
+        raise InvalidImportStatus('Ponovni OCR nije moguć u trenutnom statusu.')
     enqueue_invoice_import(run.pk)
     run.refresh_from_db()
     return import_dto(run)
@@ -408,6 +453,12 @@ def create_partner_from_import(*, tenant, import_id: int, data: dict, user=None)
         payload['tax_number'] = str(payload.get('tax_number') or '').strip()
         oib = payload['tax_number']
         vat = payload['vat_number']
+        identity = load_company_identity(tenant)
+        if is_hard_own_company({'oib': oib, 'vat_number': vat, 'name': payload.get('name') or ''}, identity):
+            raise PurchasingBadRequest(
+                'own_company_supplier',
+                'Dobavljač ne može biti vaša tvrtka. Odaberite izdavatelja s računa ili unesite podatke ručno.',
+            )
 
         existing = None
         match_kind = IncomingInvoiceImport.MATCH_EXACT_OIB
@@ -520,6 +571,68 @@ def apply_partner_updates(*, tenant, import_id: int) -> dict:
                 partner.refresh_from_db()
         run.partner_diff = compute_partner_diff(partner, supplier)
         run.save(update_fields=['partner_diff', 'updated_at'])
+        return import_dto(run)
+
+
+def apply_supplier(*, tenant, import_id: int, data: dict) -> dict:
+    with transaction.atomic():
+        run = (
+            IncomingInvoiceImport.all_objects.select_for_update(of=('self',))
+            .filter(tenant=tenant, pk=import_id)
+            .first()
+        )
+        if run is None:
+            raise Http404()
+        _require_extracted(run)
+        payload = dict(run.extracted_payload or {})
+        identity = load_company_identity(tenant)
+        source = str((data or {}).get('source') or '').strip()
+        if source in (SOURCE_ISSUER, SOURCE_BUYER):
+            raw = payload.get(source)
+            if not isinstance(raw, dict) or party_is_blank(party_from_raw(raw)):
+                raise PurchasingBadRequest(
+                    'supplier_party_blank',
+                    'Odabrana strana nema dovoljno podataka. Unesite dobavljača ručno.',
+                )
+            party = party_from_raw(raw, fallback_iban=str(payload.get('iban') or ''))
+            if is_hard_own_company(party, identity):
+                raise PurchasingBadRequest(
+                    'own_company_supplier',
+                    'Dobavljač ne može biti vaša tvrtka. Odaberite izdavatelja s računa ili unesite podatke ručno.',
+                )
+            payload['supplier'] = dict(raw)
+            payload['supplier_source'] = source
+        elif source == SOURCE_MANUAL:
+            raw = (data or {}).get('supplier')
+            if not isinstance(raw, dict):
+                raise PurchasingBadRequest('supplier_required', 'Unesite podatke dobavljača.')
+            party = party_from_raw(raw)
+            if party_is_blank(party):
+                raise PurchasingBadRequest('supplier_required', 'Unesite podatke dobavljača.')
+            if is_hard_own_company(party, identity):
+                raise PurchasingBadRequest(
+                    'own_company_supplier',
+                    'Dobavljač ne može biti vaša tvrtka. Odaberite izdavatelja s računa ili unesite podatke ručno.',
+                )
+            payload['supplier'] = dict(raw)
+            payload['supplier_source'] = SOURCE_MANUAL
+        else:
+            raise PurchasingBadRequest(
+                'supplier_source_invalid',
+                'Izvor dobavljača mora biti issuer, buyer ili manual.',
+            )
+        result = classify_document(payload, identity)
+        warnings = _extraction_warnings(payload)
+        warnings.extend(result.warnings)
+        run.extracted_payload = payload
+        run.warnings = warnings
+        _apply_partner_match(run, payload)
+        if run.duplicate_kind != IncomingInvoiceImport.DUPLICATE_HARD:
+            run.duplicate_kind = IncomingInvoiceImport.DUPLICATE_NONE
+            run.duplicate_expense = None
+            run.duplicate_detail = {}
+            _apply_business_duplicate(run, payload)
+        run.save()
         return import_dto(run)
 
 

@@ -108,6 +108,20 @@ class EracunConfigResolutionTests(TestCase):
         )
         self.assertIsNone(config)
 
+    def test_pondi_config_is_resolved(self):
+        IntegrationConfig.all_objects.create(
+            tenant=self.tenant,
+            integration_type=IntegrationType.ERACUN,
+            provider=IntegrationProvider.PONDI,
+            environment=IntegrationEnvironment.PRODUCTION,
+            is_active=True,
+        )
+        config = IntegrationRepository.resolve_eracun_config(
+            self.tenant,
+            IntegrationEnvironment.PRODUCTION,
+        )
+        self.assertEqual(config.provider, IntegrationProvider.PONDI)
+
     def test_returns_none_when_no_integration(self):
         config = IntegrationRepository.resolve_eracun_config(
             self.tenant,

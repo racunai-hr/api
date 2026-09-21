@@ -16,6 +16,7 @@ from config.schema_common import ERROR_400, ERROR_401, ERROR_404, ERROR_409, ERR
 from domains.purchasing.api.authentication import PurchasingJWTAuthentication
 from domains.purchasing.api.permissions import TenantPurchasingWritePermission
 from domains.purchasing.api.schema import (
+    ApplySupplierSerializer,
     ConfirmInvoiceImportSerializer,
     CreatePartnerFromImportSerializer,
     EracunInboundImportResponseSerializer,
@@ -37,6 +38,7 @@ from domains.purchasing.services.exceptions import PurchasingBadRequest, Purchas
 from domains.finance.services.account_resolver import ExpenseAccountResolutionError
 from domains.purchasing.services.invoice_import import (
     apply_partner_updates,
+    apply_supplier,
     create_partner_from_import,
     discard_invoice_import,
     get_invoice_import,
@@ -201,6 +203,36 @@ class InvoiceImportCreatePartnerView(_PurchasingApiView):
             raise ValidationError({'detail': str(exc)}) from exc
 
 
+class InvoiceImportApplySupplierView(_PurchasingApiView):
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_invoice_imports_apply_supplier',
+        request=ApplySupplierSerializer,
+        responses={
+            200: IncomingInvoiceImportSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request, pk: int):
+        ser = ApplySupplierSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                apply_supplier(
+                    tenant=_require_tenant(request),
+                    import_id=pk,
+                    data=ser.validated_data,
+                )
+            )
+        except PurchasingConflict as exc:
+            return _conflict(exc)
+        except PurchasingBadRequest as exc:
+            return _bad_request(exc)
+
+
 class InvoiceImportApplyPartnerUpdatesView(_PurchasingApiView):
     @extend_schema(
         tags=['purchasing'],
@@ -250,6 +282,8 @@ class InvoiceImportConfirmView(_PurchasingApiView):
             )
         except PurchasingConflict as exc:
             return _conflict(exc)
+        except PurchasingBadRequest as exc:
+            return _bad_request(exc)
         except ExpenseAccountResolutionError as exc:
             if getattr(exc, 'message_dict', None):
                 return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)

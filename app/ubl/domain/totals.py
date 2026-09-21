@@ -12,6 +12,9 @@ class TaxSubtotal(BaseModel):
     tax_amount: Decimal
     category_id: str = 'S'
     percent: Decimal
+    exemption_reason: str | None = None
+    name: str | None = None
+    tax_scheme: str = 'VAT'
 
 
 class MonetaryTotal(BaseModel):

@@ -58,3 +58,19 @@ class EnsureDefaultPostingRulesIdempotencyTests(TestCase):
             asset_rules[0].condition.get('posting_profile'),
             [ExpensePostingProfile.ASSET_PURCHASE],
         )
+
+        eu_names = set(
+            PostingRule.all_objects.filter(
+                tenant=self.tenant,
+                document_type='expense_approved',
+                credit_account_code='24032',
+                is_active=True,
+            ).values_list('name', flat=True)
+        )
+        self.assertEqual(
+            eu_names,
+            {
+                'Odobren trošak — EU usluge RC bez pretporeza',
+                'Odobren trošak — EU usluge RC pretporez',
+            },
+        )

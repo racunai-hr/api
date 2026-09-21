@@ -48,6 +48,12 @@ class M17SuperRemovalTests(TestCase):
             registered_pairs(),
         )
 
+    def test_pondi_eracun_connector_registered(self):
+        self.assertIn(
+            (IntegrationType.ERACUN, IntegrationProvider.PONDI),
+            registered_pairs(),
+        )
+
     def test_no_superclient_import_in_runtime_modules(self):
         for module_name in _iter_app_modules():
             module = importlib.import_module(module_name)

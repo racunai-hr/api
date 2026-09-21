@@ -7,11 +7,12 @@ Account resolution never reads partner defaults — those pick a category first.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 
 from accounting.models import ChartOfAccounts, PostingRule
-from expenses.models import Expense, ExpenseAccountSource, ExpenseCategory, ExpensePostingProfile
+from expenses.models import Expense, ExpenseAccountSource, ExpenseCategory, ExpenseLine, ExpensePostingProfile
 
 
 class ExpenseAccountResolutionError(ValidationError):
@@ -25,8 +26,18 @@ class ResolvedExpenseAccount:
     warning: str | None = None
 
 
-def is_expense_net_amount_rule(document_type: str, rule: PostingRule) -> bool:
-    return document_type == 'expense_approved' and rule.amount_field == 'net_amount'
+def is_expense_cost_amount_rule(document_type: str, rule: PostingRule) -> bool:
+    """Return whether the rule's debit belongs on the resolved expense account."""
+    if document_type != 'expense_approved':
+        return False
+    if rule.amount_field == 'net_amount':
+        return True
+    condition = rule.condition or {}
+    return (
+        rule.amount_field == 'eu_rc_vat'
+        and bool(condition.get('eu_service_reverse_charge'))
+        and condition.get('input_vat_deductible') is False
+    )
 
 
 def account_is_usable(account: ChartOfAccounts | None, tenant) -> bool:
@@ -47,6 +58,57 @@ def load_tenant_category(tenant, category_id: int) -> ExpenseCategory:
     return category
 
 
+@dataclass(frozen=True)
+class ExpenseLineAllocation:
+    kind: str
+    lines: tuple[ExpenseLine, ...] = ()
+    warning: str | None = None
+    code: str | None = None
+
+
+def _header_net(expense: Expense) -> Decimal:
+    tax = Decimal(getattr(expense, 'tax_amount', 0) or 0)
+    return Decimal(expense.amount) - tax
+
+
+def classify_expense_line_allocation(expense: Expense) -> ExpenseLineAllocation:
+    """header = existing single debit; split = one debit per line; blocked = do not approve."""
+    rows = list(expense.lines.all())
+    if not rows:
+        return ExpenseLineAllocation(kind='header')
+
+    assigned = [row for row in rows if row.posting_account_id]
+    if not assigned:
+        return ExpenseLineAllocation(kind='header')
+    if len(assigned) != len(rows):
+        return ExpenseLineAllocation(
+            kind='blocked',
+            warning='Sve stavke moraju imati konto, ili nijedna.',
+            code='mixed_line_accounts',
+        )
+
+    tenant = expense.tenant
+    for row in rows:
+        if not account_is_usable(row.posting_account, tenant):
+            raise ExpenseAccountResolutionError({
+                'line_accounts': 'Konto stavke mora biti aktivno knjiživo konto ovog tenanta.',
+            })
+
+    line_net = sum((Decimal(row.net_amount) for row in rows), Decimal('0.00'))
+    line_vat = sum((Decimal(row.vat_amount) for row in rows), Decimal('0.00'))
+    line_gross = sum((Decimal(row.gross_amount) for row in rows), Decimal('0.00'))
+    header_net = _header_net(expense)
+    header_tax = Decimal(getattr(expense, 'tax_amount', 0) or 0)
+    header_gross = Decimal(expense.amount)
+    if line_net != header_net or line_vat != header_tax or line_gross != header_gross:
+        return ExpenseLineAllocation(
+            kind='blocked',
+            warning='Zbroj stavki ne odgovara iznosima računa.',
+            code='line_allocation_mismatch',
+        )
+    return ExpenseLineAllocation(kind='split', lines=tuple(rows))
+
+
 def load_postable_account(tenant, account_id: int, *, field: str = 'expense_account_id') -> ChartOfAccounts:
     account = ChartOfAccounts.all_objects.filter(tenant=tenant, pk=account_id).first()
     if account is None:
@@ -59,7 +121,7 @@ def load_postable_account(tenant, account_id: int, *, field: str = 'expense_acco
 
 
 def resolve_expense_account(expense: Expense, posting_rule: PostingRule) -> ResolvedExpenseAccount:
-    """Konto rashoda for the expense_approved net line.
+    """Konto rashoda for an expense_approved cost line.
 
     Priority:
     1. Expense.expense_account → manual_override (hard-fail if unusable)

@@ -25,6 +25,12 @@ class RegistryTests(TestCase):
             registered_pairs(),
         )
 
+    def test_pondi_eracun_is_registered(self):
+        self.assertIn(
+            (IntegrationType.ERACUN, IntegrationProvider.PONDI),
+            registered_pairs(),
+        )
+
     def test_create_direct_connector(self):
         tenant = Tenant.objects.create(slug='reg-test', name='Registry Test')
         DirectTenantConfig.all_objects.create(
@@ -41,6 +47,19 @@ class RegistryTests(TestCase):
         )
         connector = create(config)
         self.assertEqual(connector.__class__.__name__, 'DirectEracunConnector')
+        self.assertEqual(connector.tenant, tenant)
+
+    def test_create_pondi_connector(self):
+        tenant = Tenant.objects.create(slug='pondi-reg', name='Pondi Registry')
+        config = IntegrationConfig.all_objects.create(
+            tenant=tenant,
+            integration_type=IntegrationType.ERACUN,
+            provider=IntegrationProvider.PONDI,
+            environment=IntegrationEnvironment.PRODUCTION,
+            is_active=True,
+        )
+        connector = create(config)
+        self.assertEqual(connector.__class__.__name__, 'PondiEracunConnector')
         self.assertEqual(connector.tenant, tenant)
 
     def test_super_config_cannot_create_connector(self):

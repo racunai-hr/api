@@ -102,6 +102,10 @@ CONTRACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
         ('get', '/api/tax/pdv-s/periods/{period}/'),
         ('get', '/api/tax/pdv-s/periods/{period}/xml/'),
         ('post', '/api/tax/pdv-s/periods/{period}/submit/'),
+        ('get', '/api/tax/tz2/years/{year}/'),
+        ('put', '/api/tax/tz2/years/{year}/'),
+        ('get', '/api/tax/tz2/years/{year}/xml/'),
+        ('post', '/api/tax/tz2/years/{year}/submit/'),
         ('post', '/api/tax/submissions/{event_uuid}/confirmation/'),
     }
 )
@@ -227,6 +231,9 @@ URL_NAME_TO_OPERATION: dict[str, tuple[str, str]] = {
     'tax-pdv-s-period-detail': ('get', '/api/tax/pdv-s/periods/{period}/'),
     'tax-pdv-s-period-xml': ('get', '/api/tax/pdv-s/periods/{period}/xml/'),
     'tax-pdv-s-period-submit': ('post', '/api/tax/pdv-s/periods/{period}/submit/'),
+    'tax-tz2-year': ('get', '/api/tax/tz2/years/{year}/'),
+    'tax-tz2-year-xml': ('get', '/api/tax/tz2/years/{year}/xml/'),
+    'tax-tz2-year-submit': ('post', '/api/tax/tz2/years/{year}/submit/'),
     'tax-submission-confirmation': ('post', '/api/tax/submissions/{event_uuid}/confirmation/'),
 }
 

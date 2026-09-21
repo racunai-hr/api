@@ -209,7 +209,7 @@ class MatchRequestSerializer(serializers.Serializer):
 
 
 class OpenItemCandidateSerializer(serializers.Serializer):
-    item_id = serializers.IntegerField()
+    item_id = serializers.IntegerField(allow_null=True)
     partner_id = serializers.IntegerField(allow_null=True)
     partner_name = serializers.CharField(allow_blank=True)
     direction = serializers.CharField()
