@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import DecimalField, Prefetch, Q, Sum, Value
+from django.db.models import DecimalField, Exists, OuterRef, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404
 
@@ -40,6 +40,15 @@ def list_journal_entries(tenant, filters: JournalEntryListFilters) -> dict:
                 Q(entry_number__icontains=term)
                 | Q(description__icontains=term)
                 | Q(reference__icontains=term)
+            )
+        if filters.cost_center_id:
+            qs = qs.filter(
+                Exists(
+                    JournalEntryLine.objects.filter(
+                        journal_entry_id=OuterRef('pk'),
+                        cost_center_id=filters.cost_center_id,
+                    )
+                )
             )
         total = qs.count()
         start = (filters.page - 1) * filters.page_size

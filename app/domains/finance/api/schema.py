@@ -290,6 +290,12 @@ JOURNAL_ENTRY_LIST_PARAMS = [
         description='Filter by entry_number, description, or reference',
     ),
     OpenApiParameter(
+        'cost_center',
+        OpenApiTypes.INT,
+        OpenApiParameter.QUERY,
+        description='Journal entries with a line on this cost center',
+    ),
+    OpenApiParameter(
         name='page',
         type=OpenApiTypes.INT,
         location=OpenApiParameter.QUERY,
@@ -425,6 +431,18 @@ class ExpenseDraftPatchSerializer(serializers.Serializer):
     line_accounts = ExpenseLineAccountPatchSerializer(many=True, required=False)
 
 
+class CostCenterLinkedVehicleSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    vin = serializers.CharField(allow_blank=True)
+    fixed_asset_id = serializers.IntegerField(allow_null=True)
+
+
+class CostCenterLinkedAssetSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class CostCenterSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     code = serializers.CharField()
@@ -435,6 +453,8 @@ class CostCenterSerializer(serializers.Serializer):
     notes = serializers.CharField(allow_blank=True)
     parent_id = serializers.IntegerField(allow_null=True)
     parent = CostCenterRefSerializer(allow_null=True)
+    vehicle = CostCenterLinkedVehicleSerializer(allow_null=True)
+    fixed_assets = CostCenterLinkedAssetSerializer(many=True)
 
 
 class CostCenterListSerializer(serializers.Serializer):

@@ -472,6 +472,46 @@ class JournalEntryReadApiTests(TestCase):
         response = client.get('/api/finance/journal-entries/', {'status': 'paid'})
         self.assertEqual(response.status_code, 400)
 
+    def test_cost_center_filter_matches_line_only(self):
+        from accounting.models import CostCenter, CostCenterKind
+
+        kitchen = CostCenter.all_objects.create(
+            tenant=self.tenant,
+            code='110',
+            name='Kuhinja',
+            kind=CostCenterKind.LOCATION,
+        )
+        other_cc = CostCenter.all_objects.create(
+            tenant=self.tenant,
+            code='100',
+            name='Restoran',
+            kind=CostCenterKind.LOCATION,
+        )
+        JournalEntryLine.objects.filter(journal_entry=self.multi).update(cost_center=kitchen)
+        other_line = JournalEntryLine.objects.filter(journal_entry=self.invoice_je).first()
+        if other_line is None:
+            JournalEntryLine.objects.create(
+                journal_entry=self.invoice_je,
+                account=self.account,
+                debit_amount=Decimal('10.00'),
+                credit_amount=Decimal('0'),
+                cost_center=other_cc,
+            )
+        else:
+            other_line.cost_center = other_cc
+            other_line.save(update_fields=['cost_center'])
+
+        client = self._client(self.viewer)
+        matched = client.get('/api/finance/journal-entries/', {'cost_center': kitchen.pk})
+        self.assertEqual(matched.status_code, 200)
+        numbers = {row['entry_number'] for row in matched.data['results']}
+        self.assertEqual(numbers, {'202607-MULTI'})
+
+        other = client.get('/api/finance/journal-entries/', {'cost_center': other_cc.pk})
+        self.assertEqual(other.status_code, 200)
+        other_numbers = {row['entry_number'] for row in other.data['results']}
+        self.assertNotIn('202607-MULTI', other_numbers)
+
     def test_search_uses_model_fields_only(self):
         client = self._client(self.viewer)
         by_ref = client.get('/api/finance/journal-entries/', {'search': 'WAUZZZF86RN003268'})

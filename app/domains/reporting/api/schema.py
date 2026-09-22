@@ -471,6 +471,18 @@ DOCUMENT_LIST_PARAMS = [
     OpenApiParameter('year', OpenApiTypes.INT, OpenApiParameter.QUERY),
     OpenApiParameter('month', OpenApiTypes.INT, OpenApiParameter.QUERY),
     OpenApiParameter('partner', OpenApiTypes.INT, OpenApiParameter.QUERY, description='Partner id'),
+    OpenApiParameter(
+        'cost_center',
+        OpenApiTypes.INT,
+        OpenApiParameter.QUERY,
+        description='Documents whose posted journal has a line on this cost center',
+    ),
+    OpenApiParameter(
+        'fixed_asset',
+        OpenApiTypes.INT,
+        OpenApiParameter.QUERY,
+        description='Official documents on this asset, or expenses on its vehicle',
+    ),
     OpenApiParameter('oib', OpenApiTypes.STR, OpenApiParameter.QUERY),
     OpenApiParameter('date_from', OpenApiTypes.DATE, OpenApiParameter.QUERY),
     OpenApiParameter('date_to', OpenApiTypes.DATE, OpenApiParameter.QUERY),

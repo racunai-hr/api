@@ -237,6 +237,17 @@ def _journal_exists(tenant, model, statuses=('posted', 'draft')):
     )
 
 
+def _posted_journal_with_cost_center(tenant, model, cost_center_id: int):
+    ct = ContentType.objects.get_for_model(model)
+    return JournalEntry.all_objects.filter(
+        tenant=tenant,
+        source_content_type=ct,
+        source_object_id=OuterRef('pk'),
+        status='posted',
+        lines__cost_center_id=cost_center_id,
+    )
+
+
 def _ledger_exists(tenant, model):
     ct = ContentType.objects.get_for_model(model)
     return VATLedgerEntry.all_objects.filter(
@@ -402,7 +413,11 @@ def _apply_deposit_view(qs, tenant, filters: DocumentListFilters, today: date):
 def filtered_invoices(tenant, filters: DocumentListFilters, today: date):
     if not includes_direction(filters, 'outgoing'):
         return _base_invoices(tenant).none()
+    if filters.fixed_asset_id:
+        return _base_invoices(tenant).none()
     qs = _apply_common_invoice_filters(_base_invoices(tenant), filters)
+    if filters.cost_center_id:
+        qs = qs.filter(Exists(_posted_journal_with_cost_center(tenant, Invoice, filters.cost_center_id)))
     return _apply_invoice_view(qs, tenant, filters, today)
 
 
@@ -410,11 +425,17 @@ def filtered_expenses(tenant, filters: DocumentListFilters, today: date):
     if not includes_direction(filters, 'incoming'):
         return _base_expenses(tenant).none()
     qs = _apply_common_expense_filters(_base_expenses(tenant), filters)
+    if filters.fixed_asset_id:
+        qs = qs.filter(vehicle__fixed_asset_id=filters.fixed_asset_id)
+    if filters.cost_center_id:
+        qs = qs.filter(Exists(_posted_journal_with_cost_center(tenant, Expense, filters.cost_center_id)))
     return _apply_expense_view(qs, tenant, filters, today)
 
 
 def filtered_deposits(tenant, filters: DocumentListFilters, today: date):
     if not includes_direction(filters, 'deposit'):
+        return _base_deposits(tenant).none()
+    if filters.fixed_asset_id or filters.cost_center_id:
         return _base_deposits(tenant).none()
     qs = _apply_common_deposit_filters(_base_deposits(tenant), filters)
     return _apply_deposit_view(qs, tenant, filters, today)
@@ -424,6 +445,12 @@ def filtered_official(tenant, filters: DocumentListFilters, today: date):
     if not includes_direction(filters, 'official'):
         return _base_official(tenant).none()
     qs = _apply_common_official_filters(_base_official(tenant), filters)
+    if filters.fixed_asset_id:
+        qs = qs.filter(related_fixed_asset_id=filters.fixed_asset_id)
+    if filters.cost_center_id:
+        qs = qs.filter(
+            Exists(_posted_journal_with_cost_center(tenant, OfficialDocument, filters.cost_center_id))
+        )
     return _apply_official_view(qs, tenant, filters, today)
 
 

@@ -71,7 +71,7 @@ def list_fixed_assets(tenant, filters: FixedAssetListFilters) -> dict:
 
 
 def get_fixed_asset(tenant, asset_id: int) -> dict:
-    asset = _asset_queryset(tenant).filter(pk=asset_id).first()
+    asset = _asset_queryset(tenant).select_related('cost_center').filter(pk=asset_id).first()
     if asset is None:
         raise Http404()
     return fixed_asset_detail_dto(asset)

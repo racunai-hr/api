@@ -72,6 +72,7 @@ from domains.finance.services.expenses import (
 from domains.finance.services.chart_accounts import list_postable_accounts
 from domains.finance.services.cost_centers import (
     create_cost_center,
+    get_cost_center,
     list_cost_centers,
     update_cost_center,
 )
@@ -835,8 +836,28 @@ class CostCenterListCreateView(APIView):
             return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class CostCenterDetailView(_FinanceWriteApiView):
-    http_method_names = ['patch', 'head', 'options']
+class CostCenterDetailView(APIView):
+    authentication_classes = [FinanceJWTAuthentication]
+    permission_classes = [IsAuthenticated, TenantFinanceReadPermission]
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [IsAuthenticated(), TenantFinanceWritePermission()]
+        return super().get_permissions()
+
+    def permission_denied(self, request, message=None, code=None):
+        if getattr(request, 'user', None) and request.user.is_authenticated:
+            raise Http404()
+        super().permission_denied(request, message=message, code=code)
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_retrieve',
+        responses={200: CostCenterSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        return Response(get_cost_center(tenant=_require_tenant(request), cost_center_id=pk))
 
     @extend_schema(
         tags=['finance'],

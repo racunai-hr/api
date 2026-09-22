@@ -35,6 +35,7 @@ class JournalEntryListFilters:
     date_from: date | None = None
     date_to: date | None = None
     search: str = ''
+    cost_center_id: int | None = None
     page: int = 1
     page_size: int = 20
 
@@ -49,6 +50,7 @@ def parse_journal_entry_filters(query) -> JournalEntryListFilters:
         date_from=_date(query.get('date_from')),
         date_to=_date(query.get('date_to')),
         search=(query.get('search') or '').strip(),
+        cost_center_id=_int(query.get('cost_center')),
         page=page,
         page_size=page_size,
     )

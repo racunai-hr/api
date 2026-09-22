@@ -284,8 +284,23 @@ class AssetsReadApiTests(TestCase):
         self.assertEqual(response.data['useful_life_months'], 60)
         self.assertEqual(response.data['depreciation_method'], 'linear')
         self.assertEqual(response.data['activation_journal_entry_id'], self.activation.pk)
+        self.assertIsNone(response.data['cost_center'])
         self.assertNotIn('activation_readiness', response.data)
         self.assertNotIn('asset_account', response.data)
+
+    def test_detail_cost_center_ref(self):
+        from accounting.models import CostCenter, CostCenterKind
+
+        cc = CostCenter.all_objects.create(
+            tenant=self.tenant,
+            code='701',
+            name='Audi A8',
+            kind=CostCenterKind.OBJECT,
+        )
+        self.asset.cost_center = cc
+        self.asset.save(update_fields=['cost_center'])
+        body = self._client(self.viewer).get(f'/api/assets/fixed-assets/{self.asset.pk}/').json()
+        self.assertEqual(body['cost_center'], {'id': cc.pk, 'code': '701', 'name': 'Audi A8'})
 
     def test_detail_other_tenant_is_404(self):
         response = self._client(self.viewer).get(

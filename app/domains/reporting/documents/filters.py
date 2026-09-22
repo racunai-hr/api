@@ -53,6 +53,8 @@ class DocumentListFilters:
     year: int | None = None
     month: int | None = None
     partner_id: int | None = None
+    cost_center_id: int | None = None
+    fixed_asset_id: int | None = None
     oib: str | None = None
     date_from: date | None = None
     date_to: date | None = None
@@ -111,6 +113,8 @@ def parse_filters(query) -> DocumentListFilters:
     year = _int(query.get('year'))
     month = _int(query.get('month'))
     partner_id = _int(query.get('partner'))
+    cost_center_id = _int(query.get('cost_center'))
+    fixed_asset_id = _int(query.get('fixed_asset'))
     return DocumentListFilters(
         direction=direction,
         status=query.get('status') or None,
@@ -118,6 +122,8 @@ def parse_filters(query) -> DocumentListFilters:
         year=year,
         month=month,
         partner_id=partner_id,
+        cost_center_id=cost_center_id,
+        fixed_asset_id=fixed_asset_id,
         oib=(query.get('oib') or '').strip() or None,
         date_from=_date(query.get('date_from')),
         date_to=_date(query.get('date_to')),

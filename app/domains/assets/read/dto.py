@@ -24,6 +24,7 @@ DETAIL_KEYS = LIST_ITEM_KEYS + (
     'useful_life_months',
     'depreciation_method',
     'activation_journal_entry_id',
+    'cost_center',
 )
 
 SCHEDULE_ITEM_KEYS = (
@@ -97,6 +98,17 @@ def fixed_asset_list_item_dto(asset: FixedAsset) -> dict:
     }
 
 
+def _cost_center_ref(asset: FixedAsset) -> dict | None:
+    cost_center = getattr(asset, 'cost_center', None)
+    if cost_center is None:
+        return None
+    return {
+        'id': cost_center.pk,
+        'code': cost_center.code,
+        'name': cost_center.name,
+    }
+
+
 def fixed_asset_detail_dto(asset: FixedAsset) -> dict:
     payload = fixed_asset_list_item_dto(asset)
     payload.update(
@@ -105,6 +117,7 @@ def fixed_asset_detail_dto(asset: FixedAsset) -> dict:
             'useful_life_months': asset.useful_life_months,
             'depreciation_method': asset.depreciation_method,
             'activation_journal_entry_id': asset.activation_journal_entry_id,
+            'cost_center': _cost_center_ref(asset),
         }
     )
     return payload

@@ -262,3 +262,55 @@ class CostCenterTests(TestCase):
         listed = other_client.get('/api/finance/cost-centers/')
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.data['count'], 0)
+
+    def test_retrieve_includes_vehicle_and_fixed_assets(self):
+        from accounting.models import (
+            DepreciationMethod,
+            FixedAsset,
+            FixedAssetOrigin,
+            FixedAssetStatus,
+            Vehicle,
+        )
+
+        retrieved = self.client.get(f'/api/finance/cost-centers/{self.kitchen.pk}/')
+        self.assertEqual(retrieved.status_code, 200)
+        self.assertEqual(retrieved.data['code'], '110')
+        self.assertIsNone(retrieved.data['vehicle'])
+        self.assertEqual(retrieved.data['fixed_assets'], [])
+
+        missing = self.client.get('/api/finance/cost-centers/999999/')
+        self.assertEqual(missing.status_code, 404)
+
+        object_cc = CostCenter.all_objects.create(
+            tenant=self.tenant,
+            code='701',
+            name='Audi A8',
+            kind=CostCenterKind.OBJECT,
+            parent=self.group,
+        )
+        asset = FixedAsset.all_objects.create(
+            tenant=self.tenant,
+            name='Audi A8 Lang 50 TDI',
+            vin='WAUZZZF86RN003268',
+            status=FixedAssetStatus.IN_PREPARATION,
+            origin=FixedAssetOrigin.OPENING_BALANCE,
+            acquisition_cost=Decimal('100.00'),
+            purchase_date=date(2026, 8, 1),
+            depreciation_method=DepreciationMethod.LINEAR,
+            construction_account=self.account_4100,
+            asset_account=self.account_4100,
+            accumulated_depreciation_account=self.account_4100,
+            depreciation_expense_account=self.account_4100,
+            cost_center=object_cc,
+        )
+        Vehicle.all_objects.create(
+            tenant=self.tenant,
+            name='Audi A8 Lang 50 TDI',
+            vin='WAUZZZF86RN003268',
+            fixed_asset=asset,
+            cost_center=object_cc,
+        )
+        body = self.client.get(f'/api/finance/cost-centers/{object_cc.pk}/').json()
+        self.assertEqual(body['vehicle']['vin'], 'WAUZZZF86RN003268')
+        self.assertEqual(body['vehicle']['fixed_asset_id'], asset.pk)
+        self.assertEqual(body['fixed_assets'], [{'id': asset.pk, 'name': 'Audi A8 Lang 50 TDI'}])

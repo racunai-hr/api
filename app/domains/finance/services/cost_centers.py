@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.http import Http404
 
-from accounting.models import CostCenter, CostCenterKind
+from accounting.models import CostCenter, CostCenterKind, Vehicle
 
 HOSPITALITY_PRESET = (
     {'code': '1', 'name': 'Ugostiteljstvo', 'kind': CostCenterKind.GROUP, 'parent_code': None},
@@ -43,6 +43,28 @@ def cost_center_ref(cost_center: CostCenter | None) -> dict | None:
     }
 
 
+def _vehicle_ref(cost_center: CostCenter) -> dict | None:
+    try:
+        vehicle = cost_center.vehicle
+    except (ObjectDoesNotExist, Vehicle.DoesNotExist):
+        return None
+    if vehicle is None:
+        return None
+    return {
+        'id': vehicle.pk,
+        'name': vehicle.name,
+        'vin': vehicle.vin or '',
+        'fixed_asset_id': vehicle.fixed_asset_id,
+    }
+
+
+def _fixed_asset_refs(cost_center: CostCenter) -> list[dict]:
+    return [
+        {'id': asset.pk, 'name': asset.name}
+        for asset in cost_center.fixed_assets.all().order_by('name', 'pk')
+    ]
+
+
 def cost_center_dto(cost_center: CostCenter) -> dict:
     parent = cost_center.parent
     return {
@@ -55,19 +77,34 @@ def cost_center_dto(cost_center: CostCenter) -> dict:
         'notes': cost_center.notes or '',
         'parent_id': cost_center.parent_id,
         'parent': cost_center_ref(parent) if parent is not None else None,
+        'vehicle': _vehicle_ref(cost_center),
+        'fixed_assets': _fixed_asset_refs(cost_center),
     }
 
 
 def list_cost_centers(*, tenant, include_inactive: bool = False) -> dict:
-    qs = CostCenter.all_objects.filter(tenant=tenant).select_related('parent')
+    qs = (
+        CostCenter.all_objects.filter(tenant=tenant)
+        .select_related('parent', 'vehicle')
+        .prefetch_related('fixed_assets')
+    )
     if not include_inactive:
         qs = qs.filter(is_active=True)
     rows = [cost_center_dto(row) for row in qs.order_by('code')]
     return {'count': len(rows), 'results': rows}
 
 
+def get_cost_center(*, tenant, cost_center_id: int) -> dict:
+    return cost_center_dto(_load(tenant, cost_center_id))
+
+
 def _load(tenant, cost_center_id: int) -> CostCenter:
-    row = CostCenter.all_objects.filter(tenant=tenant, pk=cost_center_id).select_related('parent').first()
+    row = (
+        CostCenter.all_objects.filter(tenant=tenant, pk=cost_center_id)
+        .select_related('parent', 'vehicle')
+        .prefetch_related('fixed_assets')
+        .first()
+    )
     if row is None:
         raise Http404()
     return row

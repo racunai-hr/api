@@ -23,11 +23,18 @@ class FixedAssetListItemSerializer(serializers.Serializer):
     current_book_value = money_field()
 
 
+class AssetCostCenterRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+
+
 class FixedAssetDetailSerializer(FixedAssetListItemSerializer):
     vin = serializers.CharField(allow_blank=True)
     useful_life_months = serializers.IntegerField(allow_null=True)
     depreciation_method = serializers.CharField()
     activation_journal_entry_id = serializers.IntegerField(allow_null=True)
+    cost_center = AssetCostCenterRefSerializer(allow_null=True)
 
 
 class PaginatedFixedAssetsSerializer(serializers.Serializer):
