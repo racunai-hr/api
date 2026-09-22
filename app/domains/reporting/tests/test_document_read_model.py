@@ -396,6 +396,36 @@ class DocumentReadModelTests(TestCase):
         self.assertEqual(explicit['value'], 'disputed')
         self.assertEqual(explicit['source'], 'as4_document_link')
 
+    def test_zero_vat_bank_expense_is_not_awaiting_ledger(self):
+        bank = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='OTP banka d.d.',
+            tax_number='12345678901',
+            partner_type='supplier',
+            status='active',
+            address='Ulica 3',
+            city='Zagreb',
+            postal_code='10000',
+        )
+        expense = self._expense(
+            status='paid',
+            supplier=bank,
+            amount=Decimal('23.20'),
+            tax_amount=Decimal('0.00'),
+            expense_number='T-BANK-FEE',
+        )
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['vat']['lifecycle']['value'], 'not_tax_active')
+        self.assertEqual(body['vat']['lifecycle']['source'], 'tax_classification')
+        self.assertIsNone(body['vat']['period']['value'])
+        self.assertEqual(body['vat']['period']['reason'], 'not_applicable')
+        self.assertNotIn('vat_ledger_missing', body['controls'])
+
+        taxable = self._expense(status='paid')
+        taxable_body = self._auth_client().get(f'/api/documents/incoming/{taxable.pk}/').json()
+        self.assertEqual(taxable_body['vat']['lifecycle']['value'], 'awaiting_ledger')
+        self.assertIn('vat_ledger_missing', taxable_body['controls'])
+
     def test_incoming_paid_bank_matched_without_subledger_is_paid(self):
         """Manual JE + bank match (e.g. uvoz vozila) — no AP subledger, still operational paid."""
         expense = self._expense(status='paid', amount=Decimal('8000.00'), tax_amount=Decimal('0.00'))
@@ -570,6 +600,32 @@ class DocumentReadModelTests(TestCase):
         )
         self.assertEqual(result, 'not_provable')
         body = self._auth_client().get(f'/api/documents/outgoing/{invoice.pk}/').json()
+        self.assertNotIn('vat_amount_mismatch', body['controls'])
+
+    def test_cvh_mixed_taxable_slice_is_not_amount_mismatch(self):
+        supplier = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='CVH STP "VODICE"',
+            tax_number='12345678903',
+            partner_type='supplier',
+            status='active',
+            address='Ulica 4',
+            city='Vodice',
+            postal_code='22211',
+        )
+        expense = self._expense(
+            status='paid',
+            supplier=supplier,
+            amount=Decimal('372.20'),
+            tax_amount=Decimal('7.49'),
+            expense_number='T-CVH-MIX',
+        )
+        entry = self._ledger(expense)
+        entry.base_amount = Decimal('29.96')
+        entry.vat_amount = Decimal('7.49')
+        entry.save(update_fields=['base_amount', 'vat_amount'])
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['vat']['lifecycle']['value'], 'in_ledger')
         self.assertNotIn('vat_amount_mismatch', body['controls'])
 
     def test_secondary_iban_no_warning(self):

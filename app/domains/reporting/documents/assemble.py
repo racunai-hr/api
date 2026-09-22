@@ -18,6 +18,7 @@ from domains.reporting.documents.projection import (
     collect_controls,
     money,
     collect_official_controls,
+    expense_vat_not_applicable,
     operational_deposit,
     operational_incoming,
     operational_official,
@@ -27,6 +28,7 @@ from domains.reporting.documents.projection import (
     posting_block,
     vat_lifecycle,
 )
+from domains.reporting.documents.tax_active import expense_tax_active
 from accounting.services.journal_markers import extract_document_type
 from fiscal_gateway.models import As4DocumentLink
 from integrations.models import IntegrationOutboxMessage
@@ -212,12 +214,19 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             bank_matched=match_status == 'matched',
         )
 
+    vat_not_applicable = (
+        direction == 'incoming'
+        and not ledger_rows
+        and expense_tax_active(document.status)
+        and expense_vat_not_applicable(document)
+    )
     alerts, notices = collect_controls({
         'document': document,
         'direction': direction,
         'partner': partner,
         'subledger': subledger,
         'ledger_rows': ledger_rows,
+        'vat_not_applicable': vat_not_applicable,
         'as_of_day': as_of_day,
         'as4_status': as4_status,
         'posting_entry': posting,
@@ -258,10 +267,15 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         'bank': bank_block(match_status=match_status, expected=expected_bank),
         'payment_order': payment_order_block(order),
         'vat': {
-            'lifecycle': vat_lifecycle(direction=direction, document=document, ledger_rows=ledger_rows),
-            'ledger_type': provenanced(ledger_type, source='vat_ledger_entry') if ledger_type else provenanced(None, reason='not_recorded'),
-            'period': provenanced(period_label, source='vat_ledger_entry') if period_label else provenanced(None, reason='not_recorded'),
-            'boxes': provenanced(boxes, source='vat_ledger_entry') if boxes else provenanced(None, reason='not_recorded'),
+            'lifecycle': vat_lifecycle(
+                direction=direction,
+                document=document,
+                ledger_rows=ledger_rows,
+                not_tax_relevant=vat_not_applicable,
+            ),
+            'ledger_type': provenanced(ledger_type, source='vat_ledger_entry') if ledger_type else provenanced(None, reason='not_applicable' if vat_not_applicable else 'not_recorded'),
+            'period': provenanced(period_label, source='vat_ledger_entry') if period_label else provenanced(None, reason='not_applicable' if vat_not_applicable else 'not_recorded'),
+            'boxes': provenanced(boxes, source='vat_ledger_entry') if boxes else provenanced(None, reason='not_applicable' if vat_not_applicable else 'not_recorded'),
             'document_in_submitted_return': provenanced(None, reason='not_provable'),
             'period_returns': versions,
             'disclaimer': disclaimer,

@@ -21,6 +21,7 @@ _EU_ASSET_PPMV_DUAL = frozenset({'0373'})
 _VAT_OUTPUT_PREFIXES = ('2400',)
 _REVENUE_PREFIXES = ('75', '76')
 _ACTIVE_INVOICE = frozenset({'sent', 'paid', 'overdue'})
+_ACTIVE_EXPENSE = frozenset({'approved', 'paid'})
 
 
 def tenant_uses_cash_accounting(tenant_id: int) -> bool:
@@ -138,6 +139,46 @@ def _posted_invoice_issued_siblings(original: JournalEntry, *, exclude_pks: set[
     return siblings
 
 
+def _expense_for(entry: JournalEntry):
+    app_label, model = _gfk_model(entry)
+    if app_label != 'expenses' or model != 'expense' or not entry.source_object_id:
+        return None
+    from expenses.models import Expense
+
+    return Expense.all_objects.filter(tenant_id=entry.tenant_id, pk=entry.source_object_id).first()
+
+
+def _live_expense_approved_replacement(original: JournalEntry) -> JournalEntry | None:
+    """Unique posted expense_approved sibling while the expense stays tax-active.
+
+    Input VAT is owned by the expense document, and auto-posted pretporez lines are
+    skipped in the projection snapshot. A reversed approval is therefore not a second
+    VAT event when exactly one live replacement posting remains.
+
+    Unlike invoice_issued, expense repost does not set replaces_entry. The live
+    sibling is the provenance. Missing or ambiguous replacement stays undetermined.
+    """
+    if not original.source_content_type_id or not original.source_object_id:
+        return None
+    expense = _expense_for(original)
+    if expense is None or expense.status not in _ACTIVE_EXPENSE:
+        return None
+    siblings = []
+    qs = JournalEntry.all_objects.filter(
+        tenant_id=original.tenant_id,
+        source_content_type_id=original.source_content_type_id,
+        source_object_id=original.source_object_id,
+        status='posted',
+        reversed_entry__isnull=True,
+    ).exclude(pk=original.pk)
+    for entry in qs:
+        if extract_document_type(entry.description or '') == 'expense_approved':
+            siblings.append(entry)
+    if len(siblings) != 1:
+        return None
+    return siblings[0]
+
+
 def _technical_repost_replacement(original: JournalEntry) -> JournalEntry | None:
     """Return the unique valid replacement JE, or None if not a clean technical repost."""
     replacements = list(
@@ -233,7 +274,20 @@ def assess_reversal_relevance(
             return ReversalRelevanceAssessment(TaxRelevance.NOT_TAX_RELEVANT, OriginTaxOwner.NONE)
         return ReversalRelevanceAssessment(TaxRelevance.UNDETERMINED, OriginTaxOwner.INVOICE)
 
-    if is_expense and (marker == 'expense_approved' or has_pdv_family):
+    # Payment of a payable is not a VAT event. A PDV account on that journal stays undetermined.
+    if is_expense and marker == 'expense_paid':
+        if has_pdv_family:
+            return ReversalRelevanceAssessment(TaxRelevance.UNDETERMINED, OriginTaxOwner.EXPENSE)
+        return ReversalRelevanceAssessment(TaxRelevance.NOT_TAX_RELEVANT, OriginTaxOwner.NONE)
+
+    # expense_approved: NTR only for one live replacement. invoice_issued still
+    # requires replaces_entry and is unchanged above.
+    if is_expense and marker == 'expense_approved':
+        if _live_expense_approved_replacement(original) is not None:
+            return ReversalRelevanceAssessment(TaxRelevance.NOT_TAX_RELEVANT, OriginTaxOwner.NONE)
+        return ReversalRelevanceAssessment(TaxRelevance.UNDETERMINED, OriginTaxOwner.EXPENSE)
+
+    if is_expense and has_pdv_family:
         return ReversalRelevanceAssessment(TaxRelevance.UNDETERMINED, OriginTaxOwner.EXPENSE)
 
     # --- journal-owned VAT without recoverable line evidence ---

@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from accounting.models import VATEntryCategory, VATReturnStatus
+from accounting.services.tax_forms.pdv.mapping import cvh_mixed_25_amounts, is_cvh_stp_supplier
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
 from domains.finance.services.aging import aging_bucket_for_days
 from domains.reporting.documents.provenance import provenanced
@@ -68,7 +69,29 @@ def _canonical_tax_date(direction: str, document) -> date | None:
     return None
 
 
-def vat_lifecycle(*, direction: str, document, ledger_rows: list) -> dict:
+def expense_vat_not_applicable(document) -> bool:
+    """True when the classifier excludes a tax-active expense from the VAT book.
+
+    Bank fees, insurance premiums and Swiss telecom with no charged VAT are
+    NOT_TAX_RELEVANT. They have no ledger row by design, not because evidence is pending.
+    """
+    expense_date = getattr(document, 'expense_date', None)
+    if expense_date is None:
+        return False
+    from types import SimpleNamespace
+
+    from accounting.services.tax_shadow.adapters import adapt_expense
+    from domains.tax.classification.contracts import Outcome
+    from domains.tax.classification.engine import classify
+
+    period = SimpleNamespace(year=expense_date.year, month=expense_date.month)
+    result = classify(adapt_expense(document, period=period))
+    return result.outcome == Outcome.NOT_TAX_RELEVANT
+
+
+def vat_lifecycle(*, direction: str, document, ledger_rows: list, not_tax_relevant: bool = False) -> dict:
+    if not_tax_relevant:
+        return provenanced('not_tax_active', source='tax_classification')
     status = document.status
     active = invoice_tax_active(status) if direction == 'outgoing' else expense_tax_active(status)
     if not active:
@@ -100,6 +123,16 @@ def vat_amount_check(*, direction: str, document, ledger_rows: list, items: list
         doc_vat = document.tax_amount
     led_base = sum((row.base_amount for row in ledger_rows), Decimal('0'))
     led_vat = sum((row.vat_amount for row in ledger_rows), Decimal('0'))
+    if (
+        direction != 'outgoing'
+        and abs(led_vat - doc_vat) <= MONEY_TOLERANCE
+        and is_cvh_stp_supplier(getattr(document, 'supplier', None))
+    ):
+        split = cvh_mixed_25_amounts(base_amount=doc_base, vat_amount=doc_vat)
+        if split is not None:
+            taxable_base, vat = split
+            if abs(led_base - taxable_base) <= MONEY_TOLERANCE and abs(led_vat - vat) <= MONEY_TOLERANCE:
+                return None
     if abs(led_base - doc_base) > MONEY_TOLERANCE or abs(led_vat - doc_vat) > MONEY_TOLERANCE:
         return 'mismatch'
     return None
@@ -411,7 +444,7 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
                 alerts.append('vat_header_mismatch')
 
     active = invoice_tax_active(document.status) if direction == 'outgoing' else expense_tax_active(document.status)
-    if active and not ledger_rows:
+    if active and not ledger_rows and not ctx.get('vat_not_applicable'):
         alerts.append('vat_ledger_missing')
     if vat_period_mismatch(direction=direction, document=document, ledger_rows=ledger_rows):
         alerts.append('vat_period_mismatch')
