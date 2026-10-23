@@ -24,6 +24,7 @@ def _partner(snapshot: PartnerSnapshot | None) -> dict[str, Any]:
         'country': snapshot.country,
         'tax_number': snapshot.tax_number,
         'vat_id': snapshot.vat_id,
+        'country_code': snapshot.country_code,
         'provenance': snapshot.provenance.value,
     }
 

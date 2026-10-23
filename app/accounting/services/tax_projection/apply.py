@@ -20,7 +20,12 @@ from accounting.models import (
     VATProjectionRun,
     VATProjectionRunStatus,
 )
-from accounting.services.tax_forms.pdv.mapping import PDV_MAPPING, PDV_MAPPING_VERSION, partner_eu_vat_id
+from accounting.services.tax_forms.pdv.mapping import (
+    PDV_MAPPING,
+    PDV_MAPPING_VERSION,
+    ledger_partner_vat_id,
+    partner_eu_vat_id,
+)
 from accounting.services.tax_projection.contracts import (
     PROJECTION_ENGINE_VERSION,
     ProjectedLedgerRow,
@@ -360,7 +365,10 @@ def _partner_identity(row: ProjectedLedgerRow, expenses, invoices) -> tuple[str,
         partner = getattr(invoice, 'company_to', None)
     if partner is None:
         return '', ''
-    return partner.name or '', partner_eu_vat_id(partner)
+    name = partner.name or ''
+    if row.source_kind in {'invoice', 'invoice_item'} and row.box in {'103', '104'}:
+        return name, ledger_partner_vat_id(partner)
+    return name, partner_eu_vat_id(partner)
 
 
 def _source_content_type(row: ProjectedLedgerRow, invoice_ct, expense_ct, line_ct, period_ct):

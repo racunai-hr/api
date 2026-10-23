@@ -439,6 +439,7 @@ class SubmissionService:
         state: str = SubmissionEventState.SUBMITTED,
         version_confirmed: bool = True,
         confirmation_attachment=None,
+        book_period: bool = True,
     ) -> SubmissionEvent:
         """Create an append-only submission audit event for a tax document."""
         document = _assert_submission_document(document)
@@ -500,11 +501,15 @@ class SubmissionService:
             supersedes_submission=supersedes,
         )
 
-        SubmissionService._update_document_workflow(document, submitted_at=submitted_at)
+        SubmissionService._update_document_workflow(
+            document,
+            submitted_at=submitted_at,
+            book_period=book_period,
+        )
         return event
 
     @staticmethod
-    def _update_document_workflow(document, *, submitted_at: datetime) -> None:
+    def _update_document_workflow(document, *, submitted_at: datetime, book_period: bool = True) -> None:
         from accounting.models import VATReturn, ZPReturn
 
         if isinstance(document, VATReturn):
@@ -512,9 +517,10 @@ class SubmissionService:
             if document.status == VATReturnStatus.GENERATED:
                 document.status = VATReturnStatus.SUBMITTED
                 document.save(update_fields=['status'])
-            period.status = 'submitted'
-            period.submitted_at = submitted_at
-            period.save(update_fields=['status', 'submitted_at'])
+            if book_period:
+                period.status = 'submitted'
+                period.submitted_at = submitted_at
+                period.save(update_fields=['status', 'submitted_at'])
         elif isinstance(document, ZPReturn):
             period = VATPeriod.all_objects.select_for_update().get(pk=document.vat_period_id)
             if period.status != 'submitted':

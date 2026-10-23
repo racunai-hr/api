@@ -54,7 +54,7 @@ def prepare_pdv_correction(period: VATPeriod, *, actor) -> dict:
         raise PreparePdvCorrectionError(CORRECTION_REQUIRES_SUBMITTED_RETURN)
     if (
         latest is not None
-        and latest.status == VATReturnStatus.GENERATED
+        and latest.status in {VATReturnStatus.GENERATED, VATReturnStatus.IN_PROCESSING}
         and latest.pk != current.pk
     ):
         raise PreparePdvCorrectionError(CORRECTION_ALREADY_IN_PROGRESS)

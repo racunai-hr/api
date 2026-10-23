@@ -47,7 +47,7 @@ def _recipient_key_for_ledger_entry(entry: VATLedgerEntry) -> _RecipientKey:
 
 
 def aggregate_zp_rows(period: VATPeriod) -> ZpPayload:
-    """Build ZpPayload from VATLedgerEntry (boxes 101, 103)."""
+    """Build ZpPayload from VATLedgerEntry (103 goods, 104 services)."""
     period_from, period_to = _period_bounds(period)
     taxpayer_info = _taxpayer_for_period(period)
     settings = CompanySettings.all_objects.filter(tenant=period.tenant).first()
@@ -70,14 +70,14 @@ def aggregate_zp_rows(period: VATPeriod) -> ZpPayload:
 
     ledger_qs = VATLedgerEntry.all_objects.filter(
         vat_period=period,
-        vat_box__in=('101', '103'),
+        vat_box__in=('103', '104'),
     ).order_by('entry_date', 'pk')
 
     for entry in ledger_qs:
         if entry.base_amount == 0:
             continue
         key = _recipient_key_for_ledger_entry(entry)
-        if entry.vat_box == '101':
+        if entry.vat_box == '103':
             goods[key] += entry.base_amount
         else:
             services[key] += entry.base_amount

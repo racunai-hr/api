@@ -12,6 +12,7 @@ from accounting.services.tax_forms.pdv.mapping import (
     cvh_mixed_25_amounts,
     expense_matches_domestic_25,
     invoice_eu_outbound_box,
+    invoice_foreign_zero_box,
     invoice_rate_to_box,
     is_ch_telecom_supplier,
     is_cvh_stp_supplier,
@@ -145,7 +146,7 @@ def _row(
     )
     recognized = tax if direction == Direction.INPUT and sign > 0 else Decimal('0.00')
     outputs: list[str] = ['pdv']
-    if box in {'101', '103'}:
+    if box in {'103', '104'}:
         outputs.append('zp')
     if box in {'207', '210'}:
         outputs.append('pdv_s')
@@ -253,8 +254,35 @@ def _classify_invoice(
 
     partner = document.partner
     rate = document.vat_rate if document.vat_rate is not None else Decimal('0.00')
-    if partner is not None and is_eu_outbound_invoice_line(
-        partner=_PartnerView(partner),
+    partner_view = _PartnerView(partner) if partner is not None else None
+    foreign_box = invoice_foreign_zero_box(
+        partner=partner_view,
+        tax_rate=rate,
+        has_service_date=bool(document.supply_date),
+    )
+    if foreign_box is not None:
+        if foreign_box in {'103', '104'}:
+            reason = 'eu_outbound'
+            rule_code = f'INV_EU_{foreign_box}'
+        else:
+            reason = 'export_outbound'
+            rule_code = f'INV_EXPORT_{foreign_box}'
+        return _classified(
+            document,
+            (_row(
+                document,
+                box=foreign_box,
+                rule_code=rule_code,
+                base=document.base_amount,
+                tax=Decimal('0.00'),
+            ),),
+            reason=reason,
+            rule_code=rule_code,
+            warnings=warnings,
+        )
+
+    if partner_view is not None and is_eu_outbound_invoice_line(
+        partner=partner_view,
         tax_rate=rate,
     ):
         box = invoice_eu_outbound_box(has_service_date=bool(document.supply_date))
@@ -610,4 +638,5 @@ class _PartnerView:
         self.vat_id = snapshot.vat_id
         self.vat_number = snapshot.vat_id
         self.country = snapshot.country
+        self.country_code = snapshot.country_code
         self.name = snapshot.name

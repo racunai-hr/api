@@ -560,7 +560,8 @@ class VATReturnStatus(models.TextChoices):
     DRAFT = 'draft', 'Nacrt'
     GENERATED = 'generated', 'Generirano'
     SIGNED = 'signed', 'Potpisano'
-    SUBMITTED = 'submitted', 'Predano'
+    IN_PROCESSING = 'in_processing', 'Obrazac je u obradi'
+    SUBMITTED = 'submitted', 'Obrazac je obrađen'
     SUPERSEDED = 'superseded', 'Zamijenjeno'
     IMPORTED = 'imported', 'Importirano'
 
@@ -572,6 +573,7 @@ class VATReturnSource(models.TextChoices):
 
 
 _VAT_RETURN_IMMUTABLE_STATUSES = frozenset({
+    VATReturnStatus.IN_PROCESSING,
     VATReturnStatus.SUBMITTED,
     VATReturnStatus.IMPORTED,
 })
@@ -600,7 +602,7 @@ class VATReturn(TenantMixin, models.Model):
     )
     version = models.PositiveSmallIntegerField(verbose_name='Verzija')
     status = models.CharField(
-        max_length=12,
+        max_length=16,
         choices=VATReturnStatus.choices,
         default=VATReturnStatus.GENERATED,
         verbose_name='Status',
@@ -1135,6 +1137,7 @@ class VATEntryCategory(models.TextChoices):
     EU_ACQUISITION = 'eu_acquisition', 'EU stjecanje'
     OSS_SUPPLY = 'oss_supply', 'OSS/IOSS e-trgovina'
     IMPORT = 'import', 'Uvoz'
+    EXPORT = 'export', 'Izvoz'
     ADJUSTMENT = 'adjustment', 'Korekcija'
 
 

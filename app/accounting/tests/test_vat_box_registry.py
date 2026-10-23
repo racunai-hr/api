@@ -94,9 +94,11 @@ class VATBoxRegistryTests(SimpleTestCase):
         allowed = set(BoxValueSource)
         special_codes = {
             '000': BoxValueSource.TOTAL_I_PLUS_II,
-            '101': BoxValueSource.AGGREGATE_BASE,
+            '100': BoxValueSource.TOTAL_I,
             '103': BoxValueSource.AGGREGATE_BASE,
-            '111': BoxValueSource.TOTAL_I,
+            '104': BoxValueSource.AGGREGATE_BASE,
+            '105': BoxValueSource.AGGREGATE_BASE,
+            '109': BoxValueSource.AGGREGATE_BASE,
             '200': BoxValueSource.CATEGORY_TOTAL_OUTPUT,
             '300': BoxValueSource.CATEGORY_TOTAL_INPUT,
             '400': BoxValueSource.COMPUTED_VAT_DUE,
@@ -131,7 +133,7 @@ class VATBoxRegistryTests(SimpleTestCase):
             self.assertTrue(definition.mapping_rule, msg=f'Box {code} requires mapping_rule')
 
     def test_eu_outbound_boxes_are_implemented(self):
-        for code in ('101', '103'):
+        for code in ('103', '104', '105', '109'):
             definition = next(item for item in VAT_BOX_REGISTRY if item.code == code)
             self.assertTrue(definition.implemented, msg=f'Box {code} must be implemented')
             self.assertTrue(definition.mapping_rule, msg=f'Box {code} requires mapping_rule')

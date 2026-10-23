@@ -25,10 +25,21 @@ class PdvPeriodListSerializer(serializers.Serializer):
     results = PdvPeriodSerializer(many=True)
 
 
+class PdvFormRowSerializer(serializers.Serializer):
+    form = serializers.CharField()
+    version = serializers.IntegerField()
+    status = serializers.CharField()
+    received_at = serializers.CharField(allow_null=True)
+    period_from = serializers.CharField()
+    period_to = serializers.CharField()
+    external_identifier = serializers.CharField(allow_null=True)
+
+
 class PdvPeriodWorkspaceSerializer(PdvPeriodSerializer):
     xml_integrity = serializers.CharField(allow_null=True)
     event_uuid = serializers.UUIDField(allow_null=True)
     has_confirmation = serializers.BooleanField()
+    forms = PdvFormRowSerializer(many=True)
 
 
 class PdvLedgerRebuildSerializer(serializers.Serializer):

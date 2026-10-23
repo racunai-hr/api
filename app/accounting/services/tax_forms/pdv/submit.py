@@ -65,3 +65,45 @@ def mark_vat_return_submitted(
         previous.status = VATReturnStatus.SUPERSEDED
         previous.save(update_fields=['superseded_by', 'status'])
     return vat_return
+
+
+@transaction.atomic
+def record_vat_return_in_processing(
+    vat_return: VATReturn,
+    *,
+    received_at: datetime,
+    eporezna_identifier: UUID,
+    submitted_by,
+) -> VATReturn:
+    """Record that ePorezna received a form and left it in manual processing.
+
+    The previously booked return stays submitted. The period booking date stays put.
+    """
+    if vat_return.status != VATReturnStatus.GENERATED:
+        raise MarkVatReturnSubmittedError(
+            f'PDV obrazac mora biti u statusu "generirano", trenutno: '
+            f'{vat_return.get_status_display()}.',
+        )
+    booked_at = vat_return.vat_period.submitted_at
+    vat_return.status = VATReturnStatus.IN_PROCESSING
+    vat_return.save(update_fields=['status'])
+    try:
+        SubmissionService.create_event(
+            vat_return,
+            destination=SubmissionDestination.EPOREZNA,
+            external_identifier=eporezna_identifier,
+            submitted_at=received_at,
+            submitted_by=submitted_by,
+            source=SubmissionSource.MANUAL,
+            version_confirmed=True,
+            book_period=False,
+        )
+    except Exception as exc:
+        raise MarkVatReturnSubmittedError(str(exc)) from exc
+    period = vat_return.vat_period
+    period.refresh_from_db()
+    if period.submitted_at != booked_at:
+        period.submitted_at = booked_at
+        period.save(update_fields=['submitted_at'])
+    vat_return.refresh_from_db()
+    return vat_return

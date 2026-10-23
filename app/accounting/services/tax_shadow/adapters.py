@@ -49,6 +49,7 @@ def _partner_snapshot(partner, *, provenance: PartnerProvenance) -> PartnerSnaps
         tax_number=getattr(partner, 'tax_number', '') or '',
         vat_id=vat_id,
         provenance=provenance,
+        country_code=(getattr(partner, 'country_code', '') or '').strip().upper(),
     )
 
 

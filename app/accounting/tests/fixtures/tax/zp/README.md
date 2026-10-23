@@ -45,7 +45,7 @@ Izvor za agregaciju — pojednostavljeni `VATLedgerEntry` (I-RA):
   "entries": [
     {
       "ledger_type": "I-RA",
-      "vat_box": "101",
+      "vat_box": "103",
       "entry_date": "2026-06-15",
       "net_amount": "10000.00",
       "partner_country": "DE",
@@ -55,8 +55,8 @@ Izvor za agregaciju — pojednostavljeni `VATLedgerEntry` (I-RA):
 }
 ```
 
-- **`vat_box` `101`** → dobra EU (ZP red: `goods_value`)
-- **`vat_box` `103`** → usluge EU (ZP red: `services_value`)
+- **`vat_box` `103`** → dobra EU (ZP red: `goods_value`)
+- **`vat_box` `104`** → usluge EU (ZP red: `services_value`)
 
 ### `expected_payload.json`
 
@@ -85,7 +85,7 @@ Očekivani PDV boxovi za usklađenost (Fine Star test tenant):
 
 ```json
 {
-  "fields": {"101": "10000.00", "103": "0.00"},
+  "fields": {"103": "10000.00", "104": "0.00"},
   "must_match_zp_totals": true
 }
 ```

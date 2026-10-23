@@ -28,8 +28,10 @@ from accounting.services.tax_forms.pdv.mapping import (
     map_eu_services_pretporez_306,
     map_ioss_pretporez_308,
     map_expense_input_25,
-    map_invoice_eu_goods_101,
-    map_invoice_eu_services_103,
+    map_invoice_eu_goods_103,
+    map_invoice_eu_services_104,
+    map_invoice_export_goods_109,
+    map_invoice_export_services_105,
     map_invoice_eu_distance_204,
     map_invoice_eu_electronic_214,
     map_invoice_oss_215,
@@ -176,8 +178,10 @@ class PdvMappingRegistryTests(SimpleTestCase):
 
     def test_each_implemented_box_has_mapping_test(self):
         expected = {
-            '101': map_invoice_eu_goods_101,
-            '103': map_invoice_eu_services_103,
+            '103': map_invoice_eu_goods_103,
+            '104': map_invoice_eu_services_104,
+            '105': map_invoice_export_services_105,
+            '109': map_invoice_export_goods_109,
             '204': map_invoice_eu_distance_204,
             '214': map_invoice_eu_electronic_214,
             '215': map_invoice_oss_215,

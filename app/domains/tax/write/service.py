@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from django.db import transaction
 from django.utils import timezone
 
-from accounting.models import PDVSReturn, SubmissionEvent, TZ2Return, VATPeriod, VATReturn
+from accounting.models import PDVSReturn, SubmissionEvent, TZ2Return, VATPeriod, VATReturn, ZPReturn
 from accounting.services.submission.exceptions import (
     AttachConfirmationError,
     CreateSubmissionEventError,
@@ -31,8 +31,10 @@ from accounting.services.tax_forms.pdv.submit import (
 )
 from accounting.services.tax_forms.pdv.validation import PdvSchemaValidationError
 from accounting.services.tax_forms.pdv.vat_returns import create_vat_return_draft
+from accounting.services.submission.events import get_or_create_zp_return
 from accounting.services.tax_forms.pdv_s.submit import MarkPdvSSubmittedError, mark_pdv_s_submitted
 from accounting.services.tax_forms.pdv_s.validation import PdvSSchemaValidationError
+from accounting.services.tax_forms.zp.submit import MarkZpSubmittedError, mark_zp_submitted_for_period
 from accounting.services.tax_projection.rebuild import (
     VATPeriodNotWritable,
     rebuild_vat_ledger,
@@ -184,6 +186,29 @@ def submit_pdv_s_period(
     return _submission_dto(event)
 
 
+def submit_zp_period(
+    period: VATPeriod,
+    *,
+    user,
+    eporezna_identifier: UUID,
+    submitted_at: datetime,
+) -> dict:
+    try:
+        get_or_create_zp_return(period)
+        event = mark_zp_submitted_for_period(
+            period,
+            submitted_at=submitted_at,
+            eporezna_identifier=eporezna_identifier,
+            submitted_by=user,
+            version_confirmed=True,
+        )
+    except (MarkZpSubmittedError, DuplicateExternalIdentifierError, CreateSubmissionEventError) as exc:
+        raise TaxConflict(str(exc)) from exc
+    except ValueError as exc:
+        raise TaxBadRequest(str(exc)) from exc
+    return _submission_dto(event)
+
+
 def _is_tz2_xml_upload(file_obj) -> bool:
     name = (getattr(file_obj, 'name', '') or '').lower()
     return name.endswith('.xml')
@@ -215,7 +240,7 @@ def attach_period_confirmation(tenant, event_uuid, file_obj, *, uploaded_by) -> 
     if event is None:
         raise TaxNotFound()
     document = event.document
-    if not isinstance(document, (VATReturn, PDVSReturn, TZ2Return)):
+    if not isinstance(document, (VATReturn, PDVSReturn, TZ2Return, ZPReturn)):
         raise TaxNotFound()
     if file_obj is None:
         raise TaxBadRequest('confirmation file je obavezan.')
@@ -250,6 +275,30 @@ def pdv_s_xml_bytes(period: VATPeriod) -> tuple[bytes, str]:
         raise TaxBadRequest(str(exc)) from exc
     filename = (
         f'PDV-S_{payload.taxpayer.oib}_'
+        f'{payload.period_from:%Y%m%d}-{payload.period_to:%Y%m%d}.xml'
+    )
+    return xml_bytes, filename
+
+
+def zp_xml_bytes(period: VATPeriod) -> tuple[bytes, str]:
+    from accounting.services.tax_forms.zp.aggregate import aggregate_zp_rows
+    from accounting.services.tax_forms.zp.render import render_zp_xml
+    from accounting.services.tax_forms.zp.validation import (
+        ZpSchemaValidationError,
+        ZpValidationError,
+        validate_zp_payload,
+        validate_zp_xml,
+    )
+
+    try:
+        payload = aggregate_zp_rows(period)
+        validate_zp_payload(payload)
+        xml_bytes = render_zp_xml(payload)
+        validate_zp_xml(xml_bytes)
+    except (ZpSchemaValidationError, ZpValidationError, ValueError) as exc:
+        raise TaxBadRequest(str(exc)) from exc
+    filename = (
+        f'ZP_{payload.taxpayer.oib}_'
         f'{payload.period_from:%Y%m%d}-{payload.period_to:%Y%m%d}.xml'
     )
     return xml_bytes, filename

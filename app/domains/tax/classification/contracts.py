@@ -58,6 +58,7 @@ class PartnerSnapshot:
     tax_number: str
     vat_id: str
     provenance: PartnerProvenance
+    country_code: str = ''
 
 
 @dataclass(frozen=True)

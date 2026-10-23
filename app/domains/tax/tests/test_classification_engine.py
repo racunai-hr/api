@@ -82,7 +82,7 @@ class ClassifyInvoiceTests(SimpleTestCase):
         self.assertEqual(result.rows, ())
         self.assertEqual(result.rule_code, 'UNKNOWN_RATE_NO_LONGER_SKIPPED')
 
-    def test_eu_goods_101(self):
+    def test_eu_goods_103(self):
         partner = PartnerSnapshot(
             name='DE GmbH',
             country='Germany',
@@ -92,7 +92,7 @@ class ClassifyInvoiceTests(SimpleTestCase):
         )
         result = classify(_input(partner=partner, vat_rate=Decimal('0.00'), vat_amount=Decimal('0.00')))
         self.assertEqual(result.outcome, Outcome.CLASSIFIED)
-        self.assertEqual(result.rows[0].box, '101')
+        self.assertEqual(result.rows[0].box, '103')
         self.assertIn('zp', result.rows[0].outputs)
 
     def test_eu_services_103(self):
@@ -112,7 +112,119 @@ class ClassifyInvoiceTests(SimpleTestCase):
                 supply_kind='services',
             )
         )
+        self.assertEqual(result.rows[0].box, '104')
+
+    def test_spanish_cif_services_are_103(self):
+        partner = PartnerSnapshot(
+            name='PRIMELEGACY S.L.',
+            country='Španjolska',
+            country_code='ES',
+            tax_number='B75947309',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                partner=partner,
+                vat_rate=Decimal('0.00'),
+                vat_amount=Decimal('0.00'),
+                base_amount=Decimal('10000.00'),
+                supply_date=date(2026, 9, 21),
+                supply_kind='services',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rows[0].box, '104')
+        self.assertEqual(result.rule_code, 'INV_EU_104')
+        self.assertIn('zp', result.rows[0].outputs)
+
+    def test_spanish_name_without_country_code_is_103(self):
+        partner = PartnerSnapshot(
+            name='PRIMELEGACY S.L.',
+            country='Španjolska',
+            tax_number='B75947309',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                partner=partner,
+                vat_rate=Decimal('0.00'),
+                vat_amount=Decimal('0.00'),
+                supply_date=date(2026, 9, 21),
+                supply_kind='services',
+            )
+        )
+        self.assertEqual(result.rows[0].box, '104')
+
+    def test_spanish_goods_are_101(self):
+        partner = PartnerSnapshot(
+            name='ES Goods',
+            country='Španjolska',
+            country_code='ES',
+            tax_number='B75947309',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                partner=partner,
+                vat_rate=Decimal('0.00'),
+                vat_amount=Decimal('0.00'),
+                supply_date=None,
+                supply_kind='goods',
+            )
+        )
         self.assertEqual(result.rows[0].box, '103')
+
+    def test_us_services_are_104_without_zp(self):
+        partner = PartnerSnapshot(
+            name='US Client',
+            country='Sjedinjene Američke Države',
+            country_code='US',
+            tax_number='12-3456789',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                partner=partner,
+                vat_rate=Decimal('0.00'),
+                vat_amount=Decimal('0.00'),
+                supply_date=date(2026, 9, 21),
+                supply_kind='services',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.CLASSIFIED)
+        self.assertEqual(result.rows[0].box, '105')
+        self.assertEqual(result.rule_code, 'INV_EXPORT_105')
+        self.assertNotIn('zp', result.rows[0].outputs)
+
+    def test_us_goods_are_102(self):
+        partner = PartnerSnapshot(
+            name='US Client',
+            country='United States',
+            country_code='US',
+            tax_number='',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                partner=partner,
+                vat_rate=Decimal('0.00'),
+                vat_amount=Decimal('0.00'),
+                supply_date=None,
+                supply_kind='goods',
+            )
+        )
+        self.assertEqual(result.rows[0].box, '109')
+        self.assertNotIn('zp', result.rows[0].outputs)
+
+    def test_hr_zero_rate_stays_review(self):
+        result = classify(_input(vat_rate=Decimal('0.00'), vat_amount=Decimal('0.00')))
+        self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
+        self.assertEqual(result.rule_code, 'UNKNOWN_RATE_NO_LONGER_SKIPPED')
 
     def test_draft_not_relevant(self):
         result = classify(_input(lifecycle_status='draft'))

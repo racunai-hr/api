@@ -30,7 +30,10 @@ from accounting.services.tax_forms.pdv.correction import (
     PreparePdvCorrectionError,
     prepare_pdv_correction,
 )
-from accounting.services.tax_forms.pdv.submit import mark_vat_return_submitted
+from accounting.services.tax_forms.pdv.submit import (
+    mark_vat_return_submitted,
+    record_vat_return_in_processing,
+)
 from accounting.services.tax_forms.pdv.validation import PdvSchemaValidationError
 from accounting.services.tax_forms.pdv.vat_returns import create_vat_return_draft
 from accounting.services.tax_projection.rebuild import RebuildOutcome, rebuild_vat_ledger
@@ -231,8 +234,10 @@ class PdvCorrectionTests(TestCase):
         self.assertEqual(period.latest_return.version, 2)
 
         built = build_pdv_payload(period)
-        self.assertEqual(built.field_scalar('103'), Decimal('25000.00'))
-        self.assertEqual(built.field_scalar('111'), Decimal('25000.00'))
+        self.assertEqual(built.field_scalar('104'), Decimal('25000.00'))
+        self.assertEqual(built.field_scalar('100'), Decimal('25000.00'))
+        self.assertEqual(built.field_scalar('103'), Decimal('0.00'))
+        self.assertEqual(built.field_scalar('111'), Decimal('0.00'))
         self.assertEqual(built.field_scalar('000'), Decimal('28360.00'))
         self.assertEqual(built.field_pair('303').porez, Decimal('16.59'))
         self.assertEqual(built.field_scalar('400'), Decimal('823.41'))
@@ -368,3 +373,41 @@ class PdvCorrectionApiTests(PdvCorrectionTests):
         period.refresh_from_db()
         self.assertEqual(period.status, 'submitted')
         self.assertEqual(period.latest_return.status, VATReturnStatus.SUBMITTED)
+
+    def test_in_processing_keeps_booked_return(self):
+        period, v1, _ = self._submit_v1()
+        booked_at = period.submitted_at
+        v2 = create_vat_return_draft(period, prepared_by=self.accountant)
+        portal_uuid = uuid4()
+        received_at = timezone.make_aware(datetime(2026, 10, 23, 13, 29, 5))
+        record_vat_return_in_processing(
+            v2,
+            received_at=received_at,
+            eporezna_identifier=portal_uuid,
+            submitted_by=self.user,
+        )
+        period.refresh_from_db()
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        self.assertEqual(v2.status, VATReturnStatus.IN_PROCESSING)
+        self.assertEqual(v1.status, VATReturnStatus.SUBMITTED)
+        self.assertIsNone(v1.superseded_by_id)
+        self.assertEqual(period.submitted_at, booked_at)
+        self.assertEqual(period.current_return, v1)
+        event = SubmissionService.current_submission(v2)
+        self.assertEqual(event.external_identifier, portal_uuid)
+        self.assertEqual(event.submitted_at, received_at)
+        with self.assertRaises(PreparePdvCorrectionError) as ctx:
+            prepare_pdv_correction(period, actor=self.user)
+        self.assertEqual(ctx.exception.code, CORRECTION_ALREADY_IN_PROGRESS)
+
+        client = self._client()
+        workspace = client.get('/api/tax/pdv/periods/2026-07/').json()
+        self.assertEqual(workspace['return_status'], 'submitted')
+        self.assertEqual(workspace['latest_return_status'], 'in_processing')
+        self.assertFalse(workspace['correction_in_progress'])
+        self.assertEqual(
+            [row['status'] for row in workspace['forms']],
+            ['in_processing', 'submitted'],
+        )
+        self.assertEqual(workspace['forms'][0]['external_identifier'], str(portal_uuid))

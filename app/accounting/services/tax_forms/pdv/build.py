@@ -24,7 +24,7 @@ from accounting.services.tax_forms.pdv.supply_procedure import ECOMMERCE_EXCLUDE
 from settings.models import CompanySettings, ResponsiblePerson
 
 _CATEGORY_TOTAL_EXCLUDE = frozenset({'200', '300'})
-_I_SECTION_CODES = tuple(str(code) for code in range(100, 111))
+_I_SECTION_CODES = tuple(str(code) for code in range(101, 112))
 _DERIVED_VALUE_SOURCES = frozenset(
     {
         BoxValueSource.TOTAL_I,
@@ -176,14 +176,13 @@ def map_boxes_to_pdv_fields(boxes: dict[str, BoxTotals]) -> dict[str, PdvFieldPa
             continue
         handler = _VALUE_SOURCE_HANDLERS[definition.value_source]
         fields[definition.code] = handler(definition, ctx)
-    # 111 then 000: derived after I. scalars and II. totals are filled (ADR-0027).
-    fields['111'] = sum(
+    # 100 then 000: Podatak100 is the sum of detail lines 101–111 (ePorezna v11).
+    fields['100'] = sum(
         (ctx.boxes[code].base for code in _I_SECTION_CODES),
         Decimal('0.00'),
     ).quantize(Decimal('0.01'))
-    i_total = fields['111']
     ii_base = fields['200'].vrijednost
-    fields['000'] = (i_total + ii_base).quantize(Decimal('0.01'))
+    fields['000'] = (fields['100'] + ii_base).quantize(Decimal('0.01'))
     return fields
 
 

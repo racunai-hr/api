@@ -9,8 +9,15 @@ from typing import Callable
 
 from accounting.models import VATEntryCategory, VATLedgerEntry
 from accounting.services.tax_forms.pdv.boxes import implemented_boxes
+from shared.countries import (
+    COUNTRY_TO_VAT_PREFIX,
+    is_eu_country,
+    is_valid_country_code,
+    map_legacy_country,
+    normalize_country_code,
+)
 
-PDV_MAPPING_VERSION = 11
+PDV_MAPPING_VERSION = 13
 
 _OUTPUT_RRIF_BY_RATE: dict[Decimal, str] = {
     Decimal('5.00'): '240010',
@@ -140,12 +147,29 @@ def _eu_outbound_rule(vat_box: str) -> MappingRule:
     )
 
 
-def map_invoice_eu_goods_101() -> MappingRule:
-    return _eu_outbound_rule('101')
-
-
-def map_invoice_eu_services_103() -> MappingRule:
+def map_invoice_eu_goods_103() -> MappingRule:
     return _eu_outbound_rule('103')
+
+
+def map_invoice_eu_services_104() -> MappingRule:
+    return _eu_outbound_rule('104')
+
+
+def _export_outbound_rule(vat_box: str) -> MappingRule:
+    return MappingRule(
+        vat_box=vat_box,
+        ledger_type=VATLedgerEntry.LEDGER_I_RA,
+        entry_category=VATEntryCategory.EXPORT,
+        rrif_vat_account='',
+    )
+
+
+def map_invoice_export_goods_109() -> MappingRule:
+    return _export_outbound_rule('109')
+
+
+def map_invoice_export_services_105() -> MappingRule:
+    return _export_outbound_rule('105')
 
 
 def _oss_output_rule(vat_box: str) -> MappingRule:
@@ -283,8 +307,10 @@ def map_eu_expense_viii1_614() -> MappingRule:
 
 
 _MAPPING_RULES: dict[str, Callable[[], MappingRule]] = {
-    '101': map_invoice_eu_goods_101,
-    '103': map_invoice_eu_services_103,
+    '103': map_invoice_eu_goods_103,
+    '104': map_invoice_eu_services_104,
+    '105': map_invoice_export_services_105,
+    '109': map_invoice_export_goods_109,
     '204': map_invoice_eu_distance_204,
     '214': map_invoice_eu_electronic_214,
     '215': map_invoice_oss_215,
@@ -502,9 +528,58 @@ def partner_eu_vat_id(partner) -> str:
     return (getattr(partner, 'tax_number', '') or '').strip().replace(' ', '')
 
 
+def invoice_partner_country_code(partner) -> str:
+    """ISO2 for an outbound invoice partner: country_code, then the country name."""
+    if partner is None:
+        return ''
+    code = normalize_country_code(getattr(partner, 'country_code', '') or '')
+    if is_valid_country_code(code):
+        return code
+    return map_legacy_country(getattr(partner, 'country', '') or '') or ''
+
+
+def invoice_foreign_zero_box(*, partner, tax_rate, has_service_date: bool) -> str | None:
+    """PDV box for a 0% supply to a partner outside Croatia.
+
+    EU goods/services are 101/103. Third-country goods/services are 102/104.
+    A Croatian or unknown partner returns None so domestic 0% stays in review.
+    """
+    if normalize_vat_rate(tax_rate) != Decimal('0.00'):
+        return None
+    code = invoice_partner_country_code(partner)
+    if not code or code == 'HR':
+        return None
+    if is_eu_country(code):
+        return '104' if has_service_date else '103'
+    return '105' if has_service_date else '109'
+
+
+def ledger_partner_vat_id(partner) -> str:
+    """VAT id written on an EU outbound ledger row. Does not change the partner.
+
+    A national id without a country prefix (Spanish CIF B75947309) gets the
+    VIES prefix from the partner country (ESB75947309).
+    """
+    if partner is None:
+        return ''
+    vat = _compact_vat_identifier(partner_eu_vat_id(partner))
+    if not vat:
+        return ''
+    prefix = _vat_id_prefix(vat)
+    if prefix in _EU_VAT_NUMBER_PREFIXES or prefix == 'EL':
+        return vat
+    code = invoice_partner_country_code(partner)
+    if not code or code == 'HR' or not is_eu_country(code):
+        return vat
+    country_prefix = COUNTRY_TO_VAT_PREFIX.get(code, '')
+    if not country_prefix:
+        return vat
+    return f'{country_prefix}{vat}'
+
+
 def invoice_eu_outbound_box(*, has_service_date: bool) -> str:
     """Map EU outbound invoice to box 101 (goods) or 103 (services)."""
-    return '103' if has_service_date else '101'
+    return '104' if has_service_date else '103'
 
 
 def is_eu_outbound_invoice_line(*, partner, tax_rate: Decimal | int | float | str) -> bool:

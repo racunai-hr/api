@@ -34,8 +34,8 @@ class ZpVerifyTests(SimpleTestCase):
         pdv = load_scenario('single_eu_partner')['pdv']
         result = verify_zp_against_pdv_boxes(
             payload,
-            pdv_box_101=Decimal(pdv['fields']['101']),
             pdv_box_103=Decimal(pdv['fields']['103']),
+            pdv_box_104=Decimal(pdv['fields']['104']),
         )
         self.assertTrue(result.is_aligned)
 
@@ -60,7 +60,7 @@ class ZpVerifyTests(SimpleTestCase):
         pdv = load_scenario('pdv_mismatch_101_103')['pdv']
         result = verify_zp_against_pdv_boxes(
             payload,
-            pdv_box_101=Decimal(pdv['fields']['101']),
             pdv_box_103=Decimal(pdv['fields']['103']),
+            pdv_box_104=Decimal(pdv['fields']['104']),
         )
         self.assertFalse(result.is_aligned)

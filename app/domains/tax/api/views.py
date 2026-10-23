@@ -41,6 +41,7 @@ from domains.tax.read.service import (
     list_pdv_periods,
     pdv_boxes_dto,
     pdv_s_period_dto,
+    zp_period_dto,
     pdv_workspace_dto,
 )
 from domains.tax.write.service import (
@@ -55,6 +56,8 @@ from domains.tax.write.service import (
     rebuild_period_ledger,
     submit_pdv_period,
     submit_pdv_s_period,
+    submit_zp_period,
+    zp_xml_bytes,
 )
 from domains.tax.read.tz2 import tz2_year_dto
 from domains.tax.write.tz2 import parse_tax_year, save_tz2_year, submit_tz2_year, tz2_xml_bytes
@@ -390,6 +393,128 @@ class PdvSPeriodSubmitView(TaxWriteApiView):
         try:
             identifier, submitted_at = _parse_submit_common(request.data)
             payload = submit_pdv_s_period(
+                vat_period,
+                user=request.user,
+                eporezna_identifier=identifier,
+                submitted_at=submitted_at,
+            )
+        except TaxNotFound:
+            raise Http404() from None
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        except TaxConflict as exc:
+            return _error_response(exc, status.HTTP_409_CONFLICT)
+        return Response(payload)
+
+
+class PdvIspravakXmlView(TaxWriteApiView):
+    http_method_names = ['post', 'options']
+
+    def perform_content_negotiation(self, request, force=False):
+        renderer = self.renderer_classes[0]()
+        return renderer, renderer.media_type
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_pdv_ispravak_xml',
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.BINARY, description='Unsigned Obrazac PDV-ispravak XML'),
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def post(self, request):
+        from accounting.services.tax_forms.pdv_ispravak.build import (
+            PdvIspravakBuildError,
+            pdv_ispravak_xml_bytes,
+        )
+        from domains.tax.read.dto import parse_period_key
+
+        tenant = _require_tenant(request)
+        parsed = parse_period_key(str(request.data.get('period') or ''))
+        if parsed is None:
+            return Response({'detail': 'Razdoblje mora biti YYYY-MM.'}, status=status.HTTP_400_BAD_REQUEST)
+        year, month = parsed
+        rows = request.data.get('rows')
+        if not isinstance(rows, list):
+            return Response({'detail': 'Retci računa su obavezni.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            xml_bytes, filename = pdv_ispravak_xml_bytes(tenant, year=year, month=month, rows=rows)
+        except PdvIspravakBuildError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        response = HttpResponse(xml_bytes, content_type='application/xml')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ZpPeriodView(TaxApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_zp_period_retrieve',
+        responses={
+            200: PdvSPeriodSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, period):
+        vat_period = _period_or_404(_require_tenant(request), period)
+        try:
+            return Response(zp_period_dto(vat_period))
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ZpPeriodXmlView(TaxExportApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_zp_period_xml',
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.BINARY, description='Unsigned Obrazac ZP XML'),
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, period):
+        vat_period = _period_or_404(_require_tenant(request), period)
+        try:
+            xml_bytes, filename = zp_xml_bytes(vat_period)
+        except TaxNotFound:
+            raise Http404() from None
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        response = HttpResponse(xml_bytes, content_type='application/xml')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ZpPeriodSubmitView(TaxWriteApiView):
+    http_method_names = ['post', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_zp_period_submit',
+        request=PdvSSubmitRequestSerializer,
+        responses={
+            200: SubmissionResultSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, period):
+        vat_period = _period_or_404(_require_tenant(request), period)
+        try:
+            identifier, submitted_at = _parse_submit_common(request.data)
+            payload = submit_zp_period(
                 vat_period,
                 user=request.user,
                 eporezna_identifier=identifier,
