@@ -119,6 +119,11 @@ def create_inbound_expense_from_ubl(
         supplier.address = parsed.supplier_address
         supplier.save(update_fields=['address'])
 
+    from fiscal_gateway.services.ubl_expense_facts import (
+        monetary_facts_from_parsed,
+        tax_facts_from_summary,
+    )
+
     expense = Expense.all_objects.create(
         tenant=tenant,
         expense_number=_next_expense_number(tenant, parsed.invoice_number, number_prefix),
@@ -134,6 +139,8 @@ def create_inbound_expense_from_ubl(
         receipt_number=parsed.invoice_number,
         description='; '.join(parsed.line_descriptions) or f'Ulazni eRačun {parsed.invoice_number}',
         created_by=user,
+        **monetary_facts_from_parsed(parsed),
+        **tax_facts_from_summary(parsed.tax_summary),
     )
     return InboundExpenseDraft(expense=expense, parsed=parsed)
 

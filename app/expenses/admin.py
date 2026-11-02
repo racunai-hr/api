@@ -204,7 +204,11 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
             if paid_by_id:
                 paid_by = ExpensePayer.all_objects.filter(tenant=tenant, pk=paid_by_id).first()
 
-            if settlement_method in (SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH):
+            if settlement_method in (
+                SettlementMethod.PRIVATE_CARD,
+                SettlementMethod.PRIVATE_CASH,
+                SettlementMethod.PRIVATE_ACCOUNT,
+            ):
                 if mark_paid and not paid_by:
                     messages.error(request, 'Platitelj je obavezan za privatno podmirenje plaćenih troškova.')
                     return render(request, 'admin/expenses/expense/import_f1.html', {

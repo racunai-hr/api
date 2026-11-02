@@ -305,6 +305,9 @@ def _mark_expense_paid_if_closed(*, tenant, expense: Expense) -> None:
     if expense.status == 'paid':
         return
     expense.status = 'paid'
+    # The claim journal already debited the supplier. Status paid must not
+    # fire expense_paid, which would debit 2201 a second time.
+    expense._skip_auto_posting = True
     expense.save(update_fields=['status', 'updated_at'])
 
 

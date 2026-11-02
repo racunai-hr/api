@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from accounting.services.fx import to_eur_amount
 from domains.banking.read.balances import (
     latest_statement_for_account,
     mask_iban,
@@ -10,6 +11,19 @@ from domains.banking.read.balances import (
     statement_closing_balance,
 )
 from domains.reporting.documents.snapshot import isoformat
+
+
+def _money_or_none(value) -> str | None:
+    if value is None:
+        return None
+    return money(value)
+
+
+def statement_currency_code(statement) -> str:
+    code = (statement.currency or '').strip().upper()
+    if not code and statement.bank_account_id:
+        code = (statement.bank_account.currency or '').strip().upper()
+    return code or 'EUR'
 
 
 def connection_summary(connection) -> dict | None:
@@ -47,15 +61,18 @@ def bank_account_dto(account, *, now=None) -> dict:
 
 
 def statement_list_dto(statement) -> dict:
+    currency = statement_currency_code(statement)
     return {
         'id': statement.pk,
         'statement_number': statement.statement_number,
         'bank_account_id': statement.bank_account_id,
         'statement_date': statement.statement_date.isoformat(),
         'opening_balance': money(statement.opening_balance),
+        'opening_balance_eur': _money_or_none(to_eur_amount(statement.opening_balance, currency)),
         'closing_balance': money(statement.closing_balance),
+        'closing_balance_eur': _money_or_none(to_eur_amount(statement.closing_balance, currency)),
         'status': statement.status,
-        'currency': statement.bank_account.currency if statement.bank_account_id else None,
+        'currency': currency,
         'imported_at': isoformat(statement.imported_at) if statement.imported_at else None,
         'reconciled_at': isoformat(statement.reconciled_at) if statement.reconciled_at else None,
         'transaction_count': getattr(statement, 'transaction_count', None),
@@ -76,6 +93,9 @@ def transaction_dto(tx) -> dict:
         'transaction_date': tx.transaction_date.isoformat(),
         'value_date': tx.value_date.isoformat() if tx.value_date else None,
         'amount': money(tx.amount),
+        'amount_eur': _money_or_none(
+            tx.amount_eur if tx.amount_eur is not None else to_eur_amount(tx.amount, tx.currency)
+        ),
         'currency': tx.currency,
         'transaction_type': tx.transaction_type,
         'description': tx.description,

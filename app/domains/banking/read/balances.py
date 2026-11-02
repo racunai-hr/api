@@ -48,7 +48,7 @@ def statement_closing_balance(
     return {
         'balance_type': 'statement-closing',
         'amount': money(statement.closing_balance),
-        'currency': account.currency,
+        'currency': (statement.currency or account.currency or 'EUR'),
         'as_of': _as_of_from_date(statement.statement_date),
         'source': 'statement',
         'is_stale': bool(stale_by_statement or stale_by_sync),

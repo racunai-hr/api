@@ -264,6 +264,75 @@ class BankReconcileOpenItemTests(TestCase):
         expense.refresh_from_db()
         self.assertEqual(expense.status, 'paid')
 
+    def test_hrk_debit_posts_eur_equivalent(self):
+        expense = Expense.all_objects.create(
+            tenant=self.tenant,
+            supplier=self.partner,
+            category=self.category,
+            expense_number='EXP-HRK',
+            expense_date=date(2022, 10, 5),
+            amount=Decimal('422.06'),
+            tax_amount=Decimal('0'),
+            currency='EUR',
+            status='approved',
+            settlement_method='business_account',
+            description='Kunska uplata',
+            created_by=self.owner,
+        )
+        entry = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202210-EXP-HRK',
+            entry_date=date(2022, 10, 5),
+            status='posted',
+            description='[expense_approved] hrk fixture',
+            is_auto=True,
+            fiscal_period=get_or_create_fiscal_period(self.tenant, date(2022, 10, 5)),
+            created_by=self.owner,
+        )
+        create_subledger_item(
+            self.tenant,
+            partner=self.partner,
+            direction='payable',
+            source=expense,
+            journal_entry=entry,
+            amount=Decimal('422.06'),
+            due_date=date(2022, 10, 5),
+        )
+        item = get_subledger_item_for_source(self.tenant, expense)
+        tx = BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=self.statement,
+            transaction_date=date(2022, 10, 5),
+            amount=Decimal('3180.00'),
+            currency='HRK',
+            amount_eur=Decimal('422.06'),
+            transaction_type='debit',
+            description='POZAJMICA VLASNIKA',
+            match_status='unmatched',
+        )
+        candidates = self.client.get(f'/api/banking/transactions/{tx.pk}/open-item-candidates/')
+        self.assertEqual(candidates.status_code, 200, candidates.data)
+        self.assertIn(item.pk, [row['item_id'] for row in candidates.data['results']])
+
+        response = self.client.post(
+            f'/api/banking/transactions/{tx.pk}/reconcile-open-item/',
+            {'subledger_item_id': item.pk},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='exp-hrk',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        tx.refresh_from_db()
+        journal = tx.matched_journal_entry
+        bank_line = journal.lines.get(account_id=self.bank.ledger_account_id)
+        self.assertEqual(bank_line.credit_amount, Decimal('422.06'))
+        self.assertEqual(bank_line.debit_amount, Decimal('0.00'))
+        self.assertEqual(bank_line.description, 'Plaćanje — banka · 3.180,00 HRK')
+        other = journal.lines.exclude(pk=bank_line.pk).get()
+        self.assertEqual(other.debit_amount, Decimal('422.06'))
+        self.assertNotIn('HRK', other.description)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'paid')
+
     def test_expense_partial_then_full_close_sets_paid(self):
         expense = Expense.all_objects.create(
             tenant=self.tenant,

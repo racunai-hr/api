@@ -51,6 +51,7 @@ from .models import (
     VATReturnStatus,
     ZPReturn,
     TZ2Return,
+    JOPPDReturn,
 )
 from accounting.services.submission.events import get_submission_events
 from accounting.services.submission.service import AttachConfirmationError, SubmissionService
@@ -290,12 +291,13 @@ class ChartOfAccountsAdmin(TenantAdminMixin, admin.ModelAdmin):
 class AnalyticAccountAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
         'account_code', 'account_name', 'counterparty_type',
-        'partner', 'expense_payer', 'is_active',
+        'partner', 'expense_payer', 'vehicle', 'is_active',
     )
     list_filter = ('counterparty_type', 'is_active')
     search_fields = (
         'account_code', 'account_name',
         'expense_payer__name', 'expense_payer__oib',
+        'vehicle__vin', 'vehicle__registration_plate',
     )
 
 
@@ -710,7 +712,7 @@ class ZPReturnInline(admin.TabularInline):
 
 @admin.register(VATPeriod)
 class VATPeriodAdmin(TenantAdminMixin, admin.ModelAdmin):
-    list_display = ('year', 'month', 'status', 'submitted_at', 'vat_summary_display', 'export_link')
+    list_display = ('year', 'month', 'period_to', 'status', 'submitted_at', 'vat_summary_display', 'export_link')
     list_filter = ('status', 'year')
     actions = ['generate_ledger', 'generate_draft', 'generate_zp_draft', 'export_pdv_s']
     inlines = [VATReturnInline, PDVSReturnInline, ZPReturnInline]
@@ -1692,6 +1694,31 @@ class TZ2ReturnAdmin(TenantAdminMixin, admin.ModelAdmin):
     search_fields = ('payload_hash',)
     readonly_fields = (
         'tax_year',
+        'version',
+        'schema_version',
+        'mapping_version',
+        'payload_snapshot',
+        'payload_hash',
+        'payload_json',
+        'xml_unsigned',
+        'xml_submitted',
+        'unsigned_xml_sha256',
+        'prepared_by',
+        'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(JOPPDReturn)
+class JOPPDReturnAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('period_year', 'period_month', 'version', 'payload_hash', 'created_at')
+    list_filter = ('period_year', 'period_month')
+    search_fields = ('payload_hash',)
+    readonly_fields = (
+        'period_year',
+        'period_month',
         'version',
         'schema_version',
         'mapping_version',

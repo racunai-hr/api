@@ -403,6 +403,115 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/banking/expenses/{id}/close-candidates/:
+    get:
+      operationId: banking_expenses_close_candidates
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseClosePreview'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/banking/expenses/{id}/close-from-bank/:
+    post:
+      operationId: banking_expenses_close_from_bank
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCloseRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseCloseRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseCloseRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseCloseResult'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
   /api/banking/overview/:
     get:
       operationId: banking_overview_retrieve
@@ -953,6 +1062,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Neprocesibilan zahtjev (validacija write operacije)
+  /api/banking/transactions/{id}/supplier-prepayment/:
+    post:
+      operationId: banking_transaction_supplier_prepayment
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - banking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPrepaymentCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SupplierPrepaymentCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SupplierPrepaymentCreateRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierPrepaymentResult'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Neprocesibilan zahtjev (validacija write operacije)
   /api/banking/transactions/{id}/unmatch/:
     post:
       operationId: banking_transactions_unmatch
@@ -1009,6 +1184,11 @@ paths:
         schema:
           type: number
       - in: query
+        name: cost_center
+        schema:
+          type: integer
+        description: Documents whose posted journal has a line on this cost center
+      - in: query
         name: currency
         schema:
           type: string
@@ -1042,6 +1222,11 @@ paths:
         schema:
           type: string
           format: date
+      - in: query
+        name: fixed_asset
+        schema:
+          type: integer
+        description: Official documents on this asset, or expenses on its vehicle
       - in: query
         name: month
         schema:
@@ -1297,6 +1482,11 @@ paths:
         schema:
           type: number
       - in: query
+        name: cost_center
+        schema:
+          type: integer
+        description: Documents whose posted journal has a line on this cost center
+      - in: query
         name: currency
         schema:
           type: string
@@ -1330,6 +1520,11 @@ paths:
         schema:
           type: string
           format: date
+      - in: query
+        name: fixed_asset
+        schema:
+          type: integer
+        description: Official documents on this asset, or expenses on its vehicle
       - in: query
         name: format
         schema:
@@ -1602,6 +1797,42 @@ paths:
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/cost-centers/{id}/:
+    get:
+      operationId: finance_cost_centers_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCenter'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
     patch:
       operationId: finance_cost_centers_partial_update
       parameters:
@@ -2053,6 +2284,54 @@ paths:
               schema:
                 $ref: '#/components/schemas/DepositConflict'
           description: ''
+  /api/finance/expenses/{id}/accounting-review/:
+    post:
+      operationId: finance_expense_accounting_review
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountingReviewRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AccountingReviewRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccountingReviewRequestRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountingReview'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/expenses/{id}/approve/:
     post:
       operationId: finance_expenses_approve
@@ -2149,6 +2428,11 @@ paths:
     get:
       operationId: finance_journal_entries_list
       parameters:
+      - in: query
+        name: cost_center
+        schema:
+          type: integer
+        description: Journal entries with a line on this cost center
       - in: query
         name: date_from
         schema:
@@ -2777,6 +3061,119 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/payables/{source_type}/{id}/apply-prepayments/:
+    post:
+      operationId: finance_payable_apply_prepayments
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: source_type
+        schema:
+          type: string
+        required: true
+      tags:
+      - finance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyPrepaymentsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ApplyPrepaymentsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApplyPrepaymentsRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyPrepaymentsResult'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+  /api/finance/payables/{source_type}/{id}/prepayment-candidates/:
+    get:
+      operationId: finance_payable_prepayment_candidates
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: source_type
+        schema:
+          type: string
+        required: true
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepaymentCandidateList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/finance/private-funds-claims/:
     post:
       operationId: finance_private_funds_claim_create
@@ -2953,6 +3350,993 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/finance/vehicles/:
+    get:
+      operationId: finance_vehicles_list
+      tags:
+      - finance
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountingReviewVehicle'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+  /api/hr/employees/:
+    get:
+      operationId: hr_employees_list
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: hr_employees_create
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/employees/{id}/:
+    get:
+      operationId: hr_employees_retrieve
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    patch:
+      operationId: hr_employees_partial_update
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/employees/{id}/contracts/:
+    get:
+      operationId: hr_employee_contracts_list
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: hr_employee_contracts_create
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/employees/{id}/contracts/{contract_id}/:
+    patch:
+      operationId: hr_employee_contracts_partial_update
+      parameters:
+      - in: path
+        name: contract_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payroll-periods/:
+    get:
+      operationId: hr_payroll_periods_list
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriodList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: hr_payroll_periods_create
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payroll-periods/{id}/:
+    get:
+      operationId: hr_payroll_periods_retrieve
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payroll-periods/{id}/calculate/:
+    post:
+      operationId: hr_payroll_periods_calculate
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payroll-periods/{id}/calculation-recap-pdf/:
+    get:
+      operationId: hr_payroll_periods_calculation_recap_pdf
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/hr/payroll-periods/{id}/generate/:
+    post:
+      operationId: hr_payroll_periods_generate
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payroll-periods/{id}/journal-pdf/:
+    get:
+      operationId: hr_payroll_periods_journal_pdf
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/hr/payroll-periods/{id}/payment-recap-pdf/:
+    get:
+      operationId: hr_payroll_periods_payment_recap_pdf
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/hr/payroll-periods/{id}/post/:
+    post:
+      operationId: hr_payroll_periods_post
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/hr/payslips/{id}/:
+    get:
+      operationId: hr_payslips_retrieve
+      description: GET uses read role; mutating methods use write role.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipDetail'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payslips/{id}/adjustments/:
+    post:
+      operationId: hr_payslip_adjustments_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipDetail'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payslips/{id}/earnings/:
+    post:
+      operationId: hr_payslip_earnings_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipDetail'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/payslips/{id}/pdf/:
+    get:
+      operationId: hr_payslips_pdf
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/hr/worktime/:
+    get:
+      operationId: hr_worktime_list
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - hr
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+    post:
+      operationId: hr_worktime_create
+      description: GET uses read role; mutating methods use write role.
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/hr/worktime/lock/:
+    post:
+      operationId: hr_worktime_lock
+      tags:
+      - hr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
         '401':
           content:
             application/json:
@@ -3951,6 +5335,54 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/purchasing/invoices/import/{id}/accounting-review/:
+    post:
+      operationId: purchasing_invoice_import_accounting_review
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountingReviewRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AccountingReviewRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccountingReviewRequestRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountingReview'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/purchasing/invoices/import/{id}/apply-partner-updates/:
     post:
       operationId: purchasing_invoice_imports_apply_partner_updates
@@ -3971,6 +5403,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/IncomingInvoiceImport'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasingConflict'
+          description: ''
+  /api/purchasing/invoices/import/{id}/apply-supplier/:
+    post:
+      operationId: purchasing_invoice_imports_apply_supplier
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - purchasing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplySupplierRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ApplySupplierRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApplySupplierRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomingInvoiceImport'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
         '401':
           content:
             application/json:
@@ -4207,6 +5700,296 @@ paths:
               schema:
                 $ref: '#/components/schemas/PurchasingConflict'
           description: ''
+  /api/tax/joppd/periods/{period}/:
+    get:
+      operationId: tax_joppd_period_retrieve
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoppdPeriod'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/joppd/periods/{period}/draft/:
+    post:
+      operationId: tax_joppd_period_draft
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoppdDraftRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JoppdDraftRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JoppdDraftRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoppdDraft'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/joppd/periods/{period}/submit/:
+    post:
+      operationId: tax_joppd_period_submit
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoppdSubmitRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JoppdSubmitRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JoppdSubmitRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/joppd/periods/{period}/xml/:
+    get:
+      operationId: tax_joppd_period_xml
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Unsigned draft Obrazac JOPPD XML
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pd/years/{year}/:
+    get:
+      operationId: tax_pd_year_retrieve
+      parameters:
+      - in: path
+        name: year
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdYear'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/pdv-ispravak/xml/:
+    post:
+      operationId: tax_pdv_ispravak_xml
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PdvDraftRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PdvDraftRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PdvDraftRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Unsigned Obrazac PDV-ispravak XML
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
   /api/tax/pdv-s/periods/{period}/:
     get:
       operationId: tax_pdv_s_period_retrieve
@@ -4607,6 +6390,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Konflikt (idempotency / match target taken)
+  /api/tax/pdv/periods/{period}/processed/:
+    post:
+      operationId: tax_pdv_period_processed
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PdvSubmitRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PdvSubmitRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
   /api/tax/pdv/periods/{period}/submit/:
     post:
       operationId: tax_pdv_period_submit
@@ -4713,6 +6554,44 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Konflikt (idempotency / match target taken)
   /api/tax/submissions/{event_uuid}/confirmation/:
+    get:
+      operationId: tax_submission_confirmation_download
+      parameters:
+      - in: path
+        name: event_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Potvrda zaprimanja
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
     post:
       operationId: tax_submission_confirmation
       parameters:
@@ -4970,6 +6849,154 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
           description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
             korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/zp/periods/{period}/:
+    get:
+      operationId: tax_zp_period_retrieve
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdvSPeriod'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+  /api/tax/zp/periods/{period}/submit/:
+    post:
+      operationId: tax_zp_period_submit
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PdvSSubmitRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Konflikt (idempotency / match target taken)
+  /api/tax/zp/periods/{period}/xml/:
+    get:
+      operationId: tax_zp_period_xml
+      parameters:
+      - in: path
+        name: period
+        schema:
+          type: string
+        required: true
+      tags:
+      - tax
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Unsigned Obrazac ZP XML
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Nevaljani upit / ValidationError
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              examples:
+                Unauthorized:
+                  value:
+                    detail: Authentication credentials were not provided.
+          description: Nedostaje ili je nevaljan Bearer token
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: 'Nije pronađeno: missing resource, cross-tenant ID, ili autenticiran
+            korisnik bez prava (namjerno 404, ne 403)'
 components:
   schemas:
     AccountRef:
@@ -5048,6 +7075,202 @@ components:
       - debit
       - description
       - partner_name
+    AccountingReview:
+      type: object
+      properties:
+        status:
+          type: string
+        purchase_nature:
+          type: string
+          nullable: true
+        posting_profile:
+          type: string
+          nullable: true
+        profile_label:
+          type: string
+        vehicle:
+          allOf:
+          - $ref: '#/components/schemas/AccountingReviewVehicle'
+          nullable: true
+        decision_source:
+          type: string
+        reason:
+          type: string
+        explanation:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountingReviewQuestion'
+        preview:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountingReviewLine'
+          nullable: true
+        line_accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountingReviewAccount'
+        document_date:
+          type: string
+        foreign_vat:
+          allOf:
+          - $ref: '#/components/schemas/AccountingReviewForeignVat'
+          nullable: true
+      required:
+      - decision_source
+      - document_date
+      - explanation
+      - line_accounts
+      - posting_profile
+      - preview
+      - profile_label
+      - purchase_nature
+      - questions
+      - reason
+      - status
+      - vehicle
+    AccountingReviewAccount:
+      type: object
+      properties:
+        position:
+          type: integer
+        account_id:
+          type: integer
+        account_code:
+          type: string
+        account_name:
+          type: string
+        source:
+          type: string
+      required:
+      - account_code
+      - account_id
+      - account_name
+      - position
+      - source
+    AccountingReviewForeignVat:
+      type: object
+      properties:
+        country:
+          type: string
+        amount:
+          type: string
+        net_amount:
+          type: string
+        gross_amount:
+          type: string
+        currency:
+          type: string
+        treatment:
+          type: string
+        fx_rate:
+          type: string
+        fx_rate_source:
+          type: string
+        fx_rate_date:
+          type: string
+      required:
+      - amount
+      - country
+      - currency
+      - fx_rate
+      - fx_rate_date
+      - fx_rate_source
+      - gross_amount
+      - net_amount
+      - treatment
+    AccountingReviewLine:
+      type: object
+      properties:
+        account_code:
+          type: string
+        account_name:
+          type: string
+        debit:
+          type: string
+        credit:
+          type: string
+      required:
+      - account_code
+      - account_name
+      - credit
+      - debit
+    AccountingReviewOption:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - value
+    AccountingReviewQuestion:
+      type: object
+      properties:
+        key:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        required:
+          type: boolean
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountingReviewOption'
+      required:
+      - key
+      - label
+      - options
+      - required
+      - type
+    AccountingReviewRequestRequest:
+      type: object
+      properties:
+        answers:
+          type: object
+          additionalProperties: {}
+    AccountingReviewVehicle:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        vin:
+          type: string
+        registration_plate:
+          type: string
+        accounting_role:
+          type: string
+      required:
+      - accounting_role
+      - id
+      - name
+      - registration_plate
+      - vin
+    AllocatedOcrLine:
+      type: object
+      properties:
+        position:
+          type: integer
+        description:
+          type: string
+        net_amount:
+          type: string
+        vat_amount:
+          type: string
+        gross_amount:
+          type: string
+      required:
+      - description
+      - gross_amount
+      - net_amount
+      - position
+      - vat_amount
     Allocation:
       type: object
       properties:
@@ -5077,6 +7300,15 @@ components:
         gross:
           type: string
           nullable: true
+        book_gross:
+          type: string
+          nullable: true
+        book_net:
+          type: string
+          nullable: true
+        book_vat:
+          type: string
+          nullable: true
         fx_rate:
           $ref: '#/components/schemas/Provenanced'
       required:
@@ -5085,6 +7317,97 @@ components:
       - gross
       - net
       - vat
+    AppliedPrepayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        prepayment_id:
+          type: integer
+        amount:
+          type: string
+        journal_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - amount
+      - id
+      - journal_entry_id
+      - prepayment_id
+    ApplyPrepaymentLineRequest:
+      type: object
+      properties:
+        prepayment_id:
+          type: integer
+        amount:
+          type: string
+          minLength: 1
+      required:
+      - amount
+      - prepayment_id
+    ApplyPrepaymentsRequest:
+      type: object
+      properties:
+        applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplyPrepaymentLineRequest'
+        remember:
+          type: boolean
+        lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        answers:
+          type: object
+          additionalProperties: {}
+      required:
+      - applications
+    ApplyPrepaymentsResult:
+      type: object
+      properties:
+        source_type:
+          type: string
+        source_id:
+          type: integer
+        status:
+          type: string
+        subledger_status:
+          type: string
+        applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedPrepayment'
+      required:
+      - applications
+      - source_id
+      - source_type
+      - status
+      - subledger_status
+    ApplySupplierRequest:
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        supplier:
+          type: object
+          additionalProperties: {}
+      required:
+      - source
+    AssetCostCenterRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+      required:
+      - code
+      - id
+      - name
     AssetJournalEntry:
       type: object
       properties:
@@ -5335,6 +7658,16 @@ components:
       required:
       - count
       - results
+    Choice:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - value
     ClaimTypeEnum:
       enum:
       - supplier_payment
@@ -5397,6 +7730,32 @@ components:
           nullable: true
         remember_category_for_partner:
           type: boolean
+        direction_override:
+          type: boolean
+        line_accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfirmLineAccountRequest'
+        posting_profile:
+          type: string
+        vehicle_id:
+          type: integer
+          nullable: true
+        answers:
+          type: object
+          additionalProperties: {}
+    ConfirmLineAccountRequest:
+      type: object
+      properties:
+        position:
+          type: integer
+          minimum: 1
+        posting_account_id:
+          type: integer
+          nullable: true
+      required:
+      - position
+      - posting_account_id
     ConfirmationResult:
       type: object
       properties:
@@ -5527,6 +7886,132 @@ components:
           type: boolean
         is_active:
           type: boolean
+    Contract:
+      type: object
+      properties:
+        id:
+          type: integer
+        start_date:
+          type: string
+        end_date:
+          type: string
+          nullable: true
+        contract_type:
+          type: string
+        work_time_percentage:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        base_gross_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        recipient_code:
+          type: string
+        income_type_code:
+          type: string
+        is_active:
+          type: boolean
+        signed_at:
+          type: string
+          nullable: true
+        weekly_hours:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
+        job_title:
+          type: string
+        probation_months:
+          type: integer
+          nullable: true
+        notice_rule:
+          type: string
+        annual_leave_rule:
+          type: string
+        collective_agreement_ref:
+          type: string
+        termination_reason:
+          type: string
+      required:
+      - base_gross_salary
+      - contract_type
+      - end_date
+      - id
+      - income_type_code
+      - is_active
+      - recipient_code
+      - start_date
+      - work_time_percentage
+    ContractList:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+      required:
+      - results
+    ContractRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        start_date:
+          type: string
+          minLength: 1
+        end_date:
+          type: string
+          nullable: true
+          minLength: 1
+        contract_type:
+          type: string
+          minLength: 1
+        work_time_percentage:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        base_gross_salary:
+          type: string
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        recipient_code:
+          type: string
+          minLength: 1
+        income_type_code:
+          type: string
+          minLength: 1
+        is_active:
+          type: boolean
+        signed_at:
+          type: string
+          nullable: true
+          minLength: 1
+        weekly_hours:
+          type: string
+          nullable: true
+          minLength: 1
+          description: Decimal as string, e.g. "1100.00"
+        job_title:
+          type: string
+        probation_months:
+          type: integer
+          nullable: true
+        notice_rule:
+          type: string
+        annual_leave_rule:
+          type: string
+        collective_agreement_ref:
+          type: string
+        termination_reason:
+          type: string
+      required:
+      - base_gross_salary
+      - contract_type
+      - end_date
+      - id
+      - income_type_code
+      - is_active
+      - recipient_code
+      - start_date
+      - work_time_percentage
     CostCenter:
       type: object
       properties:
@@ -5551,8 +8036,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/CostCenterRef'
           nullable: true
+        vehicle:
+          allOf:
+          - $ref: '#/components/schemas/CostCenterLinkedVehicle'
+          nullable: true
+        fixed_assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/CostCenterLinkedAsset'
       required:
       - code
+      - fixed_assets
       - id
       - is_active
       - is_bookable
@@ -5561,6 +8055,7 @@ components:
       - notes
       - parent
       - parent_id
+      - vehicle
     CostCenterKindEnum:
       enum:
       - location
@@ -5573,6 +8068,33 @@ components:
         * `object` - object
         * `overhead` - overhead
         * `group` - group
+    CostCenterLinkedAsset:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    CostCenterLinkedVehicle:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        vin:
+          type: string
+        fixed_asset_id:
+          type: integer
+          nullable: true
+      required:
+      - fixed_asset_id
+      - id
+      - name
+      - vin
     CostCenterList:
       type: object
       properties:
@@ -6008,6 +8530,27 @@ components:
             $ref: '#/components/schemas/DepreciationScheduleItem'
       required:
       - results
+    Direction:
+      type: object
+      properties:
+        code:
+          type: string
+        supplier_source:
+          type: string
+        override_required:
+          type: boolean
+        unresolved:
+          type: boolean
+        party_candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyCandidate'
+      required:
+      - code
+      - override_required
+      - party_candidates
+      - supplier_source
+      - unresolved
     DirectionEnum:
       enum:
       - incoming
@@ -6179,6 +8722,10 @@ components:
           $ref: '#/components/schemas/PaymentBlock'
         settlement_trail:
           $ref: '#/components/schemas/SettlementTrail'
+        reversal_of:
+          allOf:
+          - $ref: '#/components/schemas/ReversalOf'
+          nullable: true
         official_kind:
           type: string
           nullable: true
@@ -6420,6 +8967,244 @@ components:
       description: |-
         * `capitalize` - capitalize
         * `expense` - expense
+    Employee:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        full_name:
+          type: string
+        oib:
+          type: string
+        date_of_birth:
+          type: string
+          nullable: true
+        street:
+          type: string
+        city:
+          type: string
+        municipality_code:
+          type: string
+        work_location:
+          type: string
+        iban:
+          type: string
+        bank_name:
+          type: string
+        mio_pillar:
+          type: string
+        personal_allowance_coefficient:
+          type: string
+        is_active:
+          type: boolean
+        notes:
+          type: string
+        sex:
+          type: string
+        citizenship:
+          type: string
+        residence_street:
+          type: string
+        residence_city:
+          type: string
+        residence_municipality_code:
+          type: string
+        occupation:
+          type: string
+        qualification:
+          type: string
+        licence_note:
+          type: string
+        employment_status:
+          type: string
+        work_permit_number:
+          type: string
+        work_permit_valid_to:
+          type: string
+          nullable: true
+        hzzo_registered_at:
+          type: string
+          nullable: true
+        hzmo_registered_at:
+          type: string
+          nullable: true
+        insurance_changed_at:
+          type: string
+          nullable: true
+        deregistered_at:
+          type: string
+          nullable: true
+        legal_evidence_gaps:
+          type: array
+          items:
+            type: string
+        active_contract:
+          allOf:
+          - $ref: '#/components/schemas/Contract'
+          nullable: true
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+      required:
+      - active_contract
+      - bank_name
+      - city
+      - code
+      - date_of_birth
+      - first_name
+      - full_name
+      - iban
+      - id
+      - is_active
+      - last_name
+      - mio_pillar
+      - municipality_code
+      - notes
+      - oib
+      - personal_allowance_coefficient
+      - street
+      - work_location
+    EmployeeList:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
+      required:
+      - results
+    EmployeeRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          minLength: 1
+        first_name:
+          type: string
+          minLength: 1
+        last_name:
+          type: string
+          minLength: 1
+        full_name:
+          type: string
+          minLength: 1
+        oib:
+          type: string
+          minLength: 1
+        date_of_birth:
+          type: string
+          nullable: true
+          minLength: 1
+        street:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        municipality_code:
+          type: string
+          minLength: 1
+        work_location:
+          type: string
+          minLength: 1
+        iban:
+          type: string
+          minLength: 1
+        bank_name:
+          type: string
+          minLength: 1
+        mio_pillar:
+          type: string
+          minLength: 1
+        personal_allowance_coefficient:
+          type: string
+          minLength: 1
+        is_active:
+          type: boolean
+        notes:
+          type: string
+          minLength: 1
+        sex:
+          type: string
+        citizenship:
+          type: string
+        residence_street:
+          type: string
+        residence_city:
+          type: string
+        residence_municipality_code:
+          type: string
+        occupation:
+          type: string
+        qualification:
+          type: string
+        licence_note:
+          type: string
+        employment_status:
+          type: string
+        work_permit_number:
+          type: string
+        work_permit_valid_to:
+          type: string
+          nullable: true
+          minLength: 1
+        hzzo_registered_at:
+          type: string
+          nullable: true
+          minLength: 1
+        hzmo_registered_at:
+          type: string
+          nullable: true
+          minLength: 1
+        insurance_changed_at:
+          type: string
+          nullable: true
+          minLength: 1
+        deregistered_at:
+          type: string
+          nullable: true
+          minLength: 1
+        legal_evidence_gaps:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        active_contract:
+          allOf:
+          - $ref: '#/components/schemas/ContractRequest'
+          nullable: true
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractRequest'
+      required:
+      - active_contract
+      - bank_name
+      - city
+      - code
+      - date_of_birth
+      - first_name
+      - full_name
+      - iban
+      - id
+      - is_active
+      - last_name
+      - mio_pillar
+      - municipality_code
+      - notes
+      - oib
+      - personal_allowance_coefficient
+      - street
+      - work_location
     EracunBlock:
       type: object
       properties:
@@ -6451,6 +9236,8 @@ components:
           type: integer
         imported:
           type: integer
+        merged:
+          type: integer
         skipped:
           type: integer
         failed:
@@ -6465,6 +9252,7 @@ components:
       - errors
       - failed
       - imported
+      - merged
       - remaining_importable
       - scanned
       - skipped
@@ -6656,6 +9444,141 @@ components:
       required:
       - id
       - name
+    ExpenseCloseLine:
+      type: object
+      properties:
+        position:
+          type: integer
+        description:
+          type: string
+        account_id:
+          type: integer
+          nullable: true
+        account_code:
+          type: string
+        account_name:
+          type: string
+        source:
+          type: string
+      required:
+      - account_code
+      - account_id
+      - account_name
+      - description
+      - position
+      - source
+    ExpenseCloseLineInputRequest:
+      type: object
+      properties:
+        position:
+          type: integer
+        account_id:
+          type: integer
+      required:
+      - account_id
+      - position
+    ExpenseClosePayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        transaction_date:
+          type: string
+          format: date
+        amount:
+          type: string
+        currency:
+          type: string
+        counterparty_name:
+          type: string
+        description:
+          type: string
+        reference:
+          type: string
+        match_score:
+          type: integer
+        match_reasons:
+          type: array
+          items:
+            type: string
+        recommended:
+          type: boolean
+      required:
+      - amount
+      - counterparty_name
+      - currency
+      - description
+      - id
+      - match_reasons
+      - match_score
+      - recommended
+      - reference
+      - transaction_date
+    ExpenseClosePreview:
+      type: object
+      properties:
+        remembered:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseCloseLine'
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseClosePayment'
+      required:
+      - lines
+      - payments
+      - remembered
+    ExpenseCloseRequestRequest:
+      type: object
+      properties:
+        bank_transaction_id:
+          type: integer
+        remember:
+          type: boolean
+          default: false
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseCloseLineInputRequest'
+        answers:
+          type: object
+          additionalProperties: {}
+      required:
+      - bank_transaction_id
+    ExpenseCloseResult:
+      type: object
+      properties:
+        expense_id:
+          type: integer
+        status:
+          type: string
+        bank_transaction_id:
+          type: integer
+        match_status:
+          type: string
+        subledger_status:
+          type: string
+      required:
+      - bank_transaction_id
+      - expense_id
+      - match_status
+      - status
+      - subledger_status
+    ExpenseLineAccountPatchRequest:
+      type: object
+      properties:
+        position:
+          type: integer
+          minimum: 1
+        posting_account_id:
+          type: integer
+          nullable: true
+      required:
+      - position
+      - posting_account_id
     ExpensePostingPreview:
       type: object
       properties:
@@ -6705,6 +9628,10 @@ components:
       properties:
         supplier:
           $ref: '#/components/schemas/SupplierExtracted'
+        issuer:
+          $ref: '#/components/schemas/SupplierExtracted'
+        buyer:
+          $ref: '#/components/schemas/SupplierExtracted'
         invoice_number:
           type: string
         issue_date:
@@ -6732,11 +9659,17 @@ components:
           items:
             type: object
             additionalProperties: {}
+        allocated_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocatedOcrLine'
       required:
+      - buyer
       - currency
       - iban
       - invoice_number
       - issue_date
+      - issuer
       - net_amount
       - supplier
       - tax_amount
@@ -6791,11 +9724,16 @@ components:
         activation_journal_entry_id:
           type: integer
           nullable: true
+        cost_center:
+          allOf:
+          - $ref: '#/components/schemas/AssetCostCenterRef'
+          nullable: true
       required:
       - accumulated_depreciation
       - acquisition_cost
       - activation_date
       - activation_journal_entry_id
+      - cost_center
       - current_book_value
       - depreciation_method
       - id
@@ -7073,6 +10011,8 @@ components:
           nullable: true
         extracted:
           $ref: '#/components/schemas/ExtractedInvoice'
+        direction:
+          $ref: '#/components/schemas/Direction'
         warnings:
           type: array
           items:
@@ -7101,6 +10041,7 @@ components:
       - confirmed_expense_id
       - content_type
       - created_at
+      - direction
       - duplicate
       - extracted
       - file_sha256
@@ -7185,6 +10126,22 @@ components:
         gross_amount:
           type: string
           nullable: true
+        book_net_amount:
+          type: string
+          nullable: true
+        book_vat_amount:
+          type: string
+          nullable: true
+        book_gross_amount:
+          type: string
+          nullable: true
+        id:
+          type: integer
+          nullable: true
+        posting_account:
+          allOf:
+          - $ref: '#/components/schemas/IncomingLineAccount'
+          nullable: true
       required:
       - classification
       - description
@@ -7197,6 +10154,22 @@ components:
       - unit_price
       - vat_amount
       - vat_rate
+    IncomingLineAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+      required:
+      - active
+      - code
+      - id
+      - name
     IncomingTotals:
       type: object
       properties:
@@ -7258,6 +10231,146 @@ components:
       - received_at
       - source
       - status
+    JoppdDraft:
+      type: object
+      properties:
+        period:
+          type: string
+        return_version:
+          type: integer
+      required:
+      - period
+      - return_version
+    JoppdDraftRequest:
+      type: object
+      properties:
+        period:
+          type: string
+          minLength: 1
+        return_version:
+          type: integer
+      required:
+      - period
+      - return_version
+    JoppdPeriod:
+      type: object
+      properties:
+        period:
+          type: string
+        schema_version:
+          type: string
+        payment_date:
+          type: string
+        row_count:
+          type: integer
+        total_gross:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_mio1:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_mio2:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_income_tax:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_zo:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_net:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        return_version:
+          type: integer
+          nullable: true
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/JoppdRow'
+        event_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        current_submission:
+          allOf:
+          - $ref: '#/components/schemas/PdvSSubmission'
+          nullable: true
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdvSSubmission'
+      required:
+      - current_submission
+      - event_uuid
+      - payment_date
+      - period
+      - return_version
+      - row_count
+      - rows
+      - schema_version
+      - submissions
+      - total_gross
+      - total_income_tax
+      - total_mio1
+      - total_mio2
+      - total_net
+      - total_zo
+    JoppdRow:
+      type: object
+      properties:
+        recipient_oib:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        recipient_code:
+          type: string
+        income_type_code:
+          type: string
+        gross_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        mio1_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        mio2_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        income_tax_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        zo_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        net_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - first_name
+      - gross_salary
+      - income_tax_amount
+      - income_type_code
+      - last_name
+      - mio1_amount
+      - mio2_amount
+      - net_salary
+      - recipient_code
+      - recipient_oib
+      - zo_amount
+    JoppdSubmitRequestRequest:
+      type: object
+      properties:
+        eporezna_identifier:
+          type: string
+          format: uuid
+        submitted_at:
+          type: string
+          format: date-time
+      required:
+      - eporezna_identifier
+      - submitted_at
     JournalEntryDetail:
       type: object
       properties:
@@ -8336,6 +11449,49 @@ components:
           type: string
         internal_notes:
           type: string
+    PartyCandidate:
+      type: object
+      properties:
+        name:
+          type: string
+        oib:
+          type: string
+        vat_number:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        country_code:
+          type: string
+        iban:
+          type: string
+        role:
+          type: string
+        is_own_company:
+          type: boolean
+        suspected_own_company:
+          type: boolean
+        blank:
+          type: boolean
+      required:
+      - address
+      - blank
+      - city
+      - country
+      - country_code
+      - iban
+      - is_own_company
+      - name
+      - oib
+      - postal_code
+      - role
+      - suspected_own_company
+      - vat_number
     PatchedContactWriteRequest:
       type: object
       properties:
@@ -8383,6 +11539,112 @@ components:
           type: string
         is_active:
           type: boolean
+    PatchedEmployeeRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          minLength: 1
+        first_name:
+          type: string
+          minLength: 1
+        last_name:
+          type: string
+          minLength: 1
+        full_name:
+          type: string
+          minLength: 1
+        oib:
+          type: string
+          minLength: 1
+        date_of_birth:
+          type: string
+          nullable: true
+          minLength: 1
+        street:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        municipality_code:
+          type: string
+          minLength: 1
+        work_location:
+          type: string
+          minLength: 1
+        iban:
+          type: string
+          minLength: 1
+        bank_name:
+          type: string
+          minLength: 1
+        mio_pillar:
+          type: string
+          minLength: 1
+        personal_allowance_coefficient:
+          type: string
+          minLength: 1
+        is_active:
+          type: boolean
+        notes:
+          type: string
+          minLength: 1
+        sex:
+          type: string
+        citizenship:
+          type: string
+        residence_street:
+          type: string
+        residence_city:
+          type: string
+        residence_municipality_code:
+          type: string
+        occupation:
+          type: string
+        qualification:
+          type: string
+        licence_note:
+          type: string
+        employment_status:
+          type: string
+        work_permit_number:
+          type: string
+        work_permit_valid_to:
+          type: string
+          nullable: true
+          minLength: 1
+        hzzo_registered_at:
+          type: string
+          nullable: true
+          minLength: 1
+        hzmo_registered_at:
+          type: string
+          nullable: true
+          minLength: 1
+        insurance_changed_at:
+          type: string
+          nullable: true
+          minLength: 1
+        deregistered_at:
+          type: string
+          nullable: true
+          minLength: 1
+        legal_evidence_gaps:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        active_contract:
+          allOf:
+          - $ref: '#/components/schemas/ContractRequest'
+          nullable: true
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractRequest'
     PatchedExpenseCategoryPatchRequest:
       type: object
       properties:
@@ -8403,6 +11665,10 @@ components:
         cost_center_id:
           type: integer
           nullable: true
+        line_accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseLineAccountPatchRequest'
     PatchedPartnerBankAccountWriteRequest:
       type: object
       properties:
@@ -8488,6 +11754,12 @@ components:
         amount:
           type: string
           nullable: true
+        currency:
+          type: string
+          nullable: true
+        book_amount:
+          type: string
+          nullable: true
         account_mask:
           type: string
           nullable: true
@@ -8554,6 +11826,322 @@ components:
       required:
       - creditor_iban
       - status
+    PayrollPeriod:
+      type: object
+      properties:
+        id:
+          type: integer
+        year:
+          type: integer
+        month:
+          type: integer
+        calculation_date:
+          type: string
+        payment_date:
+          type: string
+        status:
+          type: string
+        posted_at:
+          type: string
+          nullable: true
+        employee_count:
+          type: integer
+        gross_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        net_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        income_tax_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        zo_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        payslips:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipSummary'
+      required:
+      - calculation_date
+      - employee_count
+      - gross_total
+      - id
+      - income_tax_total
+      - month
+      - net_total
+      - payment_date
+      - posted_at
+      - status
+      - year
+      - zo_total
+    PayrollPeriodList:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollPeriod'
+      required:
+      - results
+    PayslipDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        employee_id:
+          type: integer
+        employee_name:
+          type: string
+        status:
+          type: string
+        gross_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        net_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        amount_to_pay:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        non_taxable_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        deductions_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        compliance_flags:
+          type: array
+          items: {}
+        income_tax_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        zo_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_labor_cost:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        period:
+          type: object
+          additionalProperties: {}
+        date_from:
+          type: string
+        date_to:
+          type: string
+        mio1_base:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        mio1_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        mio2_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        income_base:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        personal_allowance_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        tax_base:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        income_tax_rate_used:
+          type: string
+        earning_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipEarningLine'
+      required:
+      - date_from
+      - date_to
+      - earning_lines
+      - employee_id
+      - employee_name
+      - gross_salary
+      - id
+      - income_base
+      - income_tax_amount
+      - income_tax_rate_used
+      - mio1_amount
+      - mio1_base
+      - mio2_amount
+      - net_salary
+      - period
+      - personal_allowance_amount
+      - status
+      - tax_base
+      - total_labor_cost
+      - zo_amount
+    PayslipEarningLine:
+      type: object
+      properties:
+        name:
+          type: string
+        hours:
+          type: string
+        gross_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - gross_amount
+      - hours
+      - name
+    PayslipSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        employee_id:
+          type: integer
+        employee_name:
+          type: string
+        status:
+          type: string
+        gross_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        net_salary:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        amount_to_pay:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        non_taxable_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        deductions_total:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        compliance_flags:
+          type: array
+          items: {}
+        income_tax_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        zo_amount:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+        total_labor_cost:
+          type: string
+          description: Decimal as string, e.g. "1100.00"
+      required:
+      - employee_id
+      - employee_name
+      - gross_salary
+      - id
+      - income_tax_amount
+      - net_salary
+      - status
+      - total_labor_cost
+      - zo_amount
+    PdFoundingItem:
+      type: object
+      properties:
+        entry_date:
+          type: string
+          format: date
+        entry_number:
+          type: string
+        account_code:
+          type: string
+        account_name:
+          type: string
+        amount:
+          type: string
+        description:
+          type: string
+      required:
+      - account_code
+      - account_name
+      - amount
+      - description
+      - entry_date
+      - entry_number
+    PdMissingHrk:
+      type: object
+      properties:
+        entry_date:
+          type: string
+          format: date
+        entry_number:
+          type: string
+        account_code:
+          type: string
+        account_name:
+          type: string
+        reason:
+          type: string
+      required:
+      - account_code
+      - account_name
+      - entry_date
+      - entry_number
+      - reason
+    PdRow:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        amount:
+          type: string
+        filed:
+          type: string
+          nullable: true
+      required:
+      - amount
+      - code
+      - filed
+      - label
+    PdYear:
+      type: object
+      properties:
+        tax_year:
+          type: integer
+        currency:
+          type: string
+        period_from:
+          type: string
+        period_to:
+          type: string
+        tax_rate:
+          type: string
+        founding_year:
+          type: integer
+          nullable: true
+        header:
+          type: object
+          additionalProperties: {}
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdRow'
+        founding_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdFoundingItem'
+        missing_hrk:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdMissingHrk'
+        matches_filed:
+          type: boolean
+          nullable: true
+      required:
+      - currency
+      - founding_items
+      - founding_year
+      - header
+      - matches_filed
+      - missing_hrk
+      - period_from
+      - period_to
+      - rows
+      - tax_rate
+      - tax_year
     PdvBoxes:
       type: object
       properties:
@@ -8591,6 +12179,52 @@ components:
       - return_status
       - return_version
       - xml_integrity
+    PdvDraftRequest:
+      type: object
+      properties:
+        period:
+          type: string
+          minLength: 1
+        return_version:
+          type: integer
+        return_status:
+          type: string
+          minLength: 1
+        xml_integrity:
+          type: string
+          minLength: 1
+      required:
+      - period
+      - return_status
+      - return_version
+      - xml_integrity
+    PdvFormRow:
+      type: object
+      properties:
+        form:
+          type: string
+        version:
+          type: integer
+        status:
+          type: string
+        received_at:
+          type: string
+          nullable: true
+        period_from:
+          type: string
+        period_to:
+          type: string
+        external_identifier:
+          type: string
+          nullable: true
+      required:
+      - external_identifier
+      - form
+      - period_from
+      - period_to
+      - received_at
+      - status
+      - version
     PdvLedgerRebuild:
       type: object
       properties:
@@ -8607,6 +12241,12 @@ components:
         period:
           type: string
           description: Canonical period YYYY-MM
+        period_from:
+          type: string
+          description: Prvi dan prijave, YYYY-MM-DD
+        period_to:
+          type: string
+          description: Zadnji dan prijave, YYYY-MM-DD
         period_status:
           type: string
         has_ledger:
@@ -8615,6 +12255,9 @@ components:
           type: integer
           nullable: true
         return_status:
+          type: string
+          nullable: true
+        return_source:
           type: string
           nullable: true
         latest_return_version:
@@ -8637,7 +12280,10 @@ components:
       - latest_return_status
       - latest_return_version
       - period
+      - period_from
       - period_status
+      - period_to
+      - return_source
       - return_status
       - return_version
       - submitted_at
@@ -8660,6 +12306,12 @@ components:
         period:
           type: string
           description: Canonical period YYYY-MM
+        period_from:
+          type: string
+          description: Prvi dan prijave, YYYY-MM-DD
+        period_to:
+          type: string
+          description: Zadnji dan prijave, YYYY-MM-DD
         period_status:
           type: string
         has_ledger:
@@ -8668,6 +12320,9 @@ components:
           type: integer
           nullable: true
         return_status:
+          type: string
+          nullable: true
+        return_source:
           type: string
           nullable: true
         latest_return_version:
@@ -8691,17 +12346,38 @@ components:
           type: string
           format: uuid
           nullable: true
+        external_identifier:
+          type: string
+          nullable: true
         has_confirmation:
           type: boolean
+        document_currency:
+          type: string
+          nullable: true
+        document_vat_due:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
+        forms:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdvFormRow'
       required:
       - correction_in_progress
+      - document_currency
+      - document_vat_due
       - event_uuid
+      - external_identifier
+      - forms
       - has_confirmation
       - has_ledger
       - latest_return_status
       - latest_return_version
       - period
+      - period_from
       - period_status
+      - period_to
+      - return_source
       - return_status
       - return_version
       - submitted_at
@@ -8885,6 +12561,10 @@ components:
         amount:
           type: string
           description: Decimal as string, e.g. "1100.00"
+        document_amount:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
         debit:
           $ref: '#/components/schemas/AccountRef'
         credit:
@@ -8905,6 +12585,68 @@ components:
       - debit
       - debit_cost_center
       - description
+    PrepaymentCandidate:
+      type: object
+      properties:
+        id:
+          type: integer
+        posting_date:
+          type: string
+        original_amount:
+          type: string
+        available_amount:
+          type: string
+        currency:
+          type: string
+        purchase_nature:
+          type: string
+        vat_treatment:
+          type: string
+        account_code:
+          type: string
+      required:
+      - account_code
+      - available_amount
+      - currency
+      - id
+      - original_amount
+      - posting_date
+      - purchase_nature
+      - vat_treatment
+    PrepaymentCandidateList:
+      type: object
+      properties:
+        supplier_id:
+          type: integer
+          nullable: true
+        currency:
+          type: string
+        ubl_prepaid_amount:
+          type: string
+          nullable: true
+        ubl_payable_amount:
+          type: string
+          nullable: true
+        purchase_natures:
+          type: array
+          items:
+            $ref: '#/components/schemas/Choice'
+        vat_treatments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Choice'
+        prepayments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrepaymentCandidate'
+      required:
+      - currency
+      - prepayments
+      - purchase_natures
+      - supplier_id
+      - ubl_payable_amount
+      - ubl_prepaid_amount
+      - vat_treatments
     PrivateFundsClaim:
       type: object
       properties:
@@ -9041,6 +12783,16 @@ components:
           description: Decimal as string, e.g. "1100.00"
       required:
       - return_bank_account_id
+    ReversalOf:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: string
+      required:
+      - id
+      - number
     SetOfficialDocumentPostingProfileRequest:
       type: object
       properties:
@@ -9110,6 +12862,12 @@ components:
           type: integer
           nullable: true
         partner_name:
+          type: string
+          nullable: true
+        storno_expense_id:
+          type: integer
+          nullable: true
+        storno_expense_number:
           type: string
           nullable: true
         label:
@@ -9195,6 +12953,16 @@ components:
       required:
       - code
       - message
+    SourceEnum:
+      enum:
+      - issuer
+      - buyer
+      - manual
+      type: string
+      description: |-
+        * `issuer` - issuer
+        * `buyer` - buyer
+        * `manual` - manual
     SourceTypeEnum:
       enum:
       - invoice
@@ -9225,8 +12993,16 @@ components:
         opening_balance:
           type: string
           description: Decimal as string, e.g. "1100.00"
+        opening_balance_eur:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
         closing_balance:
           type: string
+          description: Decimal as string, e.g. "1100.00"
+        closing_balance_eur:
+          type: string
+          nullable: true
           description: Decimal as string, e.g. "1100.00"
         status:
           type: string
@@ -9250,11 +13026,13 @@ components:
       - as_of
       - bank_account_id
       - closing_balance
+      - closing_balance_eur
       - currency
       - id
       - imported_at
       - match_summary
       - opening_balance
+      - opening_balance_eur
       - reconciled_at
       - statement_date
       - statement_number
@@ -9276,8 +13054,16 @@ components:
         opening_balance:
           type: string
           description: Decimal as string, e.g. "1100.00"
+        opening_balance_eur:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
         closing_balance:
           type: string
+          description: Decimal as string, e.g. "1100.00"
+        closing_balance_eur:
+          type: string
+          nullable: true
           description: Decimal as string, e.g. "1100.00"
         status:
           type: string
@@ -9294,10 +13080,12 @@ components:
       required:
       - bank_account_id
       - closing_balance
+      - closing_balance_eur
       - currency
       - id
       - imported_at
       - opening_balance
+      - opening_balance_eur
       - reconciled_at
       - statement_date
       - statement_number
@@ -9488,6 +13276,44 @@ components:
       - oib
       - postal_code
       - vat_number
+    SupplierPrepaymentCreateRequest:
+      type: object
+      properties:
+        partner_id:
+          type: integer
+        purchase_nature:
+          type: string
+          minLength: 1
+        vat_treatment:
+          type: string
+      required:
+      - partner_id
+      - purchase_nature
+    SupplierPrepaymentResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        bank_transaction_id:
+          type: integer
+        account_code:
+          type: string
+        original_amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+        match_status:
+          type: string
+      required:
+      - account_code
+      - bank_transaction_id
+      - currency
+      - id
+      - match_status
+      - original_amount
+      - status
     SyncEnqueueResponse:
       type: object
       properties:
@@ -9697,6 +13523,10 @@ components:
         amount:
           type: string
           description: Decimal as string, e.g. "1100.00"
+        amount_eur:
+          type: string
+          nullable: true
+          description: Decimal as string, e.g. "1100.00"
         currency:
           type: string
         transaction_type:
@@ -9722,6 +13552,7 @@ components:
           nullable: true
       required:
       - amount
+      - amount_eur
       - bank_account_id
       - bank_statement_id
       - counterparty_iban

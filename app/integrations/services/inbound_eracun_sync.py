@@ -15,13 +15,19 @@ from django.db import IntegrityError, connection, transaction
 
 from expenses.models import Expense, ExpenseImportMetadata, ExpenseSource
 from fiscal_gateway.client.gateway_v1_client import GatewayV1Client, GatewayV1Error
-from fiscal_gateway.services.inbound_expense import create_inbound_expense_from_ubl
+from fiscal_gateway.services.inbound_expense import _as_date, create_inbound_expense_from_ubl
 from integrations.audit import log_audit_step, new_correlation_id
 from integrations.constants import IntegrationProvider, IntegrationType
 from integrations.models import IntegrationAuditLog
 from integrations.repository import IntegrationRepository
+from integrations.services.inbound_eracun_merge import (
+    attach_inbound_eracun,
+    matching_expenses,
+    reconcile_unposted_inbound_drafts,
+)
 from integrations.services.inbound_rejection import taxpayer_oib_for_tenant
 from super_integration.models import SuperDocumentLink
+from ubl.parser.invoice import parse_invoice_ubl
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +123,31 @@ def _already_imported(tenant, guid: str) -> bool:
     ).exists()
 
 
-def _import_one(tenant, *, item: dict, guid: str, ubl_xml: str) -> Expense:
+def _import_one(tenant, *, item: dict, guid: str, ubl_xml: str) -> tuple[Expense, bool]:
+    """Create a draft, or absorb the eRačun into the one expense that already is it.
+
+    The bool is True when an existing expense took the provider identity and no
+    second row was created.
+    """
+    parsed = parse_invoice_ubl(ubl_xml)
+    matches = matching_expenses(
+        tenant,
+        supplier_oib=parsed.supplier_oib,
+        receipt_number=parsed.invoice_number,
+        expense_date=_as_date(parsed.issue_date),
+        amount=parsed.total_amount,
+    )
+    if len(matches) == 1:
+        survivor = attach_inbound_eracun(
+            tenant,
+            matches[0],
+            item=item,
+            guid=guid,
+            ubl_xml=ubl_xml,
+            receipt_number=parsed.invoice_number,
+        )
+        return survivor, True
+
     with transaction.atomic():
         draft = create_inbound_expense_from_ubl(
             tenant=tenant,
@@ -142,7 +172,7 @@ def _import_one(tenant, *, item: dict, guid: str, ubl_xml: str) -> Expense:
             super_guid=guid,
             raw_payload=item,
         )
-        return draft.expense
+        return draft.expense, False
 
 
 def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict:
@@ -155,6 +185,8 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
     audit_provider = _audit_provider(tenant)
 
     with _tenant_lock(tenant):
+        # Local rows first. A gateway outage must not leave a duplicate standing.
+        merged = reconcile_unposted_inbound_drafts(tenant)
         client = GatewayV1Client(taxpayer_oib=oib)
         try:
             items = _list_inbound_candidates(client, oib)
@@ -185,7 +217,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
 
             try:
                 ubl_xml = client.get_inbound_ubl(str(item.get('document_id')))
-                expense = _import_one(tenant, item=item, guid=guid, ubl_xml=ubl_xml)
+                expense, absorbed = _import_one(tenant, item=item, guid=guid, ubl_xml=ubl_xml)
             except IntegrityError:
                 # Another writer got the same document first — the unique constraints,
                 # not the advisory lock, are what keep this to exactly one Expense.
@@ -197,6 +229,9 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
                 logger.warning('eRačun import failed guid=%s: %s', guid, exc)
                 continue
 
+            if absorbed:
+                merged += 1
+                continue
             imported += 1
             log_audit_step(
                 tenant=tenant,
@@ -224,7 +259,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
         step=IntegrationAuditLog.STEP_INBOUND_RECEIVED,
         status=(
             IntegrationAuditLog.STATUS_FAILED
-            if failed and not imported
+            if failed and not imported and not merged
             else IntegrationAuditLog.STATUS_SUCCESS
         ),
         correlation_id=correlation_id,
@@ -233,6 +268,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
         detail={
             'scanned': len(items),
             'imported': imported,
+            'merged': merged,
             'skipped': skipped,
             'unlinked': unlinked,
             'failed': failed,
@@ -243,6 +279,7 @@ def import_available_inbound_eracun(tenant, *, limit: int | None = None) -> dict
     return {
         'scanned': len(items),
         'imported': imported,
+        'merged': merged,
         'skipped': skipped,
         'failed': failed,
         'remaining_importable': remaining,

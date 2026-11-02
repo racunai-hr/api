@@ -16,6 +16,7 @@ class VehicleLineKind(StrEnum):
     MOTOR_VEHICLE_TAX = 'motor_vehicle_tax'
     INSURANCE_COMPULSORY = 'insurance_compulsory'
     UNCLASSIFIED = 'unclassified'
+    FUEL = 'fuel'
 
 
 class LineRuleKind(StrEnum):

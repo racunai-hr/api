@@ -17,7 +17,7 @@ from shared.countries import (
     normalize_country_code,
 )
 
-PDV_MAPPING_VERSION = 13
+PDV_MAPPING_VERSION = 15
 
 _OUTPUT_RRIF_BY_RATE: dict[Decimal, str] = {
     Decimal('5.00'): '240010',

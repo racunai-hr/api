@@ -1,0 +1,35 @@
+{% extends "payroll/_base.html" %}
+{% load payroll_format %}
+{% block content %}
+<table class="meta-table">
+  <tr><td><b>Plaća za</b></td><td>{{ period.month }} / {{ period.year }}</td></tr>
+</table>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th>Konto</th>
+      <th>Naziv konta</th>
+      <th>Opis knjiženja</th>
+      <th class="num">Duguje</th>
+      <th class="num">Potražuje</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in journal_lines %}
+    <tr>
+      <td>{{ line.account_code }}</td>
+      <td>{{ line.account_name }}</td>
+      <td>{{ line.description }}</td>
+      <td class="num">{{ line.debit|hr_amount }}</td>
+      <td class="num">{{ line.credit|hr_amount }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="totals-row">
+      <td colspan="3">UKUPNO</td>
+      <td class="num">{{ total_debit|hr_amount }}</td>
+      <td class="num">{{ total_credit|hr_amount }}</td>
+    </tr>
+  </tbody>
+</table>
+{% endblock %}

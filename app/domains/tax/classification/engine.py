@@ -326,10 +326,25 @@ def _classify_invoice(
     )
 
 
+def _has_foreign_input_vat(document: TaxDocumentInput) -> bool:
+    amount = document.foreign_vat_amount or Decimal('0')
+    country = (document.foreign_vat_country or '').strip().upper()
+    return amount > 0 and country not in ('', 'HR')
+
+
 def _classify_expense(
     document: TaxDocumentInput,
     warnings: list[str],
 ) -> TaxClassificationResult:
+    if _has_foreign_input_vat(document):
+        return _empty(
+            document,
+            Outcome.NOT_TAX_RELEVANT,
+            'foreign_input_vat',
+            warnings,
+            rule_code='EXP_FOREIGN_INPUT_VAT',
+        )
+
     procedure = document.declared_procedure or VatSupplyProcedure.STANDARD
     if procedure == VatSupplyProcedure.IOSS:
         net = document.base_amount
@@ -425,6 +440,34 @@ def _classify_expense(
 
     if document.base_amount <= 0 and not document.vat_amount:
         return _empty(document, Outcome.NOT_TAX_RELEVANT, 'zero_expense', warnings)
+
+    # E means exempt from VAT (EN 16931), not "outside the VAT system" (that is O).
+    # NOT_TAX_RELEVANT here is only the terminal that emits no ledger row.
+    if (document.tax_category or '').upper() == 'E':
+        if not document.vat_amount:
+            return _empty(
+                document,
+                Outcome.NOT_TAX_RELEVANT,
+                'explicit_vat_exempt_e',
+                warnings,
+                rule_code='EXP_EXPLICIT_EXEMPT_E',
+            )
+        return _empty(
+            document,
+            Outcome.REVIEW_REQUIRED,
+            'explicit_vat_exempt_e_with_vat',
+            warnings,
+            rule_code='EXP_EXPLICIT_EXEMPT_E_WITH_VAT',
+        )
+
+    if (document.posting_profile or '') == 'company_passenger_vehicle':
+        return _empty(
+            document,
+            Outcome.REVIEW_REQUIRED,
+            'vehicle_limited_input_vat',
+            warnings,
+            rule_code='EXP_VEHICLE_LIMITED_VAT_REVIEW',
+        )
 
     eu_charged = partner is not None and is_eu_supplier(_PartnerView(partner))
     if not eu_charged and expense_matches_domestic_25(

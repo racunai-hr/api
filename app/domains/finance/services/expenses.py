@@ -85,6 +85,9 @@ def serialize_document_posting_plan(expense: Expense, plan) -> dict:
                 'amount_field': line.amount_field,
                 'description': line.description,
                 'amount': _money(line.amount),
+                'document_amount': (
+                    _money(line.document_amount) if line.document_amount is not None else None
+                ),
                 'debit': _account_ref(line.debit_account),
                 'credit': _account_ref(line.credit_account),
                 'debit_cost_center': cost_center_ref(line.debit_cost_center),
@@ -223,6 +226,38 @@ def _apply_line_accounts(*, tenant, expense, line_accounts) -> None:
 
 
 @transaction.atomic
+def _require_inventory_vehicle_context(expense: Expense) -> None:
+    from accounting.models import VehicleAccountingRole
+
+    profile = expense.posting_profile or ''
+    vehicle = expense.vehicle if expense.vehicle_id else None
+    if profile == 'vehicle_inventory_cost':
+        if vehicle is None:
+            raise ExpenseApproveBadRequest(
+                'missing_vehicle',
+                'Nabavna vrijednost vozila na zalihi ne može se knjižiti bez vozila.',
+            )
+        if vehicle.accounting_role != VehicleAccountingRole.INVENTORY_FOR_RESALE:
+            raise ExpenseApproveBadRequest(
+                'vehicle_role',
+                'Vozilo nije označeno kao vozilo za daljnju prodaju.',
+            )
+        if vehicle.fixed_asset_id:
+            raise ExpenseApproveBadRequest(
+                'vehicle_fixed_asset',
+                'Vozilo za daljnju prodaju ne smije biti vezano uz osnovno sredstvo.',
+            )
+    if (
+        profile == 'asset_purchase'
+        and vehicle is not None
+        and vehicle.accounting_role == VehicleAccountingRole.INVENTORY_FOR_RESALE
+    ):
+        raise ExpenseApproveBadRequest(
+            'inventory_vehicle_asset',
+            'Vozilo za daljnju prodaju ne može se knjižiti kao nabava imovine.',
+        )
+
+
 def approve_expense_for_posting(
     *,
     tenant,
@@ -238,6 +273,22 @@ def approve_expense_for_posting(
     - omitted (default): legacy behaviour — if blank, set ``business_account``
     - explicit value (including ``''`` / ``None``): store that value; blank stays blank
     """
+    with transaction.atomic():
+        return _approve_expense_for_posting(
+            tenant=tenant,
+            expense_id=expense_id,
+            user=user,
+            settlement_method=settlement_method,
+        )
+
+
+def _approve_expense_for_posting(
+    *,
+    tenant,
+    expense_id: int,
+    user,
+    settlement_method=_USE_EXISTING_SETTLEMENT_DEFAULT,
+) -> dict:
     expense = (
         Expense.all_objects.select_for_update()
         .filter(tenant=tenant, pk=expense_id)
@@ -251,6 +302,8 @@ def approve_expense_for_posting(
 
     if expense.status in ('rejected', 'cancelled'):
         raise ExpenseApproveConflict('invalid_status', 'Trošak nije u statusu koji se može odobriti.')
+
+    _require_inventory_vehicle_context(expense)
 
     if expense.status == 'draft':
         expense.status = 'approved'

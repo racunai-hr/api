@@ -145,6 +145,9 @@ class ConfirmInvoiceImportSerializer(serializers.Serializer):
     remember_category_for_partner = serializers.BooleanField(required=False)
     direction_override = serializers.BooleanField(required=False)
     line_accounts = ConfirmLineAccountSerializer(many=True, required=False)
+    posting_profile = serializers.CharField(required=False, allow_blank=True)
+    vehicle_id = serializers.IntegerField(required=False, allow_null=True)
+    answers = serializers.DictField(required=False)
 
 
 class ApplySupplierSerializer(serializers.Serializer):
@@ -190,6 +193,7 @@ class EracunImportErrorSerializer(serializers.Serializer):
 class EracunInboundImportResponseSerializer(serializers.Serializer):
     scanned = serializers.IntegerField()
     imported = serializers.IntegerField()
+    merged = serializers.IntegerField()
     skipped = serializers.IntegerField()
     failed = serializers.IntegerField()
     remaining_importable = serializers.IntegerField()

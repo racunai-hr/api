@@ -246,6 +246,49 @@ class ClassifyExpenseTests(SimpleTestCase):
         self.assertEqual(result.rule_code, 'EXPENSE_GENERIC_303_REMOVED')
         self.assertEqual(result.rows, ())
 
+    def test_explicit_exempt_category_emits_no_ledger_row(self):
+        partner = PartnerSnapshot(
+            name='Financijska agencija',
+            country='Hrvatska',
+            country_code='HR',
+            tax_number='85821130368',
+            vat_id='',
+            provenance=PartnerProvenance.DOCUMENT_SNAPSHOT,
+        )
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='approved',
+                partner=partner,
+                base_amount=Decimal('132.72'),
+                vat_rate=Decimal('0.00'),
+                vat_amount=Decimal('0.00'),
+                tax_category='E',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'EXP_EXPLICIT_EXEMPT_E')
+        self.assertEqual(result.reason, 'explicit_vat_exempt_e')
+        self.assertNotEqual(result.reason, 'not_subject_to_vat')
+        self.assertEqual(result.rows, ())
+
+    def test_explicit_exempt_with_vat_stays_review(self):
+        result = classify(
+            _input(
+                source_kind='expense',
+                direction=Direction.INPUT,
+                lifecycle_status='approved',
+                base_amount=Decimal('100.00'),
+                vat_rate=Decimal('25.00'),
+                vat_amount=Decimal('25.00'),
+                tax_category='E',
+            )
+        )
+        self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
+        self.assertEqual(result.rule_code, 'EXP_EXPLICIT_EXEMPT_E_WITH_VAT')
+        self.assertEqual(result.rows, ())
+
     def test_mixed_rate_expense_stays_review(self):
         result = classify(
             _input(

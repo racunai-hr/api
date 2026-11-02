@@ -11,9 +11,17 @@ from accounting.models import JournalEntry, SubledgerAllocation, SubledgerItem
 
 
 def _document_total(source) -> Decimal:
+    from accounting.services.foreign_vat import foreign_posting_amounts
+
+    posted = foreign_posting_amounts(source)
+    if posted is not None:
+        return posted['gross']
+    from accounting.services.fx import in_book_eur
+
+    currency = getattr(source, 'currency', None)
     if hasattr(source, 'total_amount') and source.total_amount is not None:
-        return Decimal(source.total_amount)
-    return Decimal(getattr(source, 'amount', 0) or 0)
+        return in_book_eur(source.total_amount, currency)
+    return in_book_eur(getattr(source, 'amount', 0) or 0, currency)
 
 
 def _document_due_date(source):

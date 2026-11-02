@@ -8,7 +8,16 @@ from uuid import UUID, uuid4
 from django.db import transaction
 from django.utils import timezone
 
-from accounting.models import PDVSReturn, SubmissionEvent, TZ2Return, VATPeriod, VATReturn, ZPReturn
+from accounting.models import (
+    JOPPDReturn,
+    PDVSReturn,
+    SubmissionEvent,
+    TZ2Return,
+    VATPeriod,
+    VATReturn,
+    VATReturnStatus,
+    ZPReturn,
+)
 from accounting.services.submission.exceptions import (
     AttachConfirmationError,
     CreateSubmissionEventError,
@@ -27,6 +36,7 @@ from accounting.services.tax_forms.pdv.integrity import (
 )
 from accounting.services.tax_forms.pdv.submit import (
     MarkVatReturnSubmittedError,
+    book_vat_return_processed,
     mark_vat_return_submitted,
 )
 from accounting.services.tax_forms.pdv.validation import PdvSchemaValidationError
@@ -166,6 +176,35 @@ def submit_pdv_period(
     return _submission_dto(event)
 
 
+def book_pdv_in_processing(
+    period: VATPeriod,
+    *,
+    user,
+    return_version: int,
+    submitted_xml,
+) -> dict:
+    """Book the received correction once ePorezna has processed the same boxes."""
+    vat_return = period.latest_return
+    if vat_return is None or vat_return.status != VATReturnStatus.IN_PROCESSING:
+        raise TaxConflict('Nema PDV obrasca u obradi.')
+    if vat_return.version != return_version:
+        raise TaxConflict('return_version ne odgovara obrascu u obradi.')
+    if submitted_xml is None:
+        raise TaxBadRequest('submitted_xml je obavezan.')
+    try:
+        book_vat_return_processed(
+            vat_return,
+            submitted_xml=submitted_xml,
+            uploaded_by=user,
+        )
+    except (MarkVatReturnSubmittedError, AttachConfirmationError) as exc:
+        raise TaxConflict(str(exc)) from exc
+    event = SubmissionService.current_submission(vat_return)
+    if event is None:
+        raise TaxConflict('Predaja nije zabilježena.')
+    return _submission_dto(event)
+
+
 def submit_pdv_s_period(
     period: VATPeriod,
     *,
@@ -240,7 +279,7 @@ def attach_period_confirmation(tenant, event_uuid, file_obj, *, uploaded_by) -> 
     if event is None:
         raise TaxNotFound()
     document = event.document
-    if not isinstance(document, (VATReturn, PDVSReturn, TZ2Return, ZPReturn)):
+    if not isinstance(document, (VATReturn, PDVSReturn, TZ2Return, ZPReturn, JOPPDReturn)):
         raise TaxNotFound()
     if file_obj is None:
         raise TaxBadRequest('confirmation file je obavezan.')
@@ -258,6 +297,21 @@ def attach_period_confirmation(tenant, event_uuid, file_obj, *, uploaded_by) -> 
         'event_uuid': str(event.event_uuid),
         'has_confirmation': bool(event.confirmation_attachment),
     }
+
+
+def confirmation_download(tenant, event_uuid) -> tuple[bytes, str]:
+    """Return the archived confirmation bytes and a download filename."""
+    event = SubmissionEvent.all_objects.filter(tenant=tenant, event_uuid=event_uuid).first()
+    if event is None or not event.confirmation_attachment:
+        raise TaxNotFound()
+    attachment = event.confirmation_attachment
+    name = attachment.name.rsplit('/', 1)[-1] or 'potvrda.pdf'
+    attachment.open('rb')
+    try:
+        data = attachment.read()
+    finally:
+        attachment.close()
+    return data, name
 
 
 def pdv_s_xml_bytes(period: VATPeriod) -> tuple[bytes, str]:
@@ -278,6 +332,70 @@ def pdv_s_xml_bytes(period: VATPeriod) -> tuple[bytes, str]:
         f'{payload.period_from:%Y%m%d}-{payload.period_to:%Y%m%d}.xml'
     )
     return xml_bytes, filename
+
+
+def create_joppd_draft(tenant, year: int, month: int) -> dict:
+    from domains.tax.forms.joppd.joppd_returns import create_joppd_return_draft
+    from domains.tax.forms.joppd.validation import JoppdValidationError
+
+    try:
+        joppd_return = create_joppd_return_draft(tenant, year, month)
+    except (JoppdValidationError, ValueError) as exc:
+        raise TaxBadRequest(str(exc)) from exc
+    return {
+        'period': f'{year:04d}-{month:02d}',
+        'return_version': joppd_return.version,
+    }
+
+
+def joppd_xml_bytes(tenant, year: int, month: int) -> tuple[bytes, str]:
+    from domains.tax.forms.joppd.aggregate import aggregate_joppd_rows
+    from domains.tax.forms.joppd.render import render_joppd_xml
+    from domains.tax.forms.joppd.validation import JoppdValidationError, validate_joppd_payload
+
+    try:
+        payload = aggregate_joppd_rows(tenant, year, month)
+        validate_joppd_payload(payload)
+        xml_bytes = render_joppd_xml(payload)
+        from domains.tax.forms.joppd.validation import validate_joppd_xml
+        validate_joppd_xml(xml_bytes)
+    except (JoppdValidationError, ValueError) as exc:
+        raise TaxBadRequest(str(exc)) from exc
+    filename = f'JOPPD_{payload.employer.oib}_{year:04d}{month:02d}.xml'
+    return xml_bytes, filename
+
+
+def submit_joppd_period(
+    tenant,
+    year: int,
+    month: int,
+    *,
+    user,
+    eporezna_identifier: UUID,
+    submitted_at: datetime,
+) -> dict:
+    from django.conf import settings
+    from domains.tax.forms.joppd.submit import MarkJoppdSubmittedError, mark_joppd_submitted_for_period
+
+    if not getattr(settings, 'JOPPD_SUBMIT_ENABLED', False):
+        raise TaxBadRequest(
+            'Slanje JOPPD-a je blokirano dok službena XSD shema nije uključena (JOPPD_SUBMIT_ENABLED).'
+        )
+    try:
+        event = mark_joppd_submitted_for_period(
+            tenant,
+            year,
+            month,
+            submitted_at=submitted_at,
+            eporezna_identifier=eporezna_identifier,
+            submitted_by=user,
+            version_confirmed=True,
+        )
+    except (MarkJoppdSubmittedError, DuplicateExternalIdentifierError, CreateSubmissionEventError) as exc:
+        raise TaxConflict(str(exc)) from exc
+    except ValueError as exc:
+        raise TaxBadRequest(str(exc)) from exc
+    return _submission_dto(event)
 
 
 def zp_xml_bytes(period: VATPeriod) -> tuple[bytes, str]:

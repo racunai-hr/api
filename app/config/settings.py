@@ -18,6 +18,7 @@ SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
+JOPPD_SUBMIT_ENABLED = env.bool('JOPPD_SUBMIT_ENABLED', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
@@ -96,6 +97,9 @@ LOCAL_APPS = [
     'ubl',
     'super_integration',
     'fiscal_gateway',
+
+    # HR / plaće
+    'payroll',
 ]
 
 # Također zakomentaj:
@@ -189,6 +193,7 @@ BANKING_IMPORT_MAX_BYTES = env.int('BANKING_IMPORT_MAX_BYTES', default=20 * 1024
 # Purchasing OCR (Purchasing AI)
 OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
 OPENAI_OCR_MODEL = env('OPENAI_OCR_MODEL', default='gpt-4.1-mini')
+OPENAI_ACCOUNT_SUGGESTION_MODEL = env('OPENAI_ACCOUNT_SUGGESTION_MODEL', default='gpt-6-luna')
 OPENAI_OCR_TIMEOUT_SECONDS = env.int('OPENAI_OCR_TIMEOUT_SECONDS', default=60)
 PURCHASING_OCR_PROVIDER = env('PURCHASING_OCR_PROVIDER', default='openai')
 PURCHASING_OCR_FAKE_BEHAVIOR = env('PURCHASING_OCR_FAKE_BEHAVIOR', default='ok')

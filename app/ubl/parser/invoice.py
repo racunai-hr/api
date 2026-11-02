@@ -58,6 +58,8 @@ class ParsedTaxSummaryRow:
     base: Decimal | None
     vat: Decimal | None
     category_id: str | None
+    exemption_reason_code: str | None = None
+    exemption_reason_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -238,12 +240,15 @@ def _parse_charges(root) -> list[ParsedCharge]:
 def _parse_tax_summary(root) -> list[ParsedTaxSummaryRow]:
     rows: list[ParsedTaxSummaryRow] = []
     for st in root.xpath('//cac:TaxTotal/cac:TaxSubtotal', namespaces=NS):
+        category = st.find('cac:TaxCategory', NS)
         rows.append(
             ParsedTaxSummaryRow(
                 rate=_optional_decimal(_text(st, './/cbc:Percent', default='') or None),
                 base=_optional_decimal(_text(st, './cbc:TaxableAmount', default='') or None),
                 vat=_optional_decimal(_text(st, './cbc:TaxAmount', default='') or None),
-                category_id=_first_text(st, './/cbc:ID'),
+                category_id=_first_text(category, './cbc:ID') if category is not None else _first_text(st, './/cbc:ID'),
+                exemption_reason_code=_first_text(category, './cbc:TaxExemptionReasonCode') if category is not None else None,
+                exemption_reason_text=_first_text(category, './cbc:TaxExemptionReason') if category is not None else None,
             )
         )
     return rows

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Draft stand-in. This is NOT the official ePorezna JOPPD XSD.
+  Submit stays off (JOPPD_SUBMIT_ENABLED) until the official schema is stored here
+  and validation is switched to it.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="ObrazacJOPPD"/>
+</xs:schema>

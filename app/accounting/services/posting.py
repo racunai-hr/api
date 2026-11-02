@@ -6,13 +6,16 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from accounting.models import ChartOfAccounts, FiscalPeriod, JournalEntry, PostingRule
 from accounting.services.analytics import (
+    VEHICLE_INVENTORY_SYNTHETIC_CODES,
     get_or_create_analytic_for_partner,
     get_or_create_analytic_for_payer,
+    get_or_create_inventory_analytic_for_vehicle,
 )
 from domains.finance.services.subledger import (
     get_subledger_item_for_source,
@@ -22,7 +25,7 @@ from domains.finance.services.subledger import (
 )
 
 
-DEFAULT_POSTING_RULES = [
+_BASE_POSTING_RULES = [
     {
         'name': 'Izdani račun — kupci usluga / prihod',
         'document_type': 'invoice_issued',
@@ -69,7 +72,10 @@ DEFAULT_POSTING_RULES = [
         'amount_field': 'tax_amount',
         'priority': 20,
         'use_analytic': True,
-        'condition': {'min_tax': '0.01'},
+        'condition': {
+            'min_tax': '0.01',
+            'exclude_posting_profile': ['company_passenger_vehicle'],
+        },
     },
     {
         'name': 'Odobren trošak — EU usluge RC bez pretporeza',
@@ -110,6 +116,66 @@ DEFAULT_POSTING_RULES = [
         'condition': {'posting_profile': ['asset_purchase']},
     },
     {
+        'name': 'Odobren trošak — zavisni trošak nabave robe',
+        'document_type': 'expense_approved',
+        'debit_account_code': '6514',
+        'credit_account_code': '2201',
+        'amount_field': 'net_amount',
+        'priority': 10,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['goods_inward_cost']},
+    },
+    {
+        'name': 'Odobren trošak — nabavna vrijednost vozila na zalihi',
+        'document_type': 'expense_approved',
+        'debit_account_code': '6600',
+        'credit_account_code': '2201',
+        'amount_field': 'net_amount',
+        'priority': 10,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['vehicle_inventory_cost']},
+    },
+    {
+        'name': 'Odobren trošak — priznati dio goriva osobnog vozila',
+        'document_type': 'expense_approved',
+        'debit_account_code': '4075',
+        'credit_account_code': '2201',
+        'amount_field': 'vehicle_cost_recognized',
+        'priority': 10,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['company_passenger_vehicle']},
+    },
+    {
+        'name': 'Odobren trošak — nepriznati dio goriva osobnog vozila',
+        'document_type': 'expense_approved',
+        'debit_account_code': '4076',
+        'credit_account_code': '2201',
+        'amount_field': 'vehicle_cost_limited',
+        'priority': 11,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['company_passenger_vehicle']},
+    },
+    {
+        'name': 'Odobren trošak — odbitni pretporez goriva osobnog vozila',
+        'document_type': 'expense_approved',
+        'debit_account_code': '1400',
+        'credit_account_code': '2201',
+        'amount_field': 'vehicle_vat_deductible',
+        'priority': 20,
+        'use_analytic': True,
+        'condition': {'posting_profile': ['company_passenger_vehicle']},
+    },
+    {
+        'name': 'Odobren trošak — potraživanje za povrat stranog PDV-a',
+        'document_type': 'expense_approved',
+        'debit_account_code': '1274',
+        'credit_account_code': '2201',
+        'amount_field': 'foreign_vat_refund_eur',
+        'priority': 21,
+        'use_analytic': True,
+        'condition': {'foreign_vat_treatment': ['refund_receivable']},
+    },
+    {
         'name': 'Plaćen trošak — dobavljač / platitelj (privatno)',
         'document_type': 'expense_paid',
         'debit_account_code': '2201',
@@ -117,7 +183,7 @@ DEFAULT_POSTING_RULES = [
         'amount_field': 'total_amount',
         'priority': 10,
         'use_analytic': True,
-        'condition': {'settlement_method': ['private_card', 'private_cash']},
+        'condition': {'settlement_method': ['private_card', 'private_cash', 'private_account']},
     },
     {
         'name': 'Plaćen trošak — dobavljač / poslovni račun',
@@ -179,7 +245,86 @@ DEFAULT_POSTING_RULES = [
         'use_analytic': True,
         'condition': {'posting_profile': ['fzoeu_tire_acquisition_fee']},
     },
+    {
+        'name': 'Knjiženje plaće — trošak neto / obveza za neto-plaće',
+        'document_type': 'payroll_posted',
+        'debit_account_code': '4200',
+        'credit_account_code': '2300',
+        'amount_field': 'payroll_net_total',
+        'priority': 10,
+        'use_analytic': False,
+    },
+    {
+        'name': 'Knjiženje plaće — trošak poreza iz plaća / obveza za porez',
+        'document_type': 'payroll_posted',
+        'debit_account_code': '4210',
+        'credit_account_code': '2410',
+        'amount_field': 'payroll_income_tax_total',
+        'priority': 20,
+        'use_analytic': False,
+    },
+    {
+        'name': 'Knjiženje plaće — trošak doprinosa iz plaća (MIO) / obveza',
+        'document_type': 'payroll_posted',
+        'debit_account_code': '4220',
+        'credit_account_code': '2420',
+        'amount_field': 'payroll_mio_from_salary_total',
+        'priority': 30,
+        'use_analytic': False,
+    },
+    {
+        'name': 'Knjiženje plaće — doprinosi na plaću (ZO) / obveza',
+        'document_type': 'payroll_posted',
+        'debit_account_code': '4230',
+        'credit_account_code': '2423',
+        'amount_field': 'payroll_zo_total',
+        'priority': 40,
+        'use_analytic': False,
+    },
 ]
+
+
+def _supplier_prepayment_rules() -> list[dict]:
+    """One debit account per leaf purchase nature. Credit is unused; the JE credits the bank ledger."""
+    rows = [
+        ('Usluga s PDV-om', {'purchase_nature': 'service', 'vat_treatment': 'vat'}, '1250', 10),
+        ('Usluga bez PDV-a', {'purchase_nature': 'service', 'vat_treatment': 'no_vat'}, '1251', 11),
+        ('Roba', {'purchase_nature': 'goods_for_resale'}, '670', 20),
+        ('Materijal', {'purchase_nature': 'material'}, '370', 21),
+        ('Rezervni dijelovi', {'purchase_nature': 'spare_parts'}, '371', 22),
+        ('Sitni inventar', {'purchase_nature': 'small_inventory'}, '372', 23),
+        ('Razvoj', {'purchase_nature': 'intangible_development'}, '0150', 30),
+        ('Koncesije', {'purchase_nature': 'intangible_concession'}, '0151', 31),
+        ('Patenti', {'purchase_nature': 'intangible_patent'}, '0152', 32),
+        ('Marke', {'purchase_nature': 'intangible_trademark'}, '0153', 33),
+        ('Softver', {'purchase_nature': 'intangible_software'}, '0154', 34),
+        ('Ostala prava uporabe', {'purchase_nature': 'intangible_usage_right'}, '0155', 35),
+        ('Ostala nematerijalna prava', {'purchase_nature': 'intangible_other'}, '0156', 36),
+        ('Zemljište', {'purchase_nature': 'land'}, '0260', 40),
+        ('Građevine', {'purchase_nature': 'building'}, '0261', 41),
+        ('Postrojenja i oprema', {'purchase_nature': 'plant_and_equipment'}, '0360', 50),
+        ('Alati, inventar i transport', {'purchase_nature': 'tools_and_transport'}, '0361', 51),
+        ('Poljoprivredna oprema', {'purchase_nature': 'agricultural_equipment'}, '0364', 52),
+        ('Ostala materijalna imovina', {'purchase_nature': 'other_tangible_asset'}, '0367', 53),
+        ('Nasadi', {'purchase_nature': 'biological_planting'}, '0460', 60),
+        ('Životinje', {'purchase_nature': 'biological_animal'}, '0461', 61),
+    ]
+    return [
+        {
+            'name': f'Predujam dobavljaču — {label}',
+            'document_type': 'supplier_prepayment',
+            'debit_account_code': debit,
+            'credit_account_code': '1000',
+            'amount_field': 'amount',
+            'priority': priority,
+            'use_analytic': False,
+            'condition': condition,
+        }
+        for label, condition, debit, priority in rows
+    ]
+
+
+DEFAULT_POSTING_RULES = _BASE_POSTING_RULES + _supplier_prepayment_rules()
 
 
 OFFICIAL_DOCUMENT_POSTED = 'official_document_posted'
@@ -322,6 +467,7 @@ class PostingPlanLine:
     amount_field: str
     debit_cost_center: object | None = None
     credit_cost_center: object | None = None
+    document_amount: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -360,8 +506,10 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
         resolve_expense_account,
     )
     from domains.finance.services.cost_center_resolver import apply_cost_center, resolve_cost_center
+    from expenses.models import ExpenseAccountSource
 
     _assert_posting_event_source(source, document_type)
+    ensure_default_posting_rules(tenant)
     rules = _active_posting_rules(tenant, document_type)
     lines: list[PostingPlanLine] = []
     warnings: list[str] = []
@@ -369,7 +517,12 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
     account_source = None
     expense_account_resolution = None
     line_allocation = None
+    foreign_vat = False
     if document_type == 'expense_approved':
+        from accounting.services.foreign_vat import has_foreign_local_vat
+
+        foreign_vat = has_foreign_local_vat(source)
+        _assert_inventory_vehicle_not_asset(source)
         line_allocation = classify_expense_line_allocation(source)
         if line_allocation.warning:
             warnings.append(line_allocation.warning)
@@ -385,7 +538,14 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
             rule, source, tenant, document_type,
         )
 
-        if is_expense_cost_amount_rule(document_type, rule):
+        if getattr(debit_analytic, 'vehicle_id', None):
+            debit_account = debit_analytic.chart_account
+            credit_account = resolve_account(tenant, credit_code)
+            resolved_cc = None
+            if is_expense_cost_amount_rule(document_type, rule):
+                expense_account = debit_account
+                account_source = ExpenseAccountSource.POSTING_RULE_FALLBACK
+        elif is_expense_cost_amount_rule(document_type, rule):
             if expense_account_resolution is None:
                 expense_account_resolution = resolve_expense_account(source, rule)
                 if expense_account_resolution.warning:
@@ -394,7 +554,11 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
             account_source = expense_account_resolution.source
             credit_account = resolve_account(tenant, credit_code)
             resolved_cc = resolve_cost_center(source)
-            if line_allocation.kind == 'split' and rule.amount_field == 'net_amount':
+            if (
+                line_allocation.kind == 'split'
+                and rule.amount_field == 'net_amount'
+                and not foreign_vat
+            ):
                 for item in line_allocation.lines:
                     if Decimal(item.net_amount) <= Decimal('0'):
                         continue
@@ -406,7 +570,8 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
                         PostingPlanLine(
                             debit_account=debit_account,
                             credit_account=credit_account,
-                            amount=Decimal(item.net_amount),
+                            amount=_in_book_eur(source, Decimal(item.net_amount)),
+                            document_amount=_hrk_face(source, Decimal(item.net_amount)),
                             description=description,
                             debit_analytic=debit_analytic,
                             credit_analytic=credit_analytic,
@@ -427,7 +592,7 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
                 and rule.amount_field == 'tax_amount'
             ):
                 for item in line_allocation.lines:
-                    vat = Decimal(item.vat_amount)
+                    vat = _in_book_eur(source, Decimal(item.vat_amount))
                     if vat <= Decimal('0'):
                         continue
                     description = rule.name
@@ -438,6 +603,7 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
                             debit_account=debit_account,
                             credit_account=credit_account,
                             amount=vat,
+                            document_amount=_hrk_face(source, Decimal(item.vat_amount)),
                             description=description,
                             debit_analytic=debit_analytic,
                             credit_analytic=credit_analytic,
@@ -448,11 +614,22 @@ def build_document_posting_plan(tenant, source, document_type: str) -> DocumentP
                     )
                 continue
 
+        face = None
+        if rule.amount_field == 'net_amount' and hasattr(source, 'amount'):
+            face = _hrk_face(
+                source,
+                Decimal(source.amount) - Decimal(getattr(source, 'tax_amount', 0) or 0),
+            )
+        elif rule.amount_field == 'tax_amount' and hasattr(source, 'tax_amount'):
+            face = _hrk_face(source, Decimal(source.tax_amount or 0))
+        elif rule.amount_field == 'total_amount' and hasattr(source, 'amount'):
+            face = _hrk_face(source, Decimal(source.amount))
         lines.append(
             PostingPlanLine(
                 debit_account=debit_account,
                 credit_account=credit_account,
                 amount=amount,
+                document_amount=face,
                 description=rule.name,
                 debit_analytic=debit_analytic,
                 credit_analytic=credit_analytic,
@@ -493,19 +670,57 @@ def resolve_account(tenant, code: str) -> ChartOfAccounts:
     return account
 
 
+def _in_book_eur(source, amount: Decimal) -> Decimal:
+    from accounting.services.fx import in_book_eur
+
+    return in_book_eur(amount, getattr(source, 'currency', None))
+
+
+def _hrk_face(source, raw: Decimal) -> Decimal | None:
+    if (getattr(source, 'currency', None) or '').strip().upper() != 'HRK':
+        return None
+    return Decimal(raw)
+
+
 def _expense_net_amount(source) -> Decimal:
+    from accounting.services.foreign_vat import foreign_posting_amounts
+
+    posted = foreign_posting_amounts(source)
+    if posted is not None:
+        return posted['cost']
     if hasattr(source, 'amount') and not hasattr(source, 'subtotal'):
         tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
-        return Decimal(source.amount) - tax
+        return _in_book_eur(source, Decimal(source.amount) - tax)
     subtotal = getattr(source, 'subtotal', None)
     if subtotal is not None:
-        return Decimal(subtotal)
+        return _in_book_eur(source, Decimal(subtotal))
     total = Decimal(getattr(source, 'total_amount', 0) or getattr(source, 'amount', 0) or 0)
     tax = Decimal(getattr(source, 'tax_amount', 0) or 0)
-    return total - tax
+    return _in_book_eur(source, total - tax)
 
 
 def _get_amount(source, field: str) -> Decimal:
+    from accounting.services.foreign_vat import foreign_posting_amounts
+
+    posted = foreign_posting_amounts(source)
+    if posted is not None:
+        if field == 'foreign_vat_refund_eur':
+            return posted['refund']
+        if field in {'net_amount', 'vehicle_cost_recognized'}:
+            return posted['cost']
+        if field in {
+            'tax_amount',
+            'eu_rc_vat',
+            'vehicle_cost_limited',
+            'vehicle_vat_deductible',
+        }:
+            return Decimal('0.00')
+        if field == 'total_amount' and hasattr(source, 'amount') and not hasattr(source, 'total_amount'):
+            return posted['gross']
+    if field in {'vehicle_cost_recognized', 'vehicle_cost_limited', 'vehicle_vat_deductible'}:
+        from domains.finance.services.vehicle_posting_amounts import vehicle_split_amount
+
+        return _in_book_eur(source, vehicle_split_amount(source, field))
     if field == 'net_amount':
         return _expense_net_amount(source)
     if field == 'eu_rc_vat':
@@ -516,13 +731,15 @@ def _get_amount(source, field: str) -> Decimal:
 
         return rc_vat_from_base(net, Decimal('25.00'))
     if field == 'total_amount' and hasattr(source, 'amount') and not hasattr(source, 'total_amount'):
-        return Decimal(source.amount)
+        return _in_book_eur(source, Decimal(source.amount))
     value = getattr(source, field, Decimal('0')) or Decimal('0')
-    return Decimal(value)
+    return _in_book_eur(source, Decimal(value))
 
 
 def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
     condition = rule.condition or {}
+    if _profile_excluded(rule, source):
+        return False
     min_tax = condition.get('min_tax')
     if min_tax is not None and amount < Decimal(str(min_tax)):
         return False
@@ -562,7 +779,28 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
         if source_profile != ExpensePostingProfile.OPEX:
             return False
 
+    required_nature = condition.get('purchase_nature')
+    if required_nature is not None:
+        if getattr(source, 'purchase_nature', None) != required_nature:
+            return False
+
+    required_vat = condition.get('vat_treatment')
+    if required_vat is not None:
+        if getattr(source, 'vat_treatment', None) != required_vat:
+            return False
+
+    required_treatment = condition.get('foreign_vat_treatment')
+    if required_treatment is not None:
+        current = getattr(source, 'foreign_vat_treatment', None) or ''
+        allowed = required_treatment if isinstance(required_treatment, list) else [required_treatment]
+        if current not in allowed:
+            return False
+
     if condition.get('eu_service_reverse_charge'):
+        from accounting.services.foreign_vat import has_foreign_local_vat
+
+        if has_foreign_local_vat(source):
+            return False
         if source is None or not hasattr(source, 'supplier'):
             return False
         from accounting.services.tax_forms.pdv.mapping import (
@@ -588,6 +826,41 @@ def _rule_matches(rule: PostingRule, amount: Decimal, source=None) -> bool:
                 return False
 
     return True
+
+
+def _assert_inventory_vehicle_not_asset(source) -> None:
+    """Vozilo za daljnju prodaju je roba; ne smije završiti na 0373."""
+    from accounting.models import VehicleAccountingRole
+
+    vehicle = getattr(source, 'vehicle', None)
+    if vehicle is None or vehicle.accounting_role != VehicleAccountingRole.INVENTORY_FOR_RESALE:
+        return
+    if _source_posting_profile_code(source) == 'asset_purchase':
+        raise ValidationError({
+            'posting_profile': 'Vozilo za daljnju prodaju ne može se knjižiti kao nabava imovine.',
+        })
+
+
+def _profile_excluded(rule: PostingRule, source) -> bool:
+    """Cijeli pretporez ne smije stati uz djelomični odbitak službenog vozila."""
+    from accounting.services.foreign_vat import has_foreign_local_vat
+
+    condition = rule.condition or {}
+    excluded = condition.get('exclude_posting_profile')
+    profile = _source_posting_profile_code(source) if source is not None else None
+    if (
+        rule.document_type == 'expense_approved'
+        and rule.amount_field == 'tax_amount'
+        and (
+            profile == 'company_passenger_vehicle'
+            or has_foreign_local_vat(source)
+        )
+    ):
+        return True
+    if excluded is None or profile is None:
+        return False
+    banned = excluded if isinstance(excluded, list) else [excluded]
+    return profile in banned
 
 
 def _source_input_vat_deductible(source) -> bool:
@@ -657,6 +930,16 @@ def _resolve_debit_credit_codes(
             analytic = get_or_create_analytic_for_payer(tenant, paid_by)
             credit_code = analytic.account_code
             credit_analytic = analytic
+
+        if debit_code in VEHICLE_INVENTORY_SYNTHETIC_CODES:
+            vehicle = getattr(source, 'vehicle', None)
+            if vehicle is None:
+                raise ValidationError({
+                    'vehicle': 'Nabavna vrijednost vozila na zalihi ne može se knjižiti bez vozila.',
+                })
+            analytic = get_or_create_inventory_analytic_for_vehicle(tenant, vehicle, debit_code)
+            debit_code = analytic.account_code
+            debit_analytic = analytic
 
     return debit_code, credit_code, debit_analytic, credit_analytic
 

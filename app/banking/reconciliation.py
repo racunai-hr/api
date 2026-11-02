@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from accounting.models import JournalEntry, JournalEntryLine
+from banking.book import transaction_book_amount, transaction_book_currency
 from banking.ledger import resolve_bank_ledger_account
 from banking.models import BankTransaction
 from payments.models import Payment
@@ -28,10 +29,11 @@ def _ledger_line_matches_transaction(
 ) -> bool:
     if line.account_id != ledger_account_id:
         return False
+    book_amount = transaction_book_amount(bank_tx)
     if bank_tx.transaction_type == 'debit':
-        return line.credit_amount == bank_tx.amount and line.debit_amount == Decimal('0')
+        return line.credit_amount == book_amount and line.debit_amount == Decimal('0')
     if bank_tx.transaction_type == 'credit':
-        return line.debit_amount == bank_tx.amount and line.credit_amount == Decimal('0')
+        return line.debit_amount == book_amount and line.credit_amount == Decimal('0')
     return False
 
 
@@ -73,15 +75,17 @@ def _expected_payment_type(bank_tx: BankTransaction) -> str:
 def _validate_payment_match(bank_tx: BankTransaction, payment: Payment) -> None:
     if bank_tx.tenant_id != payment.tenant_id:
         raise ValidationError('Plaćanje i bankovna transakcija moraju biti istog tenant-a.')
-    if payment.currency != bank_tx.currency:
+    book_amount = transaction_book_amount(bank_tx)
+    book_currency = transaction_book_currency(bank_tx)
+    if payment.currency != book_currency:
         raise ValidationError(
             f'Valuta plaćanja ({payment.currency}) mora odgovarati '
-            f'valuti transakcije ({bank_tx.currency}).'
+            f'valuti knjiženja ({book_currency}).'
         )
-    if payment.amount != bank_tx.amount:
+    if payment.amount != book_amount:
         raise ValidationError(
             f'Iznos plaćanja ({payment.amount}) mora biti jednak '
-            f'iznosu transakcije ({bank_tx.amount}).'
+            f'iznosu knjiženja ({book_amount}).'
         )
     expected = _expected_payment_type(bank_tx)
     if payment.payment_type != expected:
@@ -108,7 +112,7 @@ def _validate_journal_match(bank_tx: BankTransaction, journal_entry: JournalEntr
     if not matches:
         raise ValidationError(
             f'Temeljnica nema odgovarajuću stavku na kontu {ledger_account.account_code} '
-            f'za iznos {bank_tx.amount}.'
+            f'za iznos {transaction_book_amount(bank_tx)}.'
         )
     if len(matches) > 1:
         raise ValidationError(
@@ -155,8 +159,8 @@ def suggest_matches(tenant, *, days_tolerance: int = 3) -> int:
             tenant=tenant,
             status='completed',
             payment_type=expected_type,
-            amount=bank_tx.amount,
-            currency=bank_tx.currency,
+            amount=transaction_book_amount(bank_tx),
+            currency=transaction_book_currency(bank_tx),
             payment_date__gte=date_from,
             payment_date__lte=date_to,
         ).exclude(pk__in=linked_payment_ids)
@@ -325,8 +329,8 @@ def create_payment_from_transaction(bank_tx: BankTransaction, user) -> Payment:
         payment_type=payment_type,
         payment_method='bank_transfer',
         status='completed',
-        amount=locked_tx.amount,
-        currency=locked_tx.currency,
+        amount=transaction_book_amount(locked_tx),
+        currency=transaction_book_currency(locked_tx),
         bank_account=locked_tx.bank_statement.bank_account,
         payment_date=locked_tx.transaction_date,
         value_date=locked_tx.value_date,

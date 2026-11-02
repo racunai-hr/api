@@ -101,7 +101,11 @@ class ChartOfAccounts(TenantMixin, models.Model):
 
 
 class AnalyticAccount(TenantMixin, models.Model):
-    """Analitičko proširenje sintetičkog konta (npr. 1201 za partnera)."""
+    """Analitičko proširenje sintetičkog konta (npr. 1201 za partnera).
+
+    Subjekt je točno jedan: counterparty (partner / platitelj) ili vozilo.
+    Vozilo nije counterparty, pa njegov redak ima prazan counterparty_type.
+    """
 
     COUNTERPARTY_TYPES = [
         ('partner', 'Partner (kupac)'),
@@ -117,7 +121,12 @@ class AnalyticAccount(TenantMixin, models.Model):
     )
     account_code = models.CharField(max_length=20, verbose_name="Analitička šifra")
     account_name = models.CharField(max_length=500, verbose_name="Naziv")
-    counterparty_type = models.CharField(max_length=10, choices=COUNTERPARTY_TYPES, verbose_name="Tip subjekta")
+    counterparty_type = models.CharField(
+        max_length=10,
+        choices=COUNTERPARTY_TYPES,
+        blank=True,
+        verbose_name="Tip subjekta",
+    )
     partner = models.ForeignKey(
         'partners.Partner',
         on_delete=models.CASCADE,
@@ -134,6 +143,15 @@ class AnalyticAccount(TenantMixin, models.Model):
         related_name='analytic_accounts',
         verbose_name='Platitelj troška',
     )
+    vehicle = models.ForeignKey(
+        'accounting.Vehicle',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='inventory_analytics',
+        verbose_name='Vozilo',
+        help_text='Inventory analitika vozila za daljnju prodaju (npr. 667-Vn, 6600-Vn).',
+    )
     chart_account = models.OneToOneField(
         ChartOfAccounts,
         on_delete=models.CASCADE,
@@ -148,6 +166,26 @@ class AnalyticAccount(TenantMixin, models.Model):
         verbose_name_plural = "Analitički konti"
         constraints = [
             models.UniqueConstraint(fields=['tenant', 'account_code'], name='unique_analytic_code_per_tenant'),
+            models.UniqueConstraint(
+                fields=['tenant', 'vehicle', 'synthetic_account'],
+                condition=models.Q(vehicle__isnull=False),
+                name='unique_vehicle_analytic_per_synthetic',
+            ),
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(vehicle__isnull=False)
+                        & models.Q(counterparty_type='')
+                        & models.Q(partner__isnull=True)
+                        & models.Q(expense_payer__isnull=True)
+                    )
+                    | (
+                        models.Q(vehicle__isnull=True)
+                        & models.Q(counterparty_type__in=['partner', 'supplier', 'payer'])
+                    )
+                ),
+                name='analytic_exactly_one_subject_kind',
+            ),
         ]
 
     def __str__(self):
@@ -484,6 +522,8 @@ class PostingRule(TenantMixin, models.Model):
         ('expense_paid', 'Plaćen trošak'),
         ('payment_manual', 'Ručno plaćanje'),
         ('official_document_posted', 'Knjižen službeni dokument'),
+        ('supplier_prepayment', 'Dani predujam dobavljaču'),
+        ('payroll_posted', 'Knjiženje plaće'),
     ]
     AMOUNT_FIELDS = [
         ('subtotal', 'Osnovica'),
@@ -492,13 +532,24 @@ class PostingRule(TenantMixin, models.Model):
         ('amount', 'Iznos'),
         ('net_amount', 'Neto iznos'),
         ('eu_rc_vat', 'EU reverse-charge PDV'),
+        ('vehicle_cost_recognized', 'Priznati dio neto troška vozila'),
+        ('vehicle_cost_limited', 'Nepriznati dio neto troška i PDV-a'),
+        ('vehicle_vat_deductible', 'Odbitni pretporez vozila'),
+        ('foreign_vat_refund_eur', 'Strani PDV kao potraživanje, u EUR'),
+        ('payroll_net_total', 'Plaća — neto plaća'),
+        ('payroll_income_tax_total', 'Plaća — porez na dohodak iz plaća'),
+        ('payroll_mio_from_salary_total', 'Plaća — doprinosi iz plaće (MIO)'),
+        ('payroll_zo_total', 'Plaća — doprinosi na plaću (ZO)'),
+        ('payroll_mio1', 'Plaća — MIO I'),
+        ('payroll_mio2', 'Plaća — MIO II'),
+        ('payroll_deduction_liability', 'Plaća — obustave'),
     ]
 
     name = models.CharField(max_length=100, verbose_name="Naziv pravila")
     document_type = models.CharField(max_length=40, choices=DOCUMENT_TYPES, verbose_name="Tip dokumenta")
     debit_account_code = models.CharField(max_length=20, verbose_name="Konto duguje (šifra)")
     credit_account_code = models.CharField(max_length=20, verbose_name="Konto potražuje (šifra)")
-    amount_field = models.CharField(max_length=20, choices=AMOUNT_FIELDS, verbose_name="Polje iznosa")
+    amount_field = models.CharField(max_length=32, choices=AMOUNT_FIELDS, verbose_name="Polje iznosa")
     condition = models.JSONField(default=dict, blank=True, verbose_name="Uvjet")
     priority = models.PositiveSmallIntegerField(default=100, verbose_name="Prioritet")
     is_active = models.BooleanField(default=True, verbose_name="Aktivno")
@@ -522,6 +573,12 @@ class VATPeriod(TenantMixin, models.Model):
 
     year = models.PositiveSmallIntegerField(verbose_name="Godina")
     month = models.PositiveSmallIntegerField(verbose_name="Mjesec")
+    period_to = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Kraj razdoblja",
+        help_text="Zadnji dan prijave kad pokriva više mjeseci. Prazno znači zadnji dan mjeseca.",
+    )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open', verbose_name="Status")
     submitted_at = models.DateTimeField(null=True, blank=True, verbose_name="Datum predaje")
 
@@ -530,11 +587,31 @@ class VATPeriod(TenantMixin, models.Model):
         verbose_name_plural = "PDV razdoblja"
         ordering = ['-year', '-month']
         constraints = [
-            models.UniqueConstraint(fields=['tenant', 'year', 'month'], name='unique_vat_period_per_tenant'),
+            models.UniqueConstraint(
+                fields=['tenant', 'year', 'month'],
+                condition=models.Q(period_to__isnull=True),
+                name='unique_vat_period_month',
+            ),
+            models.UniqueConstraint(
+                fields=['tenant', 'year', 'month', 'period_to'],
+                condition=models.Q(period_to__isnull=False),
+                name='unique_vat_period_span',
+            ),
         ]
 
     def __str__(self):
         return f"PDV {self.month:02d}/{self.year}"
+
+    def filing_bounds(self):
+        """First day of ``month`` through ``period_to``, or the calendar month when unset."""
+        import calendar
+        from datetime import date
+
+        start = date(self.year, self.month, 1)
+        if self.period_to is not None:
+            return start, self.period_to
+        last_day = calendar.monthrange(self.year, self.month)[1]
+        return start, date(self.year, self.month, last_day)
 
     @property
     def current_return(self):
@@ -727,6 +804,14 @@ def tz2_return_upload_to(instance, filename: str) -> str:
     )
 
 
+def joppd_return_upload_to(instance, filename: str) -> str:
+    return (
+        f'joppd_returns/{instance.tenant.slug}/'
+        f'{instance.period_year}/{instance.period_month:02d}/'
+        f'v{instance.version}/{os.path.basename(filename)}'
+    )
+
+
 class ZPReturn(TenantMixin, models.Model):
     vat_period = models.ForeignKey(
         VATPeriod,
@@ -885,11 +970,104 @@ class TZ2Return(TenantMixin, models.Model):
         return self.payload_hash or None
 
 
+class JoppdPeriodAdapter:
+    """Duck-type period for SubmissionDocument — JOPPD nije vezan na VATPeriod."""
+
+    def __init__(self, tenant, year: int, month: int):
+        self.tenant = tenant
+        self.year = year
+        self.month = month
+
+
+class JOPPDReturn(TenantMixin, models.Model):
+    """Obrazac JOPPD — draft generiran iz ERP-a za jedan obračunski period plaće.
+
+    NAPOMENA: shema/XML nije validirana protiv službenog JOPPD XSD-a (vidi
+    ``domains/tax/forms/joppd/__init__.py``). Period je izražen kao
+    ``period_year``/``period_month`` (ne FK na ``VATPeriod`` — JOPPD nije PDV
+    obrazac) i NE FK na ``payroll.PayrollPeriod`` (arhitekturno pravilo:
+    Tax domena ne uvozi HR/payroll modele izravno, vidi
+    ``docs/architecture/DOMAIN_DEPENDENCY_MAP.md``).
+    """
+
+    period_year = models.PositiveSmallIntegerField(verbose_name='Godina razdoblja')
+    period_month = models.PositiveSmallIntegerField(verbose_name='Mjesec razdoblja')
+    version = models.PositiveSmallIntegerField(verbose_name='Verzija')
+    schema_version = models.CharField(
+        max_length=20,
+        default='1.0-draft',
+        verbose_name='Verzija sheme',
+    )
+    mapping_version = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name='Verzija mapiranja',
+    )
+    payload_snapshot = models.JSONField(verbose_name='Snapshot payloada')
+    payload_hash = models.CharField(max_length=64, verbose_name='Hash payloada')
+    payload_json = models.FileField(
+        upload_to=joppd_return_upload_to,
+        verbose_name='payload.json',
+    )
+    xml_unsigned = models.FileField(
+        upload_to=joppd_return_upload_to,
+        null=True,
+        blank=True,
+        verbose_name='Nepotpisani XML',
+    )
+    xml_submitted = models.FileField(
+        upload_to=joppd_return_upload_to,
+        null=True,
+        blank=True,
+        verbose_name='Predani XML',
+    )
+    unsigned_xml_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name='SHA256 nepotpisanog XML-a',
+    )
+    prepared_by = models.ForeignKey(
+        'settings.ResponsiblePerson',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='joppd_returns_prepared',
+        verbose_name='Sastavio',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+
+    class Meta:
+        verbose_name = 'JOPPD obrazac'
+        verbose_name_plural = 'JOPPD obrasci'
+        ordering = ['-period_year', '-period_month', '-version']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'period_year', 'period_month', 'version'],
+                name='unique_joppd_return_version_per_period',
+            ),
+        ]
+
+    def __str__(self):
+        return f'JOPPD {self.period_month:02d}/{self.period_year} v{self.version}'
+
+    def get_period(self):
+        return JoppdPeriodAdapter(self.tenant, self.period_year, self.period_month)
+
+    def get_display_name(self) -> str:
+        return str(self)
+
+    def get_version(self) -> int:
+        return self.version
+
+    def get_payload_hash(self) -> str | None:
+        return self.payload_hash or None
+
+
 class TaxDocumentType(models.TextChoices):
     PDV = 'pdv', 'Obrazac PDV'
     PDV_S = 'pdv_s', 'Obrazac PDV-S'
     ZP = 'zp', 'Obrazac ZP'
     TZ2 = 'tz2', 'Obrazac TZ 2'
+    JOPPD = 'joppd', 'Obrazac JOPPD'
 
 
 class SubmissionDestination(models.TextChoices):
@@ -967,6 +1145,7 @@ _CONTENT_TYPE_DOCUMENT_TYPE = {
     'pdvsreturn': TaxDocumentType.PDV_S,
     'zpreturn': TaxDocumentType.ZP,
     'tz2return': TaxDocumentType.TZ2,
+    'joppdreturn': TaxDocumentType.JOPPD,
 }
 
 
@@ -1635,6 +1814,13 @@ class FixedAssetJournalLink(TenantMixin, models.Model):
 VEHICLE_VIN_FORMAT_REGEX = r'^[A-HJ-NPR-Z0-9]{17}$'
 
 
+class VehicleAccountingRole(models.TextChoices):
+    INVENTORY_FOR_RESALE = 'inventory_for_resale', 'Vozilo za daljnju prodaju'
+    COMPANY_PASSENGER = 'company_passenger', 'Službeno osobno vozilo'
+    FULL_VAT_BUSINESS_USE = 'full_vat_business_use', 'Vozilo s punim odbitkom'
+    OTHER = 'other', 'Ostalo'
+
+
 class Vehicle(TenantMixin, models.Model):
     """Operativni identitet vozila. Nije računovodstvena kartica OS.
 
@@ -1663,6 +1849,13 @@ class Vehicle(TenantMixin, models.Model):
         related_name='vehicle',
         verbose_name='Mjesto troška',
         help_text='Objektno MT vozila. Input za resolver; kanonski trag je JournalEntryLine.',
+    )
+    accounting_role = models.CharField(
+        max_length=32,
+        choices=VehicleAccountingRole.choices,
+        blank=True,
+        default='',
+        verbose_name='Namjena vozila',
     )
     is_active = models.BooleanField(default=True, verbose_name='Aktivno')
     notes = models.TextField(blank=True, verbose_name='Napomene')
@@ -1694,6 +1887,13 @@ class Vehicle(TenantMixin, models.Model):
                 ),
                 name='vehicle_plate_not_padded',
             ),
+            models.CheckConstraint(
+                check=~(
+                    models.Q(accounting_role='inventory_for_resale')
+                    & models.Q(fixed_asset__isnull=False)
+                ),
+                name='vehicle_inventory_not_fixed_asset',
+            ),
         ]
 
     def __str__(self):
@@ -1708,6 +1908,10 @@ class Vehicle(TenantMixin, models.Model):
                 raise ValidationError({'cost_center': 'Grupa mjesta troška nije knjiživa.'})
         if not self.fixed_asset_id:
             return
+        if self.accounting_role == VehicleAccountingRole.INVENTORY_FOR_RESALE:
+            raise ValidationError({
+                'fixed_asset': 'Vozilo za daljnju prodaju je roba na zalihi, ne osnovno sredstvo.',
+            })
         asset = self.fixed_asset
         if asset.tenant_id != self.tenant_id:
             raise ValidationError({
@@ -2211,3 +2415,189 @@ class PrivateFundsClaim(TenantMixin, models.Model):
 
     def __str__(self):
         return f'{self.number} — {self.amount} {self.currency}'
+
+
+class PurchaseNature(models.TextChoices):
+    SERVICE = 'service', 'Usluga'
+    GOODS_FOR_RESALE = 'goods_for_resale', 'Roba'
+    MATERIAL = 'material', 'Materijal'
+    SPARE_PARTS = 'spare_parts', 'Rezervni dijelovi'
+    SMALL_INVENTORY = 'small_inventory', 'Sitni inventar'
+    INTANGIBLE_DEVELOPMENT = 'intangible_development', 'Razvoj'
+    INTANGIBLE_CONCESSION = 'intangible_concession', 'Koncesije'
+    INTANGIBLE_PATENT = 'intangible_patent', 'Patenti'
+    INTANGIBLE_TRADEMARK = 'intangible_trademark', 'Marke'
+    INTANGIBLE_SOFTWARE = 'intangible_software', 'Softver'
+    INTANGIBLE_USAGE_RIGHT = 'intangible_usage_right', 'Ostala prava uporabe'
+    INTANGIBLE_OTHER = 'intangible_other', 'Ostala nematerijalna prava'
+    LAND = 'land', 'Zemljište'
+    BUILDING = 'building', 'Građevine'
+    PLANT_AND_EQUIPMENT = 'plant_and_equipment', 'Postrojenja i oprema'
+    TOOLS_AND_TRANSPORT = 'tools_and_transport', 'Alati, inventar i transport'
+    AGRICULTURAL_EQUIPMENT = 'agricultural_equipment', 'Poljoprivredna oprema'
+    OTHER_TANGIBLE_ASSET = 'other_tangible_asset', 'Ostala materijalna imovina'
+    BIOLOGICAL_PLANTING = 'biological_planting', 'Nasadi'
+    BIOLOGICAL_ANIMAL = 'biological_animal', 'Životinje'
+
+
+class PrepaymentVatTreatment(models.TextChoices):
+    VAT = 'vat', 'S PDV-om'
+    NO_VAT = 'no_vat', 'Bez PDV-a'
+
+
+class SupplierPrepayment(TenantMixin, models.Model):
+    """Dani predujam dobavljaču. Neovisno o dokumentu koji će ga kasnije zatvoriti."""
+
+    STATUS_OPEN = 'open'
+    STATUS_PARTIAL = 'partially_applied'
+    STATUS_APPLIED = 'applied'
+    STATUS_REVERSED = 'reversed'
+    STATUS_CHOICES = [
+        (STATUS_OPEN, 'Otvoren'),
+        (STATUS_PARTIAL, 'Djelomično primijenjen'),
+        (STATUS_APPLIED, 'Primijenjen'),
+        (STATUS_REVERSED, 'Storniran'),
+    ]
+
+    partner = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.PROTECT,
+        related_name='supplier_prepayments',
+        verbose_name='Dobavljač',
+    )
+    currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
+    original_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Izvorni iznos',
+    )
+    applied_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Primijenjeni iznos',
+    )
+    purchase_nature = models.CharField(
+        max_length=32,
+        choices=PurchaseNature.choices,
+        verbose_name='Podvrsta nabave',
+    )
+    vat_treatment = models.CharField(
+        max_length=8,
+        choices=PrepaymentVatTreatment.choices,
+        blank=True,
+        verbose_name='PDV tretman',
+    )
+    prepayment_account = models.ForeignKey(
+        ChartOfAccounts,
+        on_delete=models.PROTECT,
+        related_name='supplier_prepayments',
+        verbose_name='Konto predujma',
+    )
+    bank_transaction = models.ForeignKey(
+        'banking.BankTransaction',
+        on_delete=models.PROTECT,
+        related_name='supplier_prepayments',
+        verbose_name='Bankovna transakcija',
+    )
+    posting_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='supplier_prepayments',
+        verbose_name='Temeljnica predujma',
+    )
+    posting_date = models.DateField(verbose_name='Datum knjiženja')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_OPEN,
+        verbose_name='Status',
+    )
+    idempotency_key = models.CharField(max_length=128, blank=True, verbose_name='Ključ idempotentnosti')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+
+    class Meta:
+        verbose_name = 'Predujam dobavljaču'
+        verbose_name_plural = 'Predujmovi dobavljačima'
+        ordering = ['-posting_date', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'bank_transaction'],
+                condition=~models.Q(status='reversed'),
+                name='unique_active_supplier_prepayment_bank_tx',
+            ),
+            models.UniqueConstraint(
+                fields=['tenant', 'idempotency_key'],
+                condition=~models.Q(idempotency_key=''),
+                name='unique_supplier_prepayment_idempotency',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.partner_id} {self.original_amount} {self.currency}'
+
+    @property
+    def available_amount(self) -> Decimal:
+        return (self.original_amount - self.applied_amount).quantize(Decimal('0.01'))
+
+
+class SupplierPrepaymentApplication(TenantMixin, models.Model):
+    """N:M primjena predujma na generički payable dokument."""
+
+    prepayment = models.ForeignKey(
+        SupplierPrepayment,
+        on_delete=models.PROTECT,
+        related_name='applications',
+        verbose_name='Predujam',
+    )
+    target_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.PROTECT,
+        related_name='supplier_prepayment_applications',
+        verbose_name='Tip dokumenta',
+    )
+    target_object_id = models.PositiveIntegerField(verbose_name='ID dokumenta')
+    target = GenericForeignKey('target_content_type', 'target_object_id')
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Iznos',
+    )
+    clearing_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='supplier_prepayment_applications',
+        verbose_name='Temeljnica zatvaranja',
+    )
+    subledger_allocation = models.ForeignKey(
+        'SubledgerAllocation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='supplier_prepayment_applications',
+        verbose_name='Alokacija saldakonta',
+    )
+    idempotency_key = models.CharField(max_length=160, blank=True, verbose_name='Ključ idempotentnosti')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Kreirano')
+
+    class Meta:
+        verbose_name = 'Primjena predujma'
+        verbose_name_plural = 'Primjene predujma'
+        ordering = ['-created_at', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'idempotency_key'],
+                condition=~models.Q(idempotency_key=''),
+                name='unique_supplier_prepayment_application_idempotency',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.prepayment_id} → {self.target_object_id} {self.amount}'

@@ -13,6 +13,13 @@ _CSV_HEADER_MARKERS = frozenset({
 
 
 def detect_format(content: bytes | str, filename: str = '') -> str:
+    raw = content if isinstance(content, bytes) else content.encode('utf-8', errors='replace')
+    lower_name = filename.lower()
+    if raw.startswith(b'%PDF') or lower_name.endswith('.pdf'):
+        if raw.startswith(b'%PDF') and _pdf_is_otp_izv(raw):
+            return 'otp_izv'
+        return 'unknown'
+
     text = _as_text(content)
     stripped = text.lstrip()
 
@@ -25,7 +32,6 @@ def detect_format(content: bytes | str, filename: str = '') -> str:
     if _looks_like_csv(text):
         return 'csv'
 
-    lower_name = filename.lower()
     if lower_name.endswith('.xml'):
         return 'camt053'
     if lower_name.endswith('.csv'):
@@ -34,6 +40,18 @@ def detect_format(content: bytes | str, filename: str = '') -> str:
         return 'mt940'
 
     return 'unknown'
+
+
+def _pdf_is_otp_izv(content: bytes) -> bool:
+    try:
+        from banking.parsers.otp_izv import pdf_text
+
+        text = pdf_text(content).lower()
+    except Exception:
+        return False
+    has_statement = 'izvod' in text and 'broj' in text
+    has_form = 'obrazac' in text and 'izv' in text
+    return has_statement or has_form
 
 
 def _as_text(content: bytes | str) -> str:

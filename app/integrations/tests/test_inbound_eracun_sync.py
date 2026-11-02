@@ -15,10 +15,13 @@ from lxml import etree
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from accounting.models import JournalEntry
 from expenses.models import Expense, ExpenseCategory, ExpenseImportMetadata, ExpenseSource
+from ubl.parser.invoice import parse_invoice_ubl
 from fiscal_gateway.client.gateway_v1_client import GatewayV1Error
 from integrations.services.inbound_eracun_sync import (
     CODE_DISABLED,
+    CODE_GATEWAY,
     CODE_IN_PROGRESS,
     CODE_NO_OIB,
     EracunSyncError,
@@ -139,6 +142,7 @@ class InboundEracunSyncServiceTests(TestCase):
         result = import_available_inbound_eracun(self.tenant)
 
         self.assertEqual(result['imported'], 1)
+        self.assertEqual(result['merged'], 0)
         self.assertEqual(result['skipped'], 0)
         self.assertEqual(result['failed'], 0)
         self.assertEqual(result['remaining_importable'], 0)
@@ -224,6 +228,321 @@ class InboundEracunSyncServiceTests(TestCase):
         self.assertEqual(result['failed'], 0)
         self.assertEqual(result['skipped'], 1)
         self.assertEqual(result['errors'], [])
+
+    def _invoice(self, invoice_number: str):
+        return parse_invoice_ubl(_ubl(invoice_number))
+
+    def _supplier_and_category(self, parsed):
+        supplier, _ = Partner.all_objects.get_or_create(
+            tenant=self.tenant,
+            tax_number=parsed.supplier_oib,
+            defaults={
+                'name': parsed.supplier_name or 'Dobavljač',
+                'partner_type': 'supplier',
+                'status': 'active',
+            },
+        )
+        category, _ = ExpenseCategory.all_objects.get_or_create(
+            tenant=self.tenant,
+            name='Cestarina',
+            defaults={'description': 'Cestarina'},
+        )
+        return supplier, category
+
+    def _save_expense(self, **kwargs) -> Expense:
+        kwargs.setdefault('currency', 'EUR')
+        kwargs.setdefault('tax_amount', Decimal('0.01'))
+        kwargs.setdefault('description', 'stari račun')
+        expense = Expense(
+            tenant=self.tenant,
+            created_by=self.owner,
+            **kwargs,
+        )
+        expense._skip_auto_posting = True
+        expense.save()
+        return expense
+
+    def _journal(self, expense: Expense, entry_number: str) -> JournalEntry:
+        return JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number=entry_number,
+            entry_date=expense.expense_date,
+            description=f'[expense_approved] {expense.expense_number}',
+            status='posted',
+            created_by=self.owner,
+            source_content_type=ContentType.objects.get_for_model(Expense),
+            source_object_id=expense.pk,
+        )
+
+    @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
+    def test_import_overwrites_paid_duplicate_without_a_second_row(self, client_cls):
+        parsed = self._invoice('1432082-608-600')
+        supplier, category = self._supplier_and_category(parsed)
+        paid = self._save_expense(
+            expense_number='T-2026-0041',
+            source=ExpenseSource.MANUAL,
+            status='paid',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        journal = self._journal(paid, 'JE-paid')
+        client_cls.return_value = _gateway([_item('g-pay')], ubl_by_guid={'g-pay': _ubl(parsed.invoice_number)})
+
+        result = import_available_inbound_eracun(self.tenant)
+
+        self.assertEqual(result['merged'], 1)
+        self.assertEqual(result['imported'], 0)
+        self.assertEqual(Expense.all_objects.filter(tenant=self.tenant).count(), 1)
+        paid.refresh_from_db()
+        self.assertEqual(paid.pk, journal.source_object_id)
+        self.assertEqual(paid.status, 'paid')
+        self.assertEqual(paid.amount, parsed.total_amount)
+        self.assertEqual(paid.tax_amount, Decimal('0.01'))
+        self.assertEqual(paid.category_id, category.pk)
+        self.assertEqual(paid.source, ExpenseSource.ERACUN)
+        self.assertEqual(paid.expense_number, f'ERAC-{parsed.invoice_number}'[:50])
+        self.assertEqual(paid.description, 'stari račun')
+        link = SuperDocumentLink.all_objects.get(super_guid='g-pay')
+        self.assertEqual(link.object_id, paid.pk)
+        self.assertIn(parsed.invoice_number, link.ubl_xml)
+        self.assertEqual(
+            ExpenseImportMetadata.all_objects.get(super_guid='g-pay').expense_id,
+            paid.pk,
+        )
+        journal.refresh_from_db()
+        self.assertEqual(journal.source_object_id, paid.pk)
+        self.assertEqual(JournalEntry.all_objects.filter(tenant=self.tenant).count(), 1)
+
+    @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
+    def test_already_imported_draft_merges_into_paid_expense_on_next_sync(self, client_cls):
+        parsed = self._invoice('1432082-608-600')
+        supplier, category = self._supplier_and_category(parsed)
+        paid = self._save_expense(
+            expense_number='T-2026-0041',
+            source=ExpenseSource.OCR,
+            status='paid',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        draft = self._save_expense(
+            expense_number=f'ERAC-{parsed.invoice_number}'[:50],
+            source=ExpenseSource.ERACUN,
+            status='draft',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            tax_amount=Decimal('9.99'),
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+            description='nacrt s pretinca',
+        )
+        content_type = ContentType.objects.get_for_model(Expense)
+        SuperDocumentLink.all_objects.create(
+            tenant=self.tenant,
+            direction=SuperDocumentLink.DIRECTION_INBOUND,
+            super_guid='g-hac',
+            ubl_xml=_ubl(parsed.invoice_number),
+            content_type=content_type,
+            object_id=draft.pk,
+        )
+        ExpenseImportMetadata.all_objects.create(
+            tenant=self.tenant,
+            expense=draft,
+            source=ExpenseSource.SUPER,
+            external_id='g-hac',
+            super_guid='g-hac',
+        )
+        client_cls.return_value = _gateway([_item('g-hac')])
+
+        result = import_available_inbound_eracun(self.tenant)
+
+        self.assertEqual(result['merged'], 1)
+        self.assertEqual(result['imported'], 0)
+        self.assertEqual(result['skipped'], 1)
+        self.assertFalse(Expense.all_objects.filter(pk=draft.pk).exists())
+        paid.refresh_from_db()
+        self.assertEqual(paid.status, 'paid')
+        self.assertEqual(paid.amount, parsed.total_amount)
+        self.assertEqual(paid.source, ExpenseSource.ERACUN)
+        self.assertEqual(paid.expense_number, f'ERAC-{parsed.invoice_number}'[:50])
+        self.assertEqual(SuperDocumentLink.all_objects.get(super_guid='g-hac').object_id, paid.pk)
+        self.assertEqual(
+            ExpenseImportMetadata.all_objects.get(external_id='g-hac').expense_id,
+            paid.pk,
+        )
+
+    @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
+    def test_amount_mismatch_stays_two_rows(self, client_cls):
+        parsed = self._invoice('1432082-608-600')
+        supplier, category = self._supplier_and_category(parsed)
+        paid = self._save_expense(
+            expense_number='T-2026-0041',
+            source=ExpenseSource.MANUAL,
+            status='paid',
+            category=category,
+            supplier=supplier,
+            amount=Decimal('1.00'),
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        client_cls.return_value = _gateway(
+            [_item('g-other')],
+            ubl_by_guid={'g-other': _ubl(parsed.invoice_number)},
+        )
+
+        result = import_available_inbound_eracun(self.tenant)
+
+        self.assertEqual(result['merged'], 0)
+        self.assertEqual(result['imported'], 1)
+        self.assertEqual(Expense.all_objects.filter(tenant=self.tenant).count(), 2)
+        paid.refresh_from_db()
+        self.assertEqual(paid.expense_number, 'T-2026-0041')
+        self.assertEqual(paid.source, ExpenseSource.MANUAL)
+        self.assertEqual(paid.status, 'paid')
+        self.assertEqual(paid.amount, Decimal('1.00'))
+        self.assertTrue(
+            Expense.all_objects.filter(tenant=self.tenant, source=ExpenseSource.ERACUN, status='draft').exists(),
+        )
+
+    @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
+    def test_posted_eracun_is_not_merged_when_both_are_posted(self, client_cls):
+        parsed = self._invoice('1432082-608-600')
+        supplier, category = self._supplier_and_category(parsed)
+        common = dict(
+            source=ExpenseSource.MANUAL,
+            status='paid',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        older = self._save_expense(expense_number='T-2026-0041', **common)
+        eracun = self._save_expense(
+            expense_number=f'ERAC-{parsed.invoice_number}'[:50],
+            source=ExpenseSource.ERACUN,
+            **{key: value for key, value in common.items() if key != 'source'},
+        )
+        content_type = ContentType.objects.get_for_model(Expense)
+        SuperDocumentLink.all_objects.create(
+            tenant=self.tenant,
+            direction=SuperDocumentLink.DIRECTION_INBOUND,
+            super_guid='g-both',
+            ubl_xml='<ubl/>',
+            content_type=content_type,
+            object_id=eracun.pk,
+        )
+        client_cls.return_value = _gateway([_item('g-both')])
+
+        result = import_available_inbound_eracun(self.tenant)
+
+        self.assertEqual(result['merged'], 0)
+        self.assertEqual(result['imported'], 0)
+        older.refresh_from_db()
+        eracun.refresh_from_db()
+        self.assertEqual(older.expense_number, 'T-2026-0041')
+        self.assertEqual(eracun.expense_number, f'ERAC-{parsed.invoice_number}'[:50])
+        self.assertEqual(SuperDocumentLink.all_objects.get(super_guid='g-both').object_id, eracun.pk)
+
+    @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
+    def test_two_matches_are_left_alone(self, client_cls):
+        parsed = self._invoice('1432082-608-600')
+        supplier, category = self._supplier_and_category(parsed)
+        common = dict(
+            source=ExpenseSource.MANUAL,
+            status='paid',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        self._save_expense(expense_number='T-2026-0041', **common)
+        self._save_expense(expense_number='T-2026-0042', **common)
+        draft = self._save_expense(
+            expense_number=f'ERAC-{parsed.invoice_number}'[:50],
+            source=ExpenseSource.ERACUN,
+            status='draft',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        SuperDocumentLink.all_objects.create(
+            tenant=self.tenant,
+            direction=SuperDocumentLink.DIRECTION_INBOUND,
+            super_guid='g-many',
+            ubl_xml='<ubl/>',
+            content_type=ContentType.objects.get_for_model(Expense),
+            object_id=draft.pk,
+        )
+        client_cls.return_value = _gateway([])
+
+        result = import_available_inbound_eracun(self.tenant)
+
+        self.assertEqual(result['merged'], 0)
+        self.assertEqual(Expense.all_objects.filter(tenant=self.tenant).count(), 3)
+        self.assertTrue(Expense.all_objects.filter(pk=draft.pk).exists())
+
+    @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
+    def test_existing_draft_merges_before_gateway_failure(self, client_cls):
+        parsed = self._invoice('1432082-608-600')
+        supplier, category = self._supplier_and_category(parsed)
+        paid = self._save_expense(
+            expense_number='T-2026-0041',
+            source=ExpenseSource.MANUAL,
+            status='paid',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        draft = self._save_expense(
+            expense_number=f'ERAC-{parsed.invoice_number}'[:50],
+            source=ExpenseSource.ERACUN,
+            status='draft',
+            category=category,
+            supplier=supplier,
+            amount=parsed.total_amount,
+            expense_date=date.fromisoformat(parsed.issue_date),
+            receipt_number=parsed.invoice_number,
+        )
+        SuperDocumentLink.all_objects.create(
+            tenant=self.tenant,
+            direction=SuperDocumentLink.DIRECTION_INBOUND,
+            super_guid='g-down',
+            ubl_xml=_ubl(parsed.invoice_number),
+            content_type=ContentType.objects.get_for_model(Expense),
+            object_id=draft.pk,
+        )
+        ExpenseImportMetadata.all_objects.create(
+            tenant=self.tenant,
+            expense=draft,
+            source=ExpenseSource.SUPER,
+            external_id='g-down',
+            super_guid='g-down',
+        )
+        client = MagicMock()
+        client.list_inbound_documents.side_effect = GatewayV1Error('down')
+        client_cls.return_value = client
+
+        with self.assertRaises(EracunSyncError) as ctx:
+            import_available_inbound_eracun(self.tenant)
+
+        self.assertEqual(ctx.exception.code, CODE_GATEWAY)
+        self.assertFalse(Expense.all_objects.filter(pk=draft.pk).exists())
+        paid.refresh_from_db()
+        self.assertEqual(paid.status, 'paid')
+        self.assertEqual(paid.expense_number, f'ERAC-{parsed.invoice_number}'[:50])
+        self.assertEqual(SuperDocumentLink.all_objects.get(super_guid='g-down').object_id, paid.pk)
 
     @patch('integrations.services.inbound_eracun_sync.GatewayV1Client')
     def test_gateway_list_error_is_502(self, client_cls):

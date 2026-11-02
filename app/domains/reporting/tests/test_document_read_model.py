@@ -1200,6 +1200,31 @@ class DocumentReadModelTests(TestCase):
         self.assertIn('as_of', body)
         self.assertIn('EUR', body['summary']['by_currency'])
 
+    def test_kpi_is_single_eur_and_foreign_row_shows_book_gross(self):
+        euro_sign = self._expense(amount=Decimal('50.00'), currency='€', tax_amount=Decimal('0'))
+        dkk = self._expense(
+            amount=Decimal('731.11'),
+            currency='DKK',
+            tax_amount=Decimal('0'),
+            foreign_vat_amount=Decimal('146.22'),
+            foreign_gross_amount=Decimal('731.11'),
+            foreign_vat_country='DK',
+            foreign_vat_rate=Decimal('25.00'),
+            foreign_vat_treatment='expense',
+            fx_rate=Decimal('7.326486'),
+        )
+        body = self._auth_client().get('/api/documents/').json()
+        self.assertEqual(list(body['summary']['by_currency']), ['EUR'])
+        eur = body['summary']['by_currency']['EUR']
+        self.assertEqual(eur['incoming_count'], 2)
+        self.assertEqual(eur['incoming_gross'], '149.79')
+        row = next(item for item in body['results'] if item['id'] == dkk.pk)
+        self.assertEqual(row['amounts']['gross'], '731.11')
+        self.assertEqual(row['amounts']['currency'], 'DKK')
+        self.assertEqual(row['amounts']['book_gross'], '99.79')
+        sign_row = next(item for item in body['results'] if item['id'] == euro_sign.pk)
+        self.assertEqual(sign_row['amounts']['book_gross'], '50.00')
+
 
     def _super_inbound_link(self, expense, *, pdf_path='', ubl_xml='', guid=None):
         from super_integration.models import SuperDocumentLink

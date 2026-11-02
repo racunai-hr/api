@@ -30,6 +30,10 @@ from domains.purchasing.api.schema import (
     PurchasingConflictSerializer,
 )
 from domains.purchasing.services.confirm import confirm_invoice_import
+from domains.finance.api.accounting_review_schema import (
+    AccountingReviewRequestSerializer,
+    AccountingReviewSerializer,
+)
 from domains.purchasing.services.expense_categories import (
     list_expense_categories,
     update_expense_category,
@@ -478,3 +482,25 @@ class ExpenseEracunRejectionView(_PurchasingApiView):
             )
             return Response({'code': exc.code, 'detail': exc.detail}, status=status_code)
         return Response(body, status=status.HTTP_202_ACCEPTED)
+
+
+class InvoiceImportAccountingReviewView(_PurchasingApiView):
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_invoice_import_accounting_review',
+        request=AccountingReviewRequestSerializer,
+        responses={200: AccountingReviewSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def post(self, request, pk: int):
+        from domains.finance.services.accounting_review import review_invoice_import
+        from expenses.models import IncomingInvoiceImport
+
+        ser = AccountingReviewRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        tenant = _require_tenant(request)
+        run = IncomingInvoiceImport.all_objects.filter(tenant=tenant, pk=pk).first()
+        if run is None:
+            raise Http404()
+        return Response(
+            review_invoice_import(tenant, run, ser.validated_data.get('answers'), request.user)
+        )

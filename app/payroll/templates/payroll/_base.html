@@ -1,0 +1,50 @@
+{% load payroll_format %}
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10pt; color: #000; }
+  @page { size: A4; margin: 14mm; }
+  .letterhead { text-align: center; margin-bottom: 10px; }
+  .letterhead .company-name { font-weight: bold; }
+  .doc-header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 10px; }
+  .doc-title { font-weight: bold; font-size: 12pt; }
+  table.data { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  table.data th, table.data td { border: 1px solid #000; padding: 3px 5px; font-size: 9pt; }
+  table.data th { background: #eee; text-align: left; }
+  table.data td.num, table.data th.num { text-align: right; }
+  .section-title { font-weight: bold; margin-top: 10px; margin-bottom: 3px; }
+  .totals-row td { font-weight: bold; }
+  .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 7.5pt; text-align: center; border-top: 1px solid #000; padding-top: 3px; }
+  .meta-table { width: 100%; margin-bottom: 6px; }
+  .meta-table td { padding: 1px 4px; font-size: 9pt; vertical-align: top; }
+</style>
+</head>
+<body>
+
+<div class="letterhead">
+  {% if company_logo_uri %}<img src="{{ company_logo_uri }}" style="max-height:40px;"><br>{% endif %}
+  <div class="company-name">{{ company.company_name }}</div>
+  <div>{{ company.formatted_street }}</div>
+  <div>{{ company.formatted_city_line }}</div>
+  <div>OIB {{ company.vat_number }}</div>
+  {% if payment_iban %}<div>{{ payment_iban }}</div>{% endif %}
+</div>
+
+<div class="doc-header">
+  <div class="doc-title">{{ document_title }}</div>
+  <div>
+    <div>{{ date_label }}</div>
+    <div style="text-align:right;">{{ date_value|hr_date }}</div>
+  </div>
+</div>
+
+{% block content %}{% endblock %}
+
+<div class="footer">
+  {{ company.company_name }}, {{ company.formatted_street }} {{ company.city }}, OIB {{ company.vat_number }}{% if company.registration_number %}, MBS {{ company.registration_number }}{% endif %}{% if director_name %}, Direktor: {{ director_name }}{% endif %}{% if company.share_capital %}, Temeljni kapital: {{ company.share_capital|hr_amount }} {{ company.share_capital_currency }}{% endif %}
+</div>
+
+</body>
+</html>

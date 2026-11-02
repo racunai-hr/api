@@ -44,5 +44,9 @@ class TaxJWTAuthenticationExtension(_BearerJWTScheme):
     target_class = 'domains.tax.api.authentication.TaxJWTAuthentication'
 
 
+class HrJWTAuthenticationExtension(_BearerJWTScheme):
+    target_class = 'domains.hr.api.authentication.HrJWTAuthentication'
+
+
 class SimpleJWTAuthenticationExtension(_BearerJWTScheme):
     target_class = 'rest_framework_simplejwt.authentication.JWTAuthentication'

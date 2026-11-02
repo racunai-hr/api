@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -41,8 +40,7 @@ class _BuildContext:
 
 
 def _period_bounds(period: VATPeriod) -> tuple[date, date]:
-    last_day = calendar.monthrange(period.year, period.month)[1]
-    return date(period.year, period.month, 1), date(period.year, period.month, last_day)
+    return period.filing_bounds()
 
 
 def _taxpayer_for_period(period: VATPeriod) -> TaxpayerInfo:

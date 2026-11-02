@@ -8,6 +8,7 @@ from domains.purchasing.api.views import (
     ExpenseEracunRejectionView,
     InvoiceImportApplyPartnerUpdatesView,
     InvoiceImportApplySupplierView,
+    InvoiceImportAccountingReviewView,
     InvoiceImportConfirmView,
     InvoiceImportCreatePartnerView,
     InvoiceImportCreateView,
@@ -51,6 +52,11 @@ urlpatterns = [
         'purchasing/invoices/import/<int:pk>/confirm/',
         InvoiceImportConfirmView.as_view(),
         name='purchasing-invoice-import-confirm',
+    ),
+    path(
+        'purchasing/invoices/import/<int:pk>/accounting-review/',
+        InvoiceImportAccountingReviewView.as_view(),
+        name='purchasing-invoice-import-accounting-review',
     ),
     path(
         'purchasing/invoices/import/<int:pk>/discard/',

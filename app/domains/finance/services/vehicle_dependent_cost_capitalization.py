@@ -239,6 +239,11 @@ def _inspect_expense(tenant, expense_id: int) -> dict[str, Any]:
 
     net = _money(expense.amount) - _money(expense.tax_amount)
     blockers: list[str] = []
+    vehicle = expense.vehicle if expense.vehicle_id else None
+    if vehicle is not None and vehicle.accounting_role == 'inventory_for_resale':
+        blockers.append(
+            f'{expense.expense_number}: vozilo za daljnju prodaju je zaliha, ne kapitalizira se na 0373.'
+        )
     if expense.status != 'paid':
         blockers.append(f'{expense.expense_number} status={expense.status!r} (want paid)')
     if not already and expense.posting_profile != ExpensePostingProfile.OPEX:

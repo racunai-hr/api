@@ -14,6 +14,7 @@ from domains.reporting.documents.provenance import provenanced
 from domains.reporting.documents.projection import (
     bank_block,
     bank_expected,
+    book_eur_amount,
     build_subledger_block,
     collect_controls,
     money,
@@ -69,6 +70,41 @@ def _primary_posting(rows, *, bank_by_je=None):
     return candidates[0]
 
 
+def _allocation_owned_elsewhere(alloc, document_id: int) -> bool:
+    """True when this journal closes another document, not the one being read."""
+    item = getattr(alloc, 'subledger_item', None)
+    if item is None:
+        return False
+    content_type = getattr(item, 'source_content_type', None)
+    if content_type is None or content_type.model != 'expense':
+        return True
+    return item.source_object_id != document_id
+
+
+def _incoming_payment_journals(*, document, subledger, sibling_jes, alloc_by_sub, alloc_by_je):
+    """Bank evidence follows the subledger the payment closes.
+
+    A journal sourced on the advance stays there in the books, but once its
+    allocation sits on the final invoice the payment is shown only there.
+    """
+    journals = []
+    seen: set[int] = set()
+    for je in sibling_jes or []:
+        alloc = alloc_by_je.get(je.pk)
+        if alloc is not None and _allocation_owned_elsewhere(alloc, document.pk):
+            continue
+        seen.add(je.pk)
+        journals.append(je)
+    if subledger is not None:
+        for alloc in alloc_by_sub.get(subledger.pk, []):
+            je = getattr(alloc, 'journal_entry', None)
+            if je is None or je.pk in seen:
+                continue
+            seen.add(je.pk)
+            journals.append(je)
+    return journals
+
+
 def _collect_bank_txs(*, payments, payment_bank_map, journal_entries, je_bank_map) -> list:
     """Union bank txs linked via payments or any sibling JE (deduped by pk)."""
     bank_txs = []
@@ -86,10 +122,44 @@ def _collect_bank_txs(*, payments, payment_bank_map, journal_entries, je_bank_ma
     return bank_txs
 
 
+def _subledger_block_for_row(*, document, direction, subledger, as_of_day, applied_reversal: bool):
+    if applied_reversal and direction == 'incoming':
+        return {
+            'state': provenanced('closed', source='subledger_allocation'),
+            'open_amount': provenanced(money(0), source='subledger_allocation'),
+            'original_amount': provenanced(money(getattr(document, 'amount', None)), source='subledger_allocation'),
+            'aging_bucket': provenanced(None, reason='not_applicable'),
+            'days': provenanced(None, reason='not_applicable'),
+        }
+    return build_subledger_block(subledger, as_of_day)
+
+
 def _latest_as4(links):
     if not links:
         return None
     return sorted(links, key=lambda link: link.created_at, reverse=True)[0]
+
+
+def _amounts_block(document, currency, net, vat, gross) -> dict:
+    book_net = None
+    book_vat = None
+    if (currency or '').strip().upper() == 'HRK':
+        from accounting.services.fx import to_eur_amount
+
+        if net is not None:
+            book_net = money(to_eur_amount(net, 'HRK'))
+        if vat is not None:
+            book_vat = money(to_eur_amount(vat, 'HRK'))
+    return {
+        'currency': currency,
+        'net': money(net),
+        'vat': money(vat),
+        'gross': money(gross),
+        'book_gross': money(book_eur_amount(document)),
+        'book_net': book_net,
+        'book_vat': book_vat,
+        'fx_rate': provenanced(None, reason='not_recorded'),
+    }
 
 
 def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool) -> dict:
@@ -147,12 +217,21 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             or any(link.ubl_xml or link.pdf_path for link in super_links)
         )
 
+    payment_journals = sibling_jes
+    if direction == 'incoming':
+        payment_journals = _incoming_payment_journals(
+            document=document,
+            subledger=subledger,
+            sibling_jes=sibling_jes,
+            alloc_by_sub=rel.get('alloc_by_sub') or {},
+            alloc_by_je=rel.get('alloc_by_je') or {},
+        )
     as4 = _latest_as4(as4_links)
     as4_status = as4.as4_status if as4 else None
     bank_txs = _collect_bank_txs(
         payments=payments,
         payment_bank_map=rel['bank_by_payment'],
-        journal_entries=sibling_jes,
+        journal_entries=payment_journals,
         je_bank_map=rel['bank_by_je'],
     )
     match_status = None
@@ -204,6 +283,10 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             as_of_day=as_of_day,
         )
     else:
+        storno_by_je = rel.get('storno_by_je') or {}
+        closed_by_storno = bool(allocations) and all(
+            alloc.journal_entry_id in storno_by_je for alloc in allocations
+        )
         operational = operational_incoming(
             document=document,
             subledger=subledger,
@@ -212,6 +295,8 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             has_receipt_evidence=has_receipt,
             posting=posting,
             bank_matched=match_status == 'matched',
+            applied_reversal=bool((rel.get('reversal_by_expense') or {}).get(document.pk)),
+            closed_by_storno=closed_by_storno,
         )
 
     vat_not_applicable = (
@@ -263,7 +348,13 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         'document_status': provenanced(document.status, source='document_status'),
         'operational_status': operational,
         'posting': posting_block(posting),
-        'subledger': build_subledger_block(subledger, as_of_day),
+        'subledger': _subledger_block_for_row(
+            document=document,
+            direction=direction,
+            subledger=subledger,
+            as_of_day=as_of_day,
+            applied_reversal=bool((rel.get('reversal_by_expense') or {}).get(document.pk)),
+        ),
         'bank': bank_block(match_status=match_status, expected=expected_bank),
         'payment_order': payment_order_block(order),
         'vat': {
@@ -291,13 +382,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         },
         'controls': alerts,
         'notices': notices,
-        'amounts': {
-            'currency': currency,
-            'net': money(net),
-            'vat': money(vat),
-            'gross': money(gross),
-            'fx_rate': provenanced(None, reason='not_recorded'),
-        },
+        'amounts': _amounts_block(document, currency, net, vat, gross),
     }
     if not detail:
         return payload
@@ -485,6 +570,7 @@ def assemble_official_row(document, rel, as_of_day: date, *, detail: bool) -> di
             'net': money(document.amount),
             'vat': money(0),
             'gross': money(document.amount),
+            'book_gross': money(book_eur_amount(document)),
             'fx_rate': provenanced(None, reason='not_applicable'),
         },
     }
@@ -590,6 +676,7 @@ def assemble_deposit_row(document, rel, as_of_day: date, *, detail: bool) -> dic
             'net': money(document.amount),
             'vat': money(0),
             'gross': money(document.amount),
+            'book_gross': money(book_eur_amount(document)),
             'fx_rate': provenanced(None, reason='not_applicable'),
         },
     }

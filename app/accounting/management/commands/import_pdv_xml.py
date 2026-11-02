@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from accounting.models import VATPeriod, VATReturnSource
+from accounting.models import VATReturnSource
 from accounting.services.tax_forms.pdv.import_return import import_signed_vat_return
 from accounting.services.tax_forms.pdv.parse import parse_pdv_obrazac_xml
 from tenants.models import Tenant
@@ -29,10 +29,12 @@ class Command(BaseCommand):
         for xml_path in xml_files:
             xml_bytes = xml_path.read_bytes()
             parsed = parse_pdv_obrazac_xml(xml_bytes)
-            period, _ = VATPeriod.all_objects.get_or_create(
-                tenant=tenant,
-                year=parsed.period_from.year,
-                month=parsed.period_from.month,
+            from accounting.services.vat import get_or_create_vat_period
+
+            period = get_or_create_vat_period(
+                tenant,
+                parsed.period_from.year,
+                parsed.period_from.month,
             )
             vat_return = import_signed_vat_return(
                 period,

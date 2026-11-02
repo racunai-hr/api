@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+import re
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -411,3 +412,74 @@ class PdvCorrectionApiTests(PdvCorrectionTests):
             ['in_processing', 'submitted'],
         )
         self.assertEqual(workspace['forms'][0]['external_identifier'], str(portal_uuid))
+
+    def test_processed_xml_books_matching_boxes_only(self):
+        period, v1, _ = self._submit_v1()
+        v2 = create_vat_return_draft(period, prepared_by=self.accountant)
+        portal_uuid = uuid4()
+        received_at = timezone.make_aware(datetime(2026, 10, 23, 13, 29, 5))
+        record_vat_return_in_processing(
+            v2,
+            received_at=received_at,
+            eporezna_identifier=portal_uuid,
+            submitted_by=self.user,
+        )
+        v2.refresh_from_db()
+        stored_hash = v2.payload_hash
+        xml_bytes = v2.xml_unsigned.open('rb').read()
+        client = self._client()
+        mismatch_text, replacements = re.subn(
+            r'(Podatak400[^>]*>)[^<]+',
+            r'\g<1>1.00',
+            xml_bytes.decode(),
+            count=1,
+        )
+        self.assertEqual(replacements, 1)
+        mismatch = mismatch_text.encode()
+        rejected = client.post(
+            '/api/tax/pdv/periods/2026-07/processed/',
+            {
+                'return_version': v2.version,
+                'submitted_xml': SimpleUploadedFile('pdv.xml', mismatch, content_type='application/xml'),
+            },
+            format='multipart',
+        )
+        self.assertEqual(rejected.status_code, 409)
+        self.assertIn('Boxovi', rejected.json()['detail'])
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        period.refresh_from_db()
+        self.assertEqual(v2.status, VATReturnStatus.IN_PROCESSING)
+        self.assertEqual(v1.status, VATReturnStatus.SUBMITTED)
+        self.assertNotEqual(period.submitted_at, received_at)
+
+        booked = client.post(
+            '/api/tax/pdv/periods/2026-07/processed/',
+            {
+                'return_version': v2.version,
+                'submitted_xml': SimpleUploadedFile('pdv.xml', xml_bytes, content_type='application/xml'),
+            },
+            format='multipart',
+        )
+        self.assertEqual(booked.status_code, 200, booked.content)
+        self.assertEqual(booked.json()['external_identifier'], str(portal_uuid))
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        period.refresh_from_db()
+        self.assertEqual(v2.status, VATReturnStatus.SUBMITTED)
+        self.assertEqual(v2.payload_hash, stored_hash)
+        self.assertEqual(v1.status, VATReturnStatus.SUPERSEDED)
+        self.assertEqual(v1.superseded_by_id, v2.pk)
+        self.assertEqual(period.submitted_at, received_at)
+        event = SubmissionService.current_submission(v2)
+        self.assertEqual(event.external_identifier, portal_uuid)
+        self.assertEqual(event.submitted_at, received_at)
+        self.assertTrue(event.confirmation_attachment)
+
+        workspace = client.get('/api/tax/pdv/periods/2026-07/').json()
+        self.assertEqual(
+            [row['status'] for row in workspace['forms']],
+            ['submitted', 'superseded'],
+        )
+        self.assertEqual(workspace['forms'][0]['external_identifier'], str(portal_uuid))
+        self.assertEqual(workspace['latest_return_status'], 'submitted')

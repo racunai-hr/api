@@ -64,6 +64,7 @@ KIND_RULES: dict[str, KindRule] = {
     VehicleLineKind.MOTOR_VEHICLE_TAX: KindRule(_NO_VAT, _CIT_EXCL_PCMV),
     VehicleLineKind.INSURANCE_COMPULSORY: KindRule(_NO_VAT, _CIT_EXCL_INS),
     VehicleLineKind.UNCLASSIFIED: KindRule(_VAT_REV, AxisRule(LineRuleKind.REVIEW, None)),
+    VehicleLineKind.FUEL: KindRule(_VAT_CAND, _CIT_CAND),
 }
 
 

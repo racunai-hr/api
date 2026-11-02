@@ -404,6 +404,7 @@ class PostingPlanLineSerializer(serializers.Serializer):
     amount_field = serializers.CharField()
     description = serializers.CharField()
     amount = money_field()
+    document_amount = money_field(allow_null=True, required=False)
     debit = AccountRefSerializer()
     credit = AccountRefSerializer()
     debit_cost_center = CostCenterRefSerializer(allow_null=True)

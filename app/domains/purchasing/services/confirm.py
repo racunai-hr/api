@@ -28,6 +28,14 @@ from domains.purchasing.services.exceptions import (
     PurchasingBadRequest,
 )
 from domains.purchasing.services.invoice_import import _apply_business_duplicate, _hard_duplicate
+from domains.finance.services.accounting_review import (
+    VEHICLE_PROFILES,
+    bind_review_choice,
+    locked_account_detail as _locked_account_detail,
+    require_posting_review,
+    review_invoice_import,
+    AccountingReviewBlocked,
+)
 from domains.finance.services.account_resolver import load_postable_account
 from domains.finance.services.posting_suggestions import resolve_confirm_posting_inputs
 from domains.purchasing.services.expense_lines import (
@@ -39,6 +47,7 @@ from domains.purchasing.services.expense_lines import (
     persist_extracted_lines,
 )
 from expenses.models import (
+    ACCOUNT_LOCKED_PROFILES,
     Expense,
     ExpenseAttachment,
     ExpenseImportMetadata,
@@ -95,6 +104,15 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
     cost_center_id = payload.pop('cost_center_id', None)
     remember = bool(payload.pop('remember_category_for_partner', False))
     line_accounts = list(payload.pop('line_accounts', None) or [])
+    answers = dict(payload.pop('answers', None) or {})
+    if payload.get('posting_profile'):
+        answers['posting_profile'] = payload.pop('posting_profile')
+    else:
+        payload.pop('posting_profile', None)
+    if payload.get('vehicle_id'):
+        answers['vehicle_id'] = payload.pop('vehicle_id')
+    else:
+        payload.pop('vehicle_id', None)
 
     with transaction.atomic():
         run = (
@@ -174,6 +192,20 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             partner.partner_type = 'both'
             partner.save(update_fields=['partner_type'])
 
+        review = review_invoice_import(tenant, run, answers, actor)
+        try:
+            require_posting_review(review)
+        except AccountingReviewBlocked as exc:
+            raise ValidationError({'detail': exc.detail}) from exc
+        profile = review.get('posting_profile') or 'opex'
+        manual_line_account = any(
+            item.get('posting_account_id') for item in line_accounts if isinstance(item, dict)
+        )
+        if profile in ACCOUNT_LOCKED_PROFILES and manual_line_account:
+            raise ValidationError({
+                'detail': _locked_account_detail(profile),
+            })
+
         category, expense_account, account_source = resolve_confirm_posting_inputs(
             tenant=tenant,
             partner=partner,
@@ -186,6 +218,12 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             from domains.finance.services.cost_center_resolver import load_bookable_cost_center
 
             cost_center = load_bookable_cost_center(tenant, int(cost_center_id))
+
+        if profile in ACCOUNT_LOCKED_PROFILES:
+            expense_account = None
+            posting_accounts = {position: None for position in posting_accounts}
+        elif profile in VEHICLE_PROFILES:
+            expense_account = None
 
         expense = Expense.all_objects.create(
             tenant=tenant,
@@ -205,6 +243,8 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             receipt_number=values['invoice_number'],
             description=values['description'],
             created_by=actor,
+            posting_profile=profile,
+            vehicle_id=(review.get('vehicle') or {}).get('id'),
         )
         try:
             persist_extracted_lines(
@@ -214,6 +254,7 @@ def confirm_invoice_import(*, tenant, import_id: int, actor, data: dict | None =
             )
         except LineAllocationMismatch as exc:
             raise PurchasingBadRequest(exc.code, exc.detail) from exc
+        bind_review_choice(expense, review, answers)
         ExpenseImportMetadata.all_objects.create(
             tenant=tenant,
             expense=expense,

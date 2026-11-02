@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from banking.book import transaction_book_amount
 from domains.reporting.documents.projection import money
 from domains.reporting.documents.settlement_trail import build_settlement_trail
 from integrations.services.inbound_rejection import (
@@ -217,6 +218,14 @@ def _account_ref(account) -> dict | None:
     }
 
 
+def _book_face(document, raw) -> str | None:
+    if (getattr(document, 'currency', None) or '').strip().upper() != 'HRK' or raw is None:
+        return None
+    from accounting.services.fx import to_eur_amount
+
+    return _money_str(to_eur_amount(raw, 'HRK'))
+
+
 def build_expense_lines_block(document) -> list[dict]:
     rows = []
     for line in document.lines.all():
@@ -234,6 +243,9 @@ def build_expense_lines_block(document) -> list[dict]:
                 'net_amount': _money_str(line.net_amount),
                 'vat_amount': _money_str(line.vat_amount),
                 'gross_amount': _money_str(line.gross_amount),
+                'book_net_amount': _book_face(document, line.net_amount),
+                'book_vat_amount': _book_face(document, line.vat_amount),
+                'book_gross_amount': _book_face(document, line.gross_amount),
                 'posting_account': _account_ref(line.posting_account),
             }
         )
@@ -497,6 +509,8 @@ def build_payment_block(*, bank_txs, match_status: str | None) -> dict:
         'matched': match_status == 'matched',
         'date': primary.transaction_date.isoformat() if primary and primary.transaction_date else None,
         'amount': _money_str(primary.amount) if primary else None,
+        'currency': (primary.currency or None) if primary else None,
+        'book_amount': _money_str(transaction_book_amount(primary)) if primary else None,
         'account_mask': account_mask,
         'reference': (primary.reference or None) if primary else None,
         'reconcile_status': match_status,
@@ -578,7 +592,10 @@ def enrich_incoming_detail_payload(
         lines_by_je=rel.get('lines_by_je') or {},
         bank_by_je=rel.get('bank_by_je') or {},
         pfc_by_je=rel.get('pfc_by_je') or {},
+        settlement_method=getattr(document, 'settlement_method', None) or None,
+        storno_by_je=rel.get('storno_by_je') or {},
     )
+    payload['reversal_of'] = (rel.get('reversal_by_expense') or {}).get(document.pk)
     if parsed and parsed.notes and not (payload.get('notes') or '').strip():
         payload['notes'] = '\n'.join(parsed.notes)
     return payload

@@ -12,6 +12,7 @@ from django.db.models import Q
 from django.http import Http404
 
 from accounting.models import Deposit, OfficialDocument, PrivateFundsClaim, SubledgerItem
+from banking.book import transaction_book_amount, transaction_book_currency
 from banking.models import BankReconcileIdempotency, BankTransaction
 from banking.reconciliation import MatchConflict, match_transaction_to_journal_entry
 from domains.banking.read.dto import transaction_dto
@@ -34,7 +35,7 @@ class ReconcileIdempotencyConflict(MatchConflict):
 
 
 def _abs_amount(bank_tx: BankTransaction) -> Decimal:
-    return abs(Decimal(bank_tx.amount)).quantize(Decimal('0.01'))
+    return transaction_book_amount(bank_tx)
 
 
 def _expected_direction(transaction_type: str) -> str:
@@ -467,6 +468,8 @@ def reconcile_open_item_api(
                 transaction_type=bank_tx.transaction_type,
                 bank_transaction_id=bank_tx.pk,
                 locked_source=locked_source,
+                source_amount=bank_tx.amount,
+                source_currency=bank_tx.currency,
             )
         except SettlementConflict as exc:
             raise MatchConflict(exc.detail) from exc
@@ -490,3 +493,49 @@ def reconcile_open_item_api(
             result_payload=payload,
         )
         return payload
+
+
+def list_expense_close_payments(tenant, expense: Expense) -> list[dict]:
+    """Unmatched debit bank lines with the same currency and exact gross amount."""
+    amount = Decimal(expense.amount).quantize(Decimal('0.01'))
+    currency = (expense.currency or 'EUR').upper()
+    target = _ScoreTarget(
+        open_amount=amount,
+        partner=expense.supplier,
+        due_date=expense.due_date or expense.expense_date,
+    )
+    label = expense.expense_number or ''
+    scored: list[dict] = []
+    base = BankTransaction.all_objects.filter(
+        tenant=tenant,
+        transaction_type='debit',
+        match_status='unmatched',
+        matched_journal_entry__isnull=True,
+        matched_payment__isnull=True,
+    )
+    if currency == 'EUR':
+        amount_filter = Q(currency__iexact='EUR', amount=amount) | (
+            Q(amount_eur=amount) & ~Q(currency__iexact='EUR')
+        )
+    else:
+        amount_filter = Q(currency__iexact=currency, amount=amount, amount_eur__isnull=True)
+    rows = base.filter(amount_filter).order_by('-transaction_date', '-id')[:_CANDIDATE_SCAN_LIMIT]
+    for bank_tx in rows:
+        score, reasons = _score_candidate(bank_tx, target, expense, label, amount)
+        if 'amount_exact' not in reasons:
+            continue
+        scored.append({
+            'id': bank_tx.pk,
+            'transaction_date': bank_tx.transaction_date.isoformat(),
+            'amount': f'{amount:.2f}',
+            'currency': transaction_book_currency(bank_tx),
+            'counterparty_name': bank_tx.counterparty_name,
+            'description': bank_tx.description,
+            'reference': bank_tx.reference,
+            'match_score': score,
+            'match_reasons': reasons,
+            'recommended': _is_recommended(score, reasons),
+        })
+    scored.sort(key=lambda row: row['transaction_date'], reverse=True)
+    scored.sort(key=lambda row: row['match_score'], reverse=True)
+    return scored[:_CANDIDATE_RESULT_LIMIT]

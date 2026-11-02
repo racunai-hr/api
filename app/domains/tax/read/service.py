@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
-
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, F, OuterRef
 
 from accounting.models import PDVSReturn, VATLedgerEntry, VATPeriod, VATReturnStatus
 from accounting.services.submission.events import get_latest_zp_return, get_submission_events
@@ -20,6 +18,7 @@ from accounting.services.tax_forms.zp.payload import ZP_SCHEMA_VERSION
 from domains.tax.read.dto import (
     money2,
     parse_period_key,
+    parse_span_key,
     pdv_period_dto,
     pdv_s_submission_dto,
     period_key,
@@ -34,18 +33,31 @@ def list_pdv_periods(tenant) -> dict:
                 VATLedgerEntry.all_objects.filter(vat_period_id=OuterRef('pk')),
             ),
         )
-        .order_by('-year', '-month')
+        .order_by('-year', '-month', F('period_to').asc(nulls_first=True))
     )
     results = [pdv_period_dto(period, has_ledger=period.has_ledger) for period in qs]
     return {'count': len(results), 'results': results}
 
 
 def get_vat_period(tenant, raw_period: str) -> VATPeriod | None:
+    span = parse_span_key(raw_period)
+    if span is not None:
+        year, month, end_year, end_month = span
+        for period in VATPeriod.all_objects.filter(tenant=tenant, year=year, month=month):
+            _start, end = period.filing_bounds()
+            if (end.year, end.month) == (end_year, end_month) and (year, month) != (end_year, end_month):
+                return period
+        return None
     parsed = parse_period_key(raw_period)
     if parsed is None:
         return None
     year, month = parsed
-    return VATPeriod.all_objects.filter(tenant=tenant, year=year, month=month).first()
+    return VATPeriod.all_objects.filter(
+        tenant=tenant,
+        year=year,
+        month=month,
+        period_to__isnull=True,
+    ).first()
 
 
 def pdv_form_rows(period: VATPeriod) -> list[dict]:
@@ -56,6 +68,7 @@ def pdv_form_rows(period: VATPeriod) -> list[dict]:
             VATReturnStatus.IN_PROCESSING,
             VATReturnStatus.SUBMITTED,
             VATReturnStatus.SUPERSEDED,
+            VATReturnStatus.IMPORTED,
         ),
     ).order_by('-version')
     for vat_return in returns:
@@ -64,13 +77,14 @@ def pdv_form_rows(period: VATPeriod) -> list[dict]:
         if received_at is None and vat_return.status == VATReturnStatus.SUBMITTED:
             received_at = period.submitted_at
         snapshot = vat_return.payload_snapshot or {}
+        period_from, period_to = period.filing_bounds()
         rows.append({
             'form': 'PDV',
             'version': vat_return.version,
             'status': vat_return.status,
             'received_at': received_at.isoformat() if received_at is not None else None,
-            'period_from': snapshot.get('period_from') or date(period.year, period.month, 1).isoformat(),
-            'period_to': snapshot.get('period_to') or '',
+            'period_from': snapshot.get('period_from') or period_from.isoformat(),
+            'period_to': snapshot.get('period_to') or period_to.isoformat(),
             'external_identifier': str(event.external_identifier) if event is not None else None,
         })
     return rows
@@ -82,16 +96,26 @@ def pdv_workspace_dto(period: VATPeriod) -> dict:
     vat_return = working_return(period)
     xml_integrity = None
     event_uuid = None
+    external_identifier = None
     has_confirmation = False
+    document_currency = None
+    document_vat_due = None
     if vat_return is not None:
         xml_integrity = check_vat_return_integrity(vat_return).status
+        snapshot = vat_return.payload_snapshot or {}
+        document_currency = snapshot.get('document_currency')
+        document_vat_due = snapshot.get('document_vat_due')
         event = SubmissionService.current_submission(vat_return)
         if event is not None:
             event_uuid = str(event.event_uuid)
+            external_identifier = str(event.external_identifier)
             has_confirmation = bool(event.confirmation_attachment)
     payload['xml_integrity'] = xml_integrity
     payload['event_uuid'] = event_uuid
+    payload['external_identifier'] = external_identifier
     payload['has_confirmation'] = has_confirmation
+    payload['document_currency'] = document_currency
+    payload['document_vat_due'] = document_vat_due
     payload['forms'] = pdv_form_rows(period)
     return payload
 

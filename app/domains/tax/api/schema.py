@@ -9,10 +9,13 @@ from config.schema_common import money_field
 
 class PdvPeriodSerializer(serializers.Serializer):
     period = serializers.CharField(help_text='Canonical period YYYY-MM')
+    period_from = serializers.CharField(help_text='Prvi dan prijave, YYYY-MM-DD')
+    period_to = serializers.CharField(help_text='Zadnji dan prijave, YYYY-MM-DD')
     period_status = serializers.CharField()
     has_ledger = serializers.BooleanField()
     return_version = serializers.IntegerField(allow_null=True)
     return_status = serializers.CharField(allow_null=True)
+    return_source = serializers.CharField(allow_null=True)
     latest_return_version = serializers.IntegerField(allow_null=True)
     latest_return_status = serializers.CharField(allow_null=True)
     correction_in_progress = serializers.BooleanField()
@@ -38,7 +41,10 @@ class PdvFormRowSerializer(serializers.Serializer):
 class PdvPeriodWorkspaceSerializer(PdvPeriodSerializer):
     xml_integrity = serializers.CharField(allow_null=True)
     event_uuid = serializers.UUIDField(allow_null=True)
+    external_identifier = serializers.CharField(allow_null=True)
     has_confirmation = serializers.BooleanField()
+    document_currency = serializers.CharField(allow_null=True)
+    document_vat_due = money_field(allow_null=True)
     forms = PdvFormRowSerializer(many=True)
 
 
@@ -128,6 +134,48 @@ class PdvSPeriodSerializer(serializers.Serializer):
     submissions = PdvSSubmissionSerializer(many=True)
 
 
+class JoppdRowSerializer(serializers.Serializer):
+    recipient_oib = serializers.CharField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    recipient_code = serializers.CharField()
+    income_type_code = serializers.CharField()
+    gross_salary = money_field()
+    mio1_amount = money_field()
+    mio2_amount = money_field()
+    income_tax_amount = money_field()
+    zo_amount = money_field()
+    net_salary = money_field()
+
+
+class JoppdPeriodSerializer(serializers.Serializer):
+    period = serializers.CharField()
+    schema_version = serializers.CharField()
+    payment_date = serializers.CharField()
+    row_count = serializers.IntegerField()
+    total_gross = money_field()
+    total_mio1 = money_field()
+    total_mio2 = money_field()
+    total_income_tax = money_field()
+    total_zo = money_field()
+    total_net = money_field()
+    return_version = serializers.IntegerField(allow_null=True)
+    rows = JoppdRowSerializer(many=True)
+    event_uuid = serializers.UUIDField(allow_null=True)
+    current_submission = PdvSSubmissionSerializer(allow_null=True)
+    submissions = PdvSSubmissionSerializer(many=True)
+
+
+class JoppdDraftSerializer(serializers.Serializer):
+    period = serializers.CharField()
+    return_version = serializers.IntegerField()
+
+
+class JoppdSubmitRequestSerializer(serializers.Serializer):
+    eporezna_identifier = serializers.UUIDField()
+    submitted_at = serializers.DateTimeField()
+
+
 class Tz2YearSerializer(serializers.Serializer):
     tax_year = serializers.IntegerField()
     version = serializers.IntegerField(allow_null=True)
@@ -153,6 +201,44 @@ class Tz2YearSerializer(serializers.Serializer):
     event_uuid = serializers.UUIDField(allow_null=True)
     current_submission = PdvSSubmissionSerializer(allow_null=True)
     submissions = PdvSSubmissionSerializer(many=True)
+
+
+class PdRowSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    label = serializers.CharField()
+    amount = serializers.CharField()
+    filed = serializers.CharField(allow_null=True)
+
+
+class PdFoundingItemSerializer(serializers.Serializer):
+    entry_date = serializers.DateField()
+    entry_number = serializers.CharField()
+    account_code = serializers.CharField()
+    account_name = serializers.CharField()
+    amount = serializers.CharField()
+    description = serializers.CharField()
+
+
+class PdMissingHrkSerializer(serializers.Serializer):
+    entry_date = serializers.DateField()
+    entry_number = serializers.CharField()
+    account_code = serializers.CharField()
+    account_name = serializers.CharField()
+    reason = serializers.CharField()
+
+
+class PdYearSerializer(serializers.Serializer):
+    tax_year = serializers.IntegerField()
+    currency = serializers.CharField()
+    period_from = serializers.CharField()
+    period_to = serializers.CharField()
+    tax_rate = serializers.CharField()
+    founding_year = serializers.IntegerField(allow_null=True)
+    header = serializers.DictField()
+    rows = PdRowSerializer(many=True)
+    founding_items = PdFoundingItemSerializer(many=True)
+    missing_hrk = PdMissingHrkSerializer(many=True)
+    matches_filed = serializers.BooleanField(allow_null=True)
 
 
 class Tz2SaveRequestSerializer(serializers.Serializer):

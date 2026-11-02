@@ -56,6 +56,24 @@ from domains.banking.read.service import (
     list_statements,
     list_transactions,
 )
+from domains.banking.api.expense_close_schema import (
+    ExpenseClosePreviewSerializer,
+    ExpenseCloseRequestSerializer,
+    ExpenseCloseResultSerializer,
+)
+from domains.banking.write.expense_close import (
+    CloseError,
+    close_expense_from_bank,
+    expense_close_preview,
+)
+from domains.finance.api.prepayment_schema import (
+    SupplierPrepaymentCreateSerializer,
+    SupplierPrepaymentResultSerializer,
+)
+from domains.finance.services.supplier_prepayment_api import (
+    PrepaymentApiError,
+    post_prepayment_from_bank,
+)
 from domains.banking.write.reconcile import (
     AlreadyReconciled,
     ReconcileIdempotencyConflict,
@@ -446,6 +464,107 @@ class TransactionReconcileOpenItemView(_BankingWriteApiView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class ExpenseCloseCandidatesView(_BankingApiView):
+    permission_classes = [IsAuthenticated, TenantBankingWritePermission]
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_expenses_close_candidates',
+        responses={
+            200: ExpenseClosePreviewSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            422: ERROR_422,
+        },
+    )
+    def get(self, request, pk):
+        tenant = _require_tenant(request)
+        try:
+            payload = expense_close_preview(tenant, pk)
+        except CloseError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
+
+
+class ExpenseCloseFromBankView(_BankingWriteApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_expenses_close_from_bank',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=ExpenseCloseRequestSerializer,
+        responses={
+            200: ExpenseCloseResultSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_422,
+        },
+    )
+    def post(self, request, pk):
+        tenant = _require_tenant(request)
+        try:
+            payload = close_expense_from_bank(
+                tenant=tenant,
+                user=request.user,
+                expense_id=pk,
+                bank_transaction_id=request.data.get('bank_transaction_id'),
+                lines=request.data.get('lines'),
+                remember=bool(request.data.get('remember')),
+                idempotency_key=request.headers.get('Idempotency-Key', ''),
+                answers=request.data.get('answers'),
+            )
+        except CloseError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
+
+
+class TransactionSupplierPrepaymentView(_BankingWriteApiView):
+    @extend_schema(
+        tags=['banking'],
+        operation_id='banking_transaction_supplier_prepayment',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=SupplierPrepaymentCreateSerializer,
+        responses={
+            200: SupplierPrepaymentResultSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_422,
+        },
+    )
+    def post(self, request, pk):
+        ser = SupplierPrepaymentCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            payload = post_prepayment_from_bank(
+                tenant=_require_tenant(request),
+                user=request.user,
+                bank_transaction_id=pk,
+                partner_id=ser.validated_data['partner_id'],
+                purchase_nature=ser.validated_data['purchase_nature'],
+                vat_treatment=ser.validated_data.get('vat_treatment', ''),
+                idempotency_key=request.headers.get('Idempotency-Key', ''),
+            )
+        except PrepaymentApiError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
 
 
 class ConnectionSyncEnqueueView(_BankingWriteApiView):

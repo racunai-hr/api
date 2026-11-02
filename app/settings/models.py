@@ -79,6 +79,20 @@ class CompanySettings(TenantMixin, models.Model):
     )
     tax_number = models.CharField(max_length=20, blank=True, verbose_name="Porezni broj")
     registration_number = models.CharField(max_length=20, blank=True, verbose_name="Matični broj")
+    share_capital = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Temeljni kapital",
+        help_text="Koristi se u podnožju tiskanih obrazaca (npr. plaća, računi).",
+    )
+    share_capital_currency = models.CharField(
+        max_length=3,
+        default='EUR',
+        blank=True,
+        verbose_name="Valuta temeljnog kapitala",
+    )
     tax_office = models.ForeignKey(
         TaxOffice,
         on_delete=models.PROTECT,

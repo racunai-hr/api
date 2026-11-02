@@ -63,6 +63,41 @@ def money(value) -> str | None:
     return str(Decimal(value).quantize(Decimal('0.01')))
 
 
+_EUR_CURRENCY_CODES = frozenset({'EUR', '€', 'EURO'})
+
+
+def is_eur_currency(code: str | None) -> bool:
+    return (code or 'EUR').strip().upper() in _EUR_CURRENCY_CODES
+
+
+def book_eur_amount(document) -> Decimal | None:
+    """Knjigovodstveni bruto u EUR. Strani PDV ide preko tečaja dokumenta."""
+    from accounting.services.foreign_vat import foreign_posting_amounts
+
+    posted = foreign_posting_amounts(document)
+    if posted is not None and posted['gross'] > 0:
+        return posted['gross']
+    amount = getattr(document, 'total_amount', None)
+    if amount is None:
+        amount = getattr(document, 'amount', None)
+    if amount is None:
+        return None
+    gross = Decimal(amount)
+    currency = getattr(document, 'currency', None)
+    if is_eur_currency(currency):
+        return gross.quantize(Decimal('0.01'))
+    if (currency or '').strip().upper() == 'HRK':
+        from accounting.services.fx import to_eur_amount
+
+        return to_eur_amount(gross, 'HRK')
+    rate = getattr(document, 'fx_rate', None)
+    if rate is None or Decimal(rate) <= 0:
+        return None
+    foreign_gross = getattr(document, 'foreign_gross_amount', None)
+    source = Decimal(foreign_gross) if foreign_gross is not None else gross
+    return (source / Decimal(rate)).quantize(Decimal('0.01'))
+
+
 def _canonical_tax_date(direction: str, document) -> date | None:
     if direction == 'outgoing':
         return document.service_date or None
@@ -302,9 +337,15 @@ def operational_incoming(
     has_receipt_evidence: bool,
     posting=None,
     bank_matched: bool = False,
+    applied_reversal: bool = False,
+    closed_by_storno: bool = False,
 ) -> dict:
     if document.status == 'rejected':
         return provenanced('rejected', source='document_read_model')
+    if applied_reversal and Decimal(getattr(document, 'amount', 0) or 0) < 0:
+        return provenanced('reversed', source='subledger_allocation')
+    if closed_by_storno:
+        return provenanced('reversed', source='subledger_allocation')
     if disputed:
         return provenanced('disputed', source='as4_document_link')
     if _subledger_settled(subledger):

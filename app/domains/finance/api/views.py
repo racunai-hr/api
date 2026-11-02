@@ -14,6 +14,21 @@ from rest_framework.views import APIView
 from config.schema_common import ERROR_400, ERROR_401, ERROR_404, ERROR_409
 from domains.finance.api.authentication import FinanceJWTAuthentication
 from domains.finance.api.permissions import TenantFinanceReadPermission, TenantFinanceWritePermission
+from domains.finance.services.supplier_prepayment_api import (
+    PrepaymentApiError,
+    apply_prepayments_for_source,
+    list_prepayment_candidates,
+)
+from domains.finance.api.prepayment_schema import (
+    ApplyPrepaymentsResultSerializer,
+    ApplyPrepaymentsSerializer,
+    PrepaymentCandidateListSerializer,
+)
+from domains.finance.api.accounting_review_schema import (
+    AccountingReviewRequestSerializer,
+    AccountingReviewSerializer,
+    AccountingReviewVehicleSerializer,
+)
 from domains.finance.api.schema import (
     JOURNAL_ENTRY_LIST_PARAMS,
     PARTNER_STATEMENT_PARAMS,
@@ -632,6 +647,12 @@ class ExpenseApproveView(_FinanceWriteApiView):
                 {'code': exc.code, 'detail': exc.detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        except DjangoValidationError as exc:
+            messages = getattr(exc, 'messages', None) or [str(exc)]
+            return Response(
+                {'code': 'posting_rejected', 'detail': messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class ChartOfAccountsListView(_FinanceReadApiView):
@@ -908,4 +929,95 @@ class CostCenterReportView(_FinanceReadApiView):
                 month,
                 cumulative=cumulative,
             )
+        )
+
+
+class PayablePrepaymentCandidatesView(_FinanceWriteApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_payable_prepayment_candidates',
+        responses={200: PrepaymentCandidateListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, source_type: str, pk: int):
+        try:
+            payload = list_prepayment_candidates(_require_tenant(request), source_type, pk)
+        except PrepaymentApiError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
+
+
+class PayableApplyPrepaymentsView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_payable_apply_prepayments',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=ApplyPrepaymentsSerializer,
+        responses={
+            200: ApplyPrepaymentsResultSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_400,
+        },
+    )
+    def post(self, request, source_type: str, pk: int):
+        ser = ApplyPrepaymentsSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            payload = apply_prepayments_for_source(
+                tenant=_require_tenant(request),
+                user=request.user,
+                source_type=source_type,
+                source_id=pk,
+                applications=ser.validated_data['applications'],
+                lines=ser.validated_data.get('lines'),
+                remember=bool(ser.validated_data.get('remember')),
+                idempotency_key=request.headers.get('Idempotency-Key', ''),
+                answers=ser.validated_data.get('answers'),
+            )
+        except PrepaymentApiError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
+
+
+class VehicleListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_vehicles_list',
+        responses={200: AccountingReviewVehicleSerializer(many=True), 401: ERROR_401},
+    )
+    def get(self, request):
+        from domains.finance.services.accounting_review import list_active_vehicles
+
+        return Response(list_active_vehicles(_require_tenant(request)))
+
+
+class ExpenseAccountingReviewView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_expense_accounting_review',
+        request=AccountingReviewRequestSerializer,
+        responses={200: AccountingReviewSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def post(self, request, pk: int):
+        from expenses.models import Expense
+        from domains.finance.services.accounting_review import review_expense
+
+        ser = AccountingReviewRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        tenant = _require_tenant(request)
+        expense = Expense.all_objects.filter(tenant=tenant, pk=pk).first()
+        if expense is None:
+            raise Http404()
+        return Response(
+            review_expense(tenant, expense, ser.validated_data.get('answers'), request.user)
         )

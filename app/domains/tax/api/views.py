@@ -24,6 +24,9 @@ from domains.tax.api.permissions import (
 from domains.tax.api.schema import (
     ConfirmationResultSerializer,
     ConfirmationUploadSerializer,
+    JoppdDraftSerializer,
+    JoppdPeriodSerializer,
+    JoppdSubmitRequestSerializer,
     PdvBoxesSerializer,
     PdvDraftSerializer,
     PdvLedgerRebuildSerializer,
@@ -33,9 +36,11 @@ from domains.tax.api.schema import (
     PdvSSubmitRequestSerializer,
     PdvSubmitRequestSerializer,
     SubmissionResultSerializer,
+    PdYearSerializer,
     Tz2SaveRequestSerializer,
     Tz2YearSerializer,
 )
+from domains.tax.read.joppd import joppd_period_dto
 from domains.tax.read.service import (
     get_vat_period,
     list_pdv_periods,
@@ -49,16 +54,22 @@ from domains.tax.write.service import (
     TaxConflict,
     TaxNotFound,
     attach_period_confirmation,
+    confirmation_download,
+    create_joppd_draft,
     create_period_draft,
+    joppd_xml_bytes,
     pdv_s_xml_bytes,
     pdv_unsigned_xml_bytes,
     prepare_period_correction,
     rebuild_period_ledger,
+    submit_joppd_period,
     submit_pdv_period,
+    book_pdv_in_processing,
     submit_pdv_s_period,
     submit_zp_period,
     zp_xml_bytes,
 )
+from domains.tax.read.pd import pd_year_dto
 from domains.tax.read.tz2 import tz2_year_dto
 from domains.tax.write.tz2 import parse_tax_year, save_tz2_year, submit_tz2_year, tz2_xml_bytes
 
@@ -75,6 +86,25 @@ def _period_or_404(tenant, period: str):
     if vat_period is None:
         raise Http404()
     return vat_period
+
+
+def _joppd_period_or_404(tenant, period: str) -> tuple[int, int]:
+    """Parse a YYYY-MM period key and verify a payroll period exists for it.
+
+    JOPPD is not tied to VATPeriod — the backing record is ``payroll.PayrollPeriod``,
+    looked up only through ``domains.hr.facade`` (DTO-only, per domain dependency rule).
+    """
+    from domains.tax.read.dto import parse_period_key
+
+    parsed = parse_period_key(period)
+    if parsed is None:
+        raise Http404()
+    year, month = parsed
+    from domains.hr.facade import get_payroll_period_summary
+
+    if get_payroll_period_summary(tenant, year, month) is None:
+        raise Http404()
+    return year, month
 
 
 def _error_response(exc, http_status):
@@ -326,6 +356,44 @@ class PdvPeriodSubmitView(TaxWriteApiView):
         return Response(payload)
 
 
+class PdvPeriodProcessedView(TaxWriteApiView):
+    parser_classes = [MultiPartParser, FormParser]
+    http_method_names = ['post', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_pdv_period_processed',
+        request=PdvSubmitRequestSerializer,
+        responses={
+            200: SubmissionResultSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, period):
+        vat_period = _period_or_404(_require_tenant(request), period)
+        try:
+            raw_version = request.data.get('return_version')
+            if raw_version is None:
+                raise TaxBadRequest('return_version je obavezan.')
+            payload = book_pdv_in_processing(
+                vat_period,
+                user=request.user,
+                return_version=int(raw_version),
+                submitted_xml=request.FILES.get('submitted_xml'),
+            )
+        except TaxNotFound:
+            raise Http404() from None
+        except (TaxBadRequest, ValueError, TypeError) as exc:
+            detail = getattr(exc, 'detail', str(exc))
+            return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+        except TaxConflict as exc:
+            return _error_response(exc, status.HTTP_409_CONFLICT)
+        return Response(payload)
+
+
 class PdvSPeriodView(TaxApiView):
     http_method_names = ['get', 'head', 'options']
 
@@ -408,6 +476,7 @@ class PdvSPeriodSubmitView(TaxWriteApiView):
 
 
 class PdvIspravakXmlView(TaxWriteApiView):
+    serializer_class = PdvDraftSerializer
     http_method_names = ['post', 'options']
 
     def perform_content_negotiation(self, request, force=False):
@@ -529,9 +598,141 @@ class ZpPeriodSubmitView(TaxWriteApiView):
         return Response(payload)
 
 
-class SubmissionConfirmationView(TaxWriteApiView):
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+class JoppdPeriodView(TaxApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_joppd_period_retrieve',
+        responses={
+            200: JoppdPeriodSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, period):
+        year, month = _joppd_period_or_404(_require_tenant(request), period)
+        try:
+            return Response(joppd_period_dto(_require_tenant(request), year, month))
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class JoppdPeriodDraftView(TaxWriteApiView):
+    serializer_class = JoppdDraftSerializer
     http_method_names = ['post', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_joppd_period_draft',
+        responses={
+            200: JoppdDraftSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def post(self, request, period):
+        tenant = _require_tenant(request)
+        year, month = _joppd_period_or_404(tenant, period)
+        try:
+            payload = create_joppd_draft(tenant, year, month)
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class JoppdPeriodXmlView(TaxExportApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_joppd_period_xml',
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.BINARY, description='Unsigned draft Obrazac JOPPD XML'),
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, period):
+        tenant = _require_tenant(request)
+        year, month = _joppd_period_or_404(tenant, period)
+        try:
+            xml_bytes, filename = joppd_xml_bytes(tenant, year, month)
+        except TaxNotFound:
+            raise Http404() from None
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        response = HttpResponse(xml_bytes, content_type='application/xml')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class JoppdPeriodSubmitView(TaxWriteApiView):
+    http_method_names = ['post', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_joppd_period_submit',
+        request=JoppdSubmitRequestSerializer,
+        responses={
+            200: SubmissionResultSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, period):
+        tenant = _require_tenant(request)
+        year, month = _joppd_period_or_404(tenant, period)
+        try:
+            identifier, submitted_at = _parse_submit_common(request.data)
+            payload = submit_joppd_period(
+                tenant,
+                year,
+                month,
+                user=request.user,
+                eporezna_identifier=identifier,
+                submitted_at=submitted_at,
+            )
+        except TaxNotFound:
+            raise Http404() from None
+        except TaxBadRequest as exc:
+            return _error_response(exc, status.HTTP_400_BAD_REQUEST)
+        except TaxConflict as exc:
+            return _error_response(exc, status.HTTP_409_CONFLICT)
+        return Response(payload)
+
+
+class SubmissionConfirmationView(TaxApiView):
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    http_method_names = ['get', 'post', 'options']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), TenantTaxWritePermission()]
+        return [IsAuthenticated(), TenantTaxReadPermission()]
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_submission_confirmation_download',
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.BINARY, description='Potvrda zaprimanja'),
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, event_uuid):
+        try:
+            data, filename = confirmation_download(_require_tenant(request), event_uuid)
+        except TaxNotFound:
+            raise Http404() from None
+        response = HttpResponse(data, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
     @extend_schema(
         tags=['tax'],
@@ -601,6 +802,23 @@ class Tz2YearView(TaxApiView):
         except TaxBadRequest as exc:
             return _error_response(exc, status.HTTP_400_BAD_REQUEST)
         return Response(tz2_year_dto(tenant, tax_year))
+
+
+class PdYearView(TaxApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['tax'],
+        operation_id='tax_pd_year_retrieve',
+        responses={200: PdYearSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, year):
+        tenant = _require_tenant(request)
+        try:
+            tax_year = parse_tax_year(year)
+        except TaxNotFound:
+            raise Http404() from None
+        return Response(pd_year_dto(tenant, tax_year))
 
 
 class Tz2YearXmlView(TaxExportApiView):

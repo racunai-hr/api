@@ -3,7 +3,7 @@
     "215": {"base": "100.00", "vat": "19.00"},
     "400": "0.00"
   },
-  "mapping_version": 13,
+  "mapping_version": 15,
   "period_from": "2026-06-01",
   "period_to": "2026-06-30",
   "schema_version": "11.0"

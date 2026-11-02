@@ -76,6 +76,10 @@ def hash_tax_input(document: TaxDocumentInput) -> str:
         'period_year': document.period_year,
         'period_month': document.period_month,
         'input_vat_deductible': document.input_vat_deductible,
+        'tax_category': document.tax_category or '',
+        'posting_profile': document.posting_profile or '',
+        'foreign_vat_amount': _dec(document.foreign_vat_amount),
+        'foreign_vat_country': document.foreign_vat_country or '',
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
     return hashlib.sha256(encoded.encode('utf-8')).hexdigest()

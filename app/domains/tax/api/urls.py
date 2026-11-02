@@ -1,11 +1,16 @@
 from django.urls import path
 
 from domains.tax.api.views import (
+    JoppdPeriodDraftView,
+    JoppdPeriodSubmitView,
+    JoppdPeriodView,
+    JoppdPeriodXmlView,
     PdvPeriodBoxesView,
     PdvPeriodCorrectionView,
     PdvPeriodDraftView,
     PdvPeriodLedgerView,
     PdvPeriodListView,
+    PdvPeriodProcessedView,
     PdvPeriodSubmitView,
     PdvPeriodWorkspaceView,
     PdvPeriodXmlView,
@@ -17,6 +22,7 @@ from domains.tax.api.views import (
     ZpPeriodView,
     ZpPeriodXmlView,
     SubmissionConfirmationView,
+    PdYearView,
     Tz2YearSubmitView,
     Tz2YearView,
     Tz2YearXmlView,
@@ -53,6 +59,11 @@ urlpatterns = [
         'tax/pdv/periods/<str:period>/submit/',
         PdvPeriodSubmitView.as_view(),
         name='tax-pdv-period-submit',
+    ),
+    path(
+        'tax/pdv/periods/<str:period>/processed/',
+        PdvPeriodProcessedView.as_view(),
+        name='tax-pdv-period-processed',
     ),
     path(
         'tax/pdv/periods/<str:period>/',
@@ -93,6 +104,31 @@ urlpatterns = [
         'tax/zp/periods/<str:period>/',
         ZpPeriodView.as_view(),
         name='tax-zp-period-detail',
+    ),
+    path(
+        'tax/joppd/periods/<str:period>/draft/',
+        JoppdPeriodDraftView.as_view(),
+        name='tax-joppd-period-draft',
+    ),
+    path(
+        'tax/joppd/periods/<str:period>/xml/',
+        JoppdPeriodXmlView.as_view(),
+        name='tax-joppd-period-xml',
+    ),
+    path(
+        'tax/joppd/periods/<str:period>/submit/',
+        JoppdPeriodSubmitView.as_view(),
+        name='tax-joppd-period-submit',
+    ),
+    path(
+        'tax/joppd/periods/<str:period>/',
+        JoppdPeriodView.as_view(),
+        name='tax-joppd-period-detail',
+    ),
+    path(
+        'tax/pd/years/<str:year>/',
+        PdYearView.as_view(),
+        name='tax-pd-year',
     ),
     path(
         'tax/tz2/years/<str:year>/xml/',

@@ -16,6 +16,9 @@ from domains.finance.api.views import (
     OfficialDocumentRegisterView,
     OfficialDocumentSetPostingProfileView,
     ExpenseApproveView,
+    ExpenseAccountingReviewView,
+    PayableApplyPrepaymentsView,
+    PayablePrepaymentCandidatesView,
     ExpenseDraftPatchView,
     ExpensePostingPreviewView,
     ChartOfAccountsListView,
@@ -30,6 +33,7 @@ from domains.finance.api.views import (
     PrivateFundsClaimCreateView,
     PrivateFundsClaimDetailView,
     PrivateFundsClaimPostView,
+    VehicleListView,
 )
 
 urlpatterns = [
@@ -153,5 +157,25 @@ urlpatterns = [
         'finance/official-documents/<int:pk>/post/',
         OfficialDocumentPostView.as_view(),
         name='finance-official-document-post',
+    ),
+    path(
+        'finance/payables/<str:source_type>/<int:pk>/prepayment-candidates/',
+        PayablePrepaymentCandidatesView.as_view(),
+        name='finance-payable-prepayment-candidates',
+    ),
+    path(
+        'finance/payables/<str:source_type>/<int:pk>/apply-prepayments/',
+        PayableApplyPrepaymentsView.as_view(),
+        name='finance-payable-apply-prepayments',
+    ),
+    path(
+        'finance/vehicles/',
+        VehicleListView.as_view(),
+        name='finance-vehicle-list',
+    ),
+    path(
+        'finance/expenses/<int:pk>/accounting-review/',
+        ExpenseAccountingReviewView.as_view(),
+        name='finance-expense-accounting-review',
     ),
 ]

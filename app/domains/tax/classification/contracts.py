@@ -134,6 +134,10 @@ class TaxDocumentInput:
     period_month: int
     input_vat_deductible: bool
     input_hash: str
+    tax_category: str = ''
+    posting_profile: str = ''
+    foreign_vat_amount: Decimal | None = None
+    foreign_vat_country: str = ''
 
 
 @dataclass(frozen=True)

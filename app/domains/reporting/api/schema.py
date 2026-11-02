@@ -79,6 +79,9 @@ class AmountsBlockSerializer(serializers.Serializer):
     net = serializers.CharField(allow_null=True)
     vat = serializers.CharField(allow_null=True)
     gross = serializers.CharField(allow_null=True)
+    book_gross = serializers.CharField(allow_null=True, required=False)
+    book_net = serializers.CharField(allow_null=True, required=False)
+    book_vat = serializers.CharField(allow_null=True, required=False)
     fx_rate = ProvenancedSerializer()
 
 
@@ -254,6 +257,8 @@ class PaymentBlockSerializer(serializers.Serializer):
     matched = serializers.BooleanField()
     date = serializers.CharField(allow_null=True)
     amount = serializers.CharField(allow_null=True)
+    currency = serializers.CharField(allow_null=True, required=False)
+    book_amount = serializers.CharField(allow_null=True, required=False)
     account_mask = serializers.CharField(allow_null=True)
     reference = serializers.CharField(allow_null=True)
     reconcile_status = serializers.CharField(allow_null=True)
@@ -280,6 +285,8 @@ class SettlementTrailClosingSerializer(serializers.Serializer):
     claim_number = serializers.CharField(allow_null=True)
     partner_id = serializers.IntegerField(allow_null=True)
     partner_name = serializers.CharField(allow_null=True)
+    storno_expense_id = serializers.IntegerField(required=False, allow_null=True)
+    storno_expense_number = serializers.CharField(required=False, allow_null=True)
     label = serializers.CharField()
 
 
@@ -334,6 +341,9 @@ class IncomingLineSerializer(serializers.Serializer):
     net_amount = serializers.CharField(allow_null=True)
     vat_amount = serializers.CharField(allow_null=True)
     gross_amount = serializers.CharField(allow_null=True)
+    book_net_amount = serializers.CharField(allow_null=True, required=False)
+    book_vat_amount = serializers.CharField(allow_null=True, required=False)
+    book_gross_amount = serializers.CharField(allow_null=True, required=False)
     id = serializers.IntegerField(allow_null=True, required=False)
     posting_account = IncomingLineAccountSerializer(allow_null=True, required=False)
 
@@ -393,6 +403,11 @@ class DocumentActionsSerializer(serializers.Serializer):
     reject = DocumentRejectActionSerializer()
 
 
+class ReversalOfSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    number = serializers.CharField()
+
+
 class DocumentDetailSerializer(DocumentSummarySerializer):
     partner_id = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True, allow_null=True)
@@ -429,6 +444,7 @@ class DocumentDetailSerializer(DocumentSummarySerializer):
     subledger_context = SubledgerContextSerializer(required=False)
     payment = PaymentBlockSerializer(required=False)
     settlement_trail = SettlementTrailSerializer(required=False)
+    reversal_of = ReversalOfSerializer(required=False, allow_null=True)
     official_kind = serializers.CharField(required=False, allow_null=True)
     related_fixed_asset_id = serializers.IntegerField(required=False, allow_null=True)
     posting_profile_id = serializers.IntegerField(required=False, allow_null=True)

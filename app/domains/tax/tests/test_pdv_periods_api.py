@@ -21,14 +21,19 @@ EMPTY_HOST = 'pdvempty.racunai.hr'
 
 PERIOD_FIELDS = {
     'period',
+    'period_from',
+    'period_to',
     'period_status',
     'has_ledger',
     'return_version',
     'return_status',
+    'return_source',
     'latest_return_version',
     'latest_return_status',
     'correction_in_progress',
     'vat_due',
+    'document_vat_due',
+    'document_currency',
     'submitted_at',
 }
 
@@ -162,6 +167,9 @@ class PdvPeriodsApiTests(TestCase):
         self.assertEqual(july['return_version'], 2)
         self.assertEqual(july['return_status'], VATReturnStatus.SUBMITTED)
         self.assertEqual(july['period_status'], 'submitted')
+        self.assertEqual(july['period_from'], '2026-07-01')
+        self.assertEqual(july['period_to'], '2026-07-31')
+        self.assertEqual(july['return_source'], 'erp_generated')
         self.assertIsNotNone(july['submitted_at'])
 
         august = next(row for row in response.json()['results'] if row['period'] == '2026-08')

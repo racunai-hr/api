@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from accounting.models import FixedAsset, Vehicle
+from accounting.models import FixedAsset, Vehicle, VehicleAccountingRole
 
 
 def link_vehicle_to_fixed_asset(vehicle: Vehicle, fixed_asset: FixedAsset) -> Vehicle:
@@ -13,6 +13,10 @@ def link_vehicle_to_fixed_asset(vehicle: Vehicle, fixed_asset: FixedAsset) -> Ve
 
     Tvrdo pada na prekršenoj invarijanti. Idempotentno za isti par.
     """
+    if vehicle.accounting_role == VehicleAccountingRole.INVENTORY_FOR_RESALE:
+        raise ValidationError({
+            'fixed_asset': 'Vozilo za daljnju prodaju je roba na zalihi, ne osnovno sredstvo.',
+        })
     if vehicle.tenant_id != fixed_asset.tenant_id:
         raise ValidationError({
             'fixed_asset': 'Osnovno sredstvo mora pripadati istom tenantu kao vozilo.',

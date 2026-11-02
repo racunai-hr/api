@@ -138,6 +138,7 @@ class SettlementMethod(models.TextChoices):
     COMPANY_CASH = 'company_cash', 'Gotovina (blagajna)'
     PRIVATE_CARD = 'private_card', 'Privatna kartica zaposlenika/vlasnika'
     PRIVATE_CASH = 'private_cash', 'Privatna gotovina'
+    PRIVATE_ACCOUNT = 'private_account', 'Privatni račun'
 
 
 class ReimbursementStatus(models.TextChoices):
@@ -191,6 +192,45 @@ class ExpensePostingProfile(models.TextChoices):
 
     OPEX = 'opex', 'Operativni trošak'
     ASSET_PURCHASE = 'asset_purchase', 'Nabava dugotrajne imovine'
+    GOODS_INWARD_COST = 'goods_inward_cost', 'Zavisni trošak nabave robe'
+    COMPANY_PASSENGER_VEHICLE = 'company_passenger_vehicle', 'Gorivo službenog osobnog vozila'
+    FULL_VAT_VEHICLE = 'full_vat_vehicle', 'Vozilo s punim odbitkom pretporeza'
+    VEHICLE_INVENTORY_COST = 'vehicle_inventory_cost', 'Nabavna vrijednost vozila na zalihi'
+
+
+# Konta određuje pravilo knjiženja; ručno konto zaglavlja i stavki se ne prihvaća.
+ACCOUNT_LOCKED_PROFILES = frozenset({
+    ExpensePostingProfile.COMPANY_PASSENGER_VEHICLE,
+    ExpensePostingProfile.VEHICLE_INVENTORY_COST,
+})
+
+
+class InventoryCostComponent(models.TextChoices):
+    """Komponenta nabavne vrijednosti vozila na zalihi. Iznos dolazi iz knjiženja."""
+
+    PURCHASE_PRICE = 'purchase_price', 'Kupovna cijena'
+    TRANSPORT = 'transport', 'Transport'
+    FUEL = 'fuel', 'Gorivo za dopremu'
+    TOLL_FERRY = 'toll_ferry', 'Cestarina / trajekt'
+    HOMOLOGATION = 'homologation', 'Homologacija'
+    OTHER_DIRECT = 'other_direct', 'Drugi izravno pripisivi trošak'
+
+
+class ForeignVatTreatment(models.TextChoices):
+    """Hoće li lokalni strani PDV ući u trošak ili u potraživanje za povrat.
+
+    Generički za bilo koju zemlju. Nije hrvatski odbitni pretporez.
+    """
+
+    EXPENSE = 'expense', 'Uključi u trošak nabave'
+    REFUND_RECEIVABLE = 'refund_receivable', 'Potraživanje za EU VAT Refund'
+
+
+class FxRateSource(models.TextChoices):
+    HNB = 'HNB', 'HNB'
+    ECB = 'ECB', 'ECB'
+    MANUAL = 'manual', 'Ručni unos'
+    STATUTORY = 'statutory', 'Zakonski tečaj'
 
 
 class VehicleLineKind(models.TextChoices):
@@ -280,7 +320,7 @@ class Expense(TenantMixin, models.Model):
         blank=True,
         related_name='expenses',
         verbose_name='Vozilo',
-        help_text='Operativna pripadnost troška vozilu. Ne utječe na knjiženje.',
+        help_text='Vozilo na koje se trošak odnosi. Namjena vozila određuje profil knjiženja.',
     )
     cost_center = models.ForeignKey(
         'accounting.CostCenter',
@@ -311,8 +351,99 @@ class Expense(TenantMixin, models.Model):
         verbose_name='PDV postupak',
         help_text='IOSS uvoz — mapira na PDV box 308',
     )
+    ubl_prepaid_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='UBL PrepaidAmount',
+    )
+    ubl_payable_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='UBL PayableAmount',
+    )
+    ubl_tax_category = models.CharField(max_length=8, blank=True, verbose_name='UBL TaxCategory')
+    ubl_tax_exemption_reason_code = models.CharField(
+        max_length=32,
+        blank=True,
+        verbose_name='UBL TaxExemptionReasonCode',
+    )
+    ubl_tax_exemption_reason_text = models.TextField(
+        blank=True,
+        verbose_name='UBL TaxExemptionReason',
+    )
     currency = models.CharField(max_length=3, default='EUR', verbose_name="Valuta")
-    
+    foreign_net_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Neto u valuti dokumenta',
+    )
+    foreign_vat_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Strani PDV u valuti dokumenta',
+        help_text='Porez obračunan na izvornom dokumentu. Nije hrvatski odbitni pretporez.',
+    )
+    foreign_gross_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Bruto u valuti dokumenta',
+    )
+    foreign_vat_country = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='Zemlja stranog PDV-a',
+    )
+    foreign_vat_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Stopa stranog PDV-a',
+    )
+    foreign_vat_treatment = models.CharField(
+        max_length=32,
+        blank=True,
+        choices=ForeignVatTreatment.choices,
+        verbose_name='Tretman stranog PDV-a',
+    )
+    fx_rate = models.DecimalField(
+        max_digits=18,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='Tečaj',
+        help_text='Jedinica valute dokumenta za 1 EUR. Isti snapshot za sve iznose temeljnice.',
+    )
+    fx_rate_source = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=FxRateSource.choices,
+        verbose_name='Izvor tečaja',
+    )
+    fx_rate_date = models.DateField(null=True, blank=True, verbose_name='Datum tečaja')
+    inventory_cost_component = models.CharField(
+        max_length=32,
+        blank=True,
+        choices=InventoryCostComponent.choices,
+        verbose_name='Komponenta nabavne vrijednosti vozila',
+    )
+    refund_eligibility = models.CharField(
+        max_length=32,
+        blank=True,
+        verbose_name='Kandidat za povrat',
+        help_text='candidate znači moguć kandidat za EU VAT Refund, ne sigurno povrativ iznos.',
+    )
+
     expense_date = models.DateField(verbose_name="Datum troška")
     due_date = models.DateField(blank=True, null=True, verbose_name="Datum dospijeća")
     
@@ -339,7 +470,11 @@ class Expense(TenantMixin, models.Model):
 
     def clean(self):
         super().clean()
-        private_methods = {SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH}
+        private_methods = {
+            SettlementMethod.PRIVATE_CARD,
+            SettlementMethod.PRIVATE_CASH,
+            SettlementMethod.PRIVATE_ACCOUNT,
+        }
         if self.settlement_method in private_methods and self.status == 'paid' and not self.paid_by_id:
             raise ValidationError({
                 'paid_by': 'Platitelj je obavezan za privatno podmirenje plaćenog troška.',
@@ -362,7 +497,11 @@ class Expense(TenantMixin, models.Model):
 
     def save(self, *args, **kwargs):
         self._reject_locked_accounting_input_changes(kwargs.get('update_fields'))
-        private_methods = {SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH}
+        private_methods = {
+            SettlementMethod.PRIVATE_CARD,
+            SettlementMethod.PRIVATE_CASH,
+            SettlementMethod.PRIVATE_ACCOUNT,
+        }
         if self.settlement_method in private_methods and self.status == 'paid':
             if self.reimbursement_status == ReimbursementStatus.NOT_REQUIRED:
                 self.reimbursement_status = ReimbursementStatus.PENDING
@@ -843,3 +982,108 @@ class IncomingInvoiceImport(TenantMixin, models.Model):
 
     def __str__(self):
         return f'IncomingInvoiceImport #{self.pk} ({self.status})'
+
+
+class SupplierLinePostingPattern(TenantMixin, models.Model):
+    """Konto rashoda zapamćeno za dobavljača i iste stavke računa."""
+
+    supplier = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.CASCADE,
+        related_name='line_posting_patterns',
+        verbose_name='Dobavljač',
+    )
+    line_signature = models.CharField(max_length=64, verbose_name='Potpis stavki')
+    accounts = models.JSONField(default=list, blank=True, verbose_name='Konta stavki')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Uzorak knjiženja stavki'
+        verbose_name_plural = 'Uzorci knjiženja stavki'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'supplier', 'line_signature'],
+                name='unique_supplier_line_posting_pattern',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.supplier_id}:{self.line_signature[:8]}'
+
+
+class SupplierItemProfileMemory(TenantMixin, models.Model):
+    """Zapamćeni posting profil za dobavljača i iste stavke. Nije konto."""
+
+    supplier = models.ForeignKey(
+        'partners.Partner',
+        on_delete=models.CASCADE,
+        related_name='item_profile_memories',
+        verbose_name='Dobavljač',
+    )
+    line_signature = models.CharField(max_length=64, verbose_name='Potpis stavki')
+    posting_profile = models.CharField(max_length=32, verbose_name='Posting profil')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Zapamćeni profil stavki'
+        verbose_name_plural = 'Zapamćeni profili stavki'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'supplier', 'line_signature'],
+                name='unique_supplier_item_profile_memory',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.supplier_id}:{self.posting_profile}'
+
+
+class AccountingClassification(TenantMixin, models.Model):
+    """Spremljena AI klasifikacija dokumenta. Ne sadrži konto ni odluku knjiženja."""
+
+    facts_hash = models.CharField(max_length=64, verbose_name='Hash činjenica')
+    prompt_version = models.PositiveSmallIntegerField(verbose_name='Verzija prompta')
+    schema_version = models.PositiveSmallIntegerField(verbose_name='Verzija sheme')
+    model = models.CharField(max_length=64, verbose_name='Model')
+    payload = models.JSONField(default=dict, verbose_name='Odgovor')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Klasifikacija dokumenta'
+        verbose_name_plural = 'Klasifikacije dokumenata'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'facts_hash', 'prompt_version', 'schema_version', 'model'],
+                name='unique_accounting_classification_cache',
+            ),
+        ]
+
+    def __str__(self):
+        return self.facts_hash
+
+
+class ExpenseBankCloseIdempotency(TenantMixin, models.Model):
+    """Istí Idempotency-Key ne smije zatvoriti drugi račun."""
+
+    idempotency_key = models.CharField(max_length=128)
+    expense = models.ForeignKey(
+        Expense,
+        on_delete=models.CASCADE,
+        related_name='bank_close_idempotency_keys',
+    )
+    result_payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Idempotency zatvaranja nacrta'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'idempotency_key'],
+                name='unique_expense_bank_close_idempotency',
+            ),
+        ]
+
+    def __str__(self):
+        return f'ExpenseClose {self.expense_id} key={self.idempotency_key}'

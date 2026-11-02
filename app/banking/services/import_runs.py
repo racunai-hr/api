@@ -21,7 +21,7 @@ from banking.services.import_statements import import_bank_statement_file
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_ASYNC_FORMATS = frozenset({'camt053'})
+SUPPORTED_ASYNC_FORMATS = frozenset({'camt053', 'otp_izv'})
 
 
 class IdempotencyConflict(ValidationError):

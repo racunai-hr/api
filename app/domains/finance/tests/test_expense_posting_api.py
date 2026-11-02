@@ -420,3 +420,53 @@ class ExpensePostingApiTests(TestCase):
             [('1400', '20.00'), ('1400', '3.00'), ('1400', '3.00')],
         )
         self.assertIsNone(net[0]['debit_cost_center'])
+
+    def test_kuna_invoice_approves_as_balanced_eur(self):
+        account = ChartOfAccounts.all_objects.get(tenant=self.tenant, account_code='4164')
+        expense = self._expense(
+            amount=Decimal('1800.00'),
+            tax_amount=Decimal('360.00'),
+            currency='HRK',
+            expense_date=date(2021, 4, 1),
+        )
+        ExpenseLine.all_objects.create(
+            expense=expense,
+            position=1,
+            description='Knjigovodstvene usluge',
+            net_amount=Decimal('1440.00'),
+            vat_amount=Decimal('360.00'),
+            gross_amount=Decimal('1800.00'),
+            posting_account=account,
+        )
+        preview = self.client.get(f'/api/finance/expenses/{expense.pk}/posting-preview/')
+        self.assertEqual(preview.status_code, 200, preview.content)
+        by_field = {line['amount_field']: line for line in preview.data['lines']}
+        self.assertEqual(by_field['net_amount']['amount'], '191.12')
+        self.assertEqual(by_field['net_amount']['document_amount'], '1440.00')
+        self.assertEqual(by_field['tax_amount']['amount'], '47.78')
+        self.assertEqual(by_field['tax_amount']['document_amount'], '360.00')
+
+        approved = self.client.post(f'/api/finance/expenses/{expense.pk}/approve/')
+        self.assertEqual(approved.status_code, 200, approved.content)
+
+        from accounting.models import JournalEntry
+
+        entries = JournalEntry.all_objects.filter(
+            tenant=self.tenant,
+            source_object_id=expense.pk,
+        )
+        self.assertEqual(entries.filter(description__contains='[expense_approved]').count(), 1)
+        self.assertEqual(entries.filter(description__contains='[expense_paid]').count(), 0)
+        entry = entries.get(description__contains='[expense_approved]')
+        self.assertEqual(entry.entry_date, date(2021, 4, 1))
+        self.assertEqual(entry.status, 'posted')
+        debits: dict[str, Decimal] = {}
+        credits = Decimal('0')
+        for line in entry.lines.all():
+            if line.debit_amount:
+                debits[line.account.account_code] = line.debit_amount
+            if line.credit_amount:
+                credits += line.credit_amount
+        self.assertEqual(debits['4164'], Decimal('191.12'))
+        self.assertEqual(debits['1400'], Decimal('47.78'))
+        self.assertEqual(credits, Decimal('238.90'))

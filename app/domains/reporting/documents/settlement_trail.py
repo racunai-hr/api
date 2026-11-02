@@ -48,11 +48,14 @@ def build_settlement_trail(
     lines_by_je: dict | None = None,
     bank_by_je: dict | None = None,
     pfc_by_je: dict | None = None,
+    settlement_method: str | None = None,
+    storno_by_je: dict | None = None,
 ) -> dict:
     """Build settlement_trail block. SubledgerItem.open_amount is SSOT for open."""
     lines_by_je = lines_by_je or {}
     bank_by_je = bank_by_je or {}
     pfc_by_je = pfc_by_je or {}
+    storno_by_je = storno_by_je or {}
     allocations = list(allocations or [])
     sibling_jes = list(sibling_jes or [])
 
@@ -96,8 +99,29 @@ def build_settlement_trail(
         je = jes_by_id.get(alloc.journal_entry_id)
         bank_txs = bank_by_je.get(alloc.journal_entry_id, []) if alloc.journal_entry_id else []
         claims = pfc_by_je.get(alloc.journal_entry_id, []) if alloc.journal_entry_id else []
+        storno = storno_by_je.get(alloc.journal_entry_id) if alloc.journal_entry_id else None
 
-        if bank_txs:
+        if storno:
+            closings.append(
+                {
+                    'kind': 'storno',
+                    'amount': money(alloc.amount),
+                    'journal_entry_id': alloc.journal_entry_id,
+                    'entry_number': je.entry_number if je else None,
+                    'allocation_id': alloc.pk,
+                    'bank_transaction_id': None,
+                    'bank_statement_id': None,
+                    'counterparty_name': None,
+                    'private_funds_claim_id': None,
+                    'claim_number': None,
+                    'partner_id': None,
+                    'partner_name': None,
+                    'storno_expense_id': storno['id'],
+                    'storno_expense_number': storno['number'],
+                    'label': 'Storno',
+                }
+            )
+        elif bank_txs:
             tx = bank_txs[0]
             statement = getattr(tx, 'bank_statement', None)
             closings.append(
@@ -114,6 +138,8 @@ def build_settlement_trail(
                     'claim_number': None,
                     'partner_id': None,
                     'partner_name': None,
+                    'storno_expense_id': None,
+                    'storno_expense_number': None,
                     'label': 'Banka',
                 }
             )
@@ -134,7 +160,13 @@ def build_settlement_trail(
                     'claim_number': claim.number or None,
                     'partner_id': partner.pk if partner is not None else claim.partner_id,
                     'partner_name': partner.name if partner is not None else None,
-                    'label': 'Privatna sredstva',
+                    'storno_expense_id': None,
+                    'storno_expense_number': None,
+                    'label': (
+                        'Privatni račun'
+                        if settlement_method == 'private_account'
+                        else 'Privatna sredstva'
+                    ),
                 }
             )
         else:
@@ -152,6 +184,8 @@ def build_settlement_trail(
                     'claim_number': None,
                     'partner_id': None,
                     'partner_name': None,
+                    'storno_expense_id': None,
+                    'storno_expense_number': None,
                     'label': 'Ostalo',
                 }
             )

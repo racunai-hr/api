@@ -28,4 +28,22 @@ LIFECYCLE_PROTECTED_MODELS: tuple[LifecycleProtectedModel, ...] = (
         }),
         scan_packages=frozenset({'banking'}),
     ),
+    LifecycleProtectedModel(
+        model='PayrollPeriod',
+        field='status',
+        allowed_modules=frozenset({Path('payroll/services/lifecycle.py')}),
+        scan_packages=frozenset({'payroll'}),
+    ),
+    LifecycleProtectedModel(
+        model='Payslip',
+        field='status',
+        allowed_modules=frozenset({Path('payroll/services/lifecycle.py')}),
+        scan_packages=frozenset({'payroll'}),
+    ),
+    LifecycleProtectedModel(
+        model='WorkTimeMonth',
+        field='status',
+        allowed_modules=frozenset({Path('payroll/services/lifecycle.py')}),
+        scan_packages=frozenset({'payroll'}),
+    ),
 )

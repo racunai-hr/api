@@ -71,12 +71,16 @@ def _invoice_item_box(*, item, partner, has_service_date: bool) -> str | None:
 
 
 def get_or_create_vat_period(tenant, year: int, month: int) -> VATPeriod:
-    period, _ = VATPeriod.all_objects.get_or_create(
+    """Calendar month used by the ledger. A multi-month filing that starts here is a different row."""
+    period = VATPeriod.all_objects.filter(
         tenant=tenant,
         year=year,
         month=month,
-    )
-    return period
+        period_to__isnull=True,
+    ).first()
+    if period is not None:
+        return period
+    return VATPeriod.all_objects.create(tenant=tenant, year=year, month=month)
 
 
 def _create_ledger_entry(

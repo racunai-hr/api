@@ -19,6 +19,7 @@ from accounting.models import (
     VATLedgerEntry,
     VATReturn,
 )
+from accounting.services.journal_markers import extract_document_type
 from banking.models import BankTransaction
 from banking.provider_models import PaymentOrder
 from expenses.models import Expense, ExpenseAttachment, ExpenseLine
@@ -144,8 +145,63 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     alloc_by_sub = defaultdict(list)
     for alloc in SubledgerAllocation.all_objects.filter(
         tenant=tenant, subledger_item_id__in=sub_ids,
-    ).select_related('journal_entry'):
+    ).select_related('journal_entry', 'subledger_item__source_content_type'):
         alloc_by_sub[alloc.subledger_item_id].append(alloc)
+
+    alloc_by_je = {}
+    for rows in alloc_by_sub.values():
+        for alloc in rows:
+            if alloc.journal_entry_id:
+                alloc_by_je[alloc.journal_entry_id] = alloc
+    incoming_je_ids = [entry.pk for rows in je_in.values() for entry in rows]
+    missing_je_ids = [pk for pk in incoming_je_ids if pk not in alloc_by_je]
+    if missing_je_ids:
+        for alloc in SubledgerAllocation.all_objects.filter(
+            tenant=tenant, journal_entry_id__in=missing_je_ids,
+        ).select_related('journal_entry', 'subledger_item__source_content_type'):
+            alloc_by_je[alloc.journal_entry_id] = alloc
+
+    storno_source_ids = []
+    for alloc in alloc_by_je.values():
+        je = alloc.journal_entry
+        if je is not None and je.source_content_type_id == expense_ct.id and je.source_object_id:
+            storno_source_ids.append(je.source_object_id)
+    storno_expenses = {
+        exp.pk: exp
+        for exp in Expense.all_objects.filter(
+            tenant=tenant, pk__in=storno_source_ids, amount__lt=0,
+        )
+    }
+    storno_by_je = {}
+    for alloc in alloc_by_je.values():
+        je = alloc.journal_entry
+        exp = storno_expenses.get(je.source_object_id) if je is not None else None
+        if exp is not None and je.source_content_type_id == expense_ct.id:
+            storno_by_je[je.pk] = {'id': exp.pk, 'number': exp.expense_number}
+
+    reversal_targets = []
+    reversal_target_ids = []
+    for exp in expenses.values():
+        if exp.amount >= 0:
+            continue
+        for je in je_in.get(exp.pk, []):
+            if extract_document_type(je.description or '') != 'expense_approved':
+                continue
+            alloc = alloc_by_je.get(je.pk)
+            item = alloc.subledger_item if alloc is not None else None
+            if item is None or item.source_content_type_id != expense_ct.id:
+                continue
+            reversal_targets.append((exp.pk, item.source_object_id))
+            reversal_target_ids.append(item.source_object_id)
+    reversal_numbers = {
+        row.pk: row.expense_number
+        for row in Expense.all_objects.filter(tenant=tenant, pk__in=reversal_target_ids)
+    }
+    reversal_by_expense = {
+        exp_id: {'id': target_id, 'number': reversal_numbers[target_id]}
+        for exp_id, target_id in reversal_targets
+        if target_id in reversal_numbers
+    }
 
     # Allocation settlement JEs may omit expense/invoice GFK (e.g. private_funds
     # postings). Include them so bank/PFC reverse lookups still classify closings.
@@ -255,6 +311,9 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'vat_in': vat_in,
         'lines_by_je': lines_by_je,
         'alloc_by_sub': alloc_by_sub,
+        'alloc_by_je': alloc_by_je,
+        'storno_by_je': storno_by_je,
+        'reversal_by_expense': reversal_by_expense,
         'payments_by_invoice': payments_by_invoice,
         'bank_by_payment': bank_by_payment,
         'bank_by_je': bank_by_je,

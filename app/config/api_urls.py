@@ -21,6 +21,7 @@ urlpatterns = [
     path('assets/', include('domains.assets.api.urls')),
     path('', include('domains.purchasing.api.urls')),
     path('', include('domains.tax.api.urls')),
+    path('', include('domains.hr.api.urls')),
     path('auth/token/', AuthTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', AuthTokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', AuthMeView.as_view(), name='auth_me'),

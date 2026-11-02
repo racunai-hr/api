@@ -33,9 +33,9 @@ def _keys_from_union_page(page_rows) -> list[tuple[str, int]]:
 
 
 def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
-    from django.db.models import Count
+    from decimal import Decimal
 
-    from domains.reporting.documents.projection import money
+    from domains.reporting.documents.projection import book_eur_amount, money
 
     invoices = filtered_invoices(tenant, filters, today)
     expenses = filtered_expenses(tenant, filters, today)
@@ -50,12 +50,13 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
     inv_gross = invoices.aggregate(total=Sum('total_amount'))['total']
     dep_count = deposits.count()
     dep_gross = deposits.aggregate(total=Sum('amount'))['total']
-    exp_by_currency = list(
-        expenses.values('currency').annotate(count=Count('id'), total=Sum('amount'))
-    )
-    off_by_currency = list(
-        official.values('currency').annotate(count=Count('id'), total=Sum('amount'))
-    )
+    incoming_count = 0
+    incoming_gross = Decimal('0.00')
+    for document in list(expenses) + list(official):
+        incoming_count += 1
+        booked = book_eur_amount(document)
+        if booked is not None:
+            incoming_gross += booked
     open_ar_inv = SubledgerItem.all_objects.filter(
         tenant=tenant,
         direction='receivable',
@@ -87,39 +88,18 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
     ).aggregate(total=Sum('open_amount'))['total']
     open_ap = (open_ap_exp or 0) + (open_ap_off or 0)
 
-    by_currency: dict[str, dict] = {}
-    eur = by_currency.setdefault('EUR', {
-        'outgoing_count': 0,
-        'incoming_count': 0,
-        'outgoing_gross': '0.00',
-        'incoming_gross': '0.00',
-        'open_receivables': '0.00',
-        'open_payables': '0.00',
-    })
-    eur['outgoing_count'] = inv_count + dep_count
-    eur['outgoing_gross'] = money((inv_gross or 0) + (dep_gross or 0))
-    eur['open_receivables'] = money(open_ar)
-
-    incoming_totals: dict[str, dict] = {}
-    for row in exp_by_currency + off_by_currency:
-        currency = row['currency'] or 'EUR'
-        bucket = incoming_totals.setdefault(currency, {'count': 0, 'total': 0})
-        bucket['count'] += row['count'] or 0
-        bucket['total'] += row['total'] or 0
-    for currency, row in incoming_totals.items():
-        bucket = by_currency.setdefault(currency, {
-            'outgoing_count': 0,
-            'incoming_count': 0,
-            'outgoing_gross': '0.00',
-            'incoming_gross': '0.00',
-            'open_receivables': '0.00',
-            'open_payables': '0.00',
-        })
-        bucket['incoming_count'] = row['count']
-        bucket['incoming_gross'] = money(row['total'] or 0)
-    if 'EUR' in by_currency:
-        by_currency['EUR']['open_payables'] = money(open_ap or 0)
-    return {'by_currency': by_currency}
+    return {
+        'by_currency': {
+            'EUR': {
+                'outgoing_count': inv_count + dep_count,
+                'incoming_count': incoming_count,
+                'outgoing_gross': money((inv_gross or 0) + (dep_gross or 0)),
+                'incoming_gross': money(incoming_gross),
+                'open_receivables': money(open_ar),
+                'open_payables': money(open_ap or 0),
+            },
+        },
+    }
 
 
 def list_documents(tenant, filters: DocumentListFilters) -> dict:

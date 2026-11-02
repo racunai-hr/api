@@ -71,7 +71,11 @@ def _resolve_reimbursement_status(
     status: str,
     reimbursement_status: str,
 ) -> str:
-    private_methods = {SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH}
+    private_methods = {
+        SettlementMethod.PRIVATE_CARD,
+        SettlementMethod.PRIVATE_CASH,
+        SettlementMethod.PRIVATE_ACCOUNT,
+    }
     if settlement_method in private_methods and status == 'paid':
         return reimbursement_status or ReimbursementStatus.PENDING
     if reimbursement_status:
@@ -80,7 +84,11 @@ def _resolve_reimbursement_status(
 
 
 def _validate_private_settlement(settlement_method: str, status: str, paid_by: ExpensePayer | None) -> None:
-    private_methods = {SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH}
+    private_methods = {
+        SettlementMethod.PRIVATE_CARD,
+        SettlementMethod.PRIVATE_CASH,
+        SettlementMethod.PRIVATE_ACCOUNT,
+    }
     if settlement_method in private_methods and status == 'paid' and paid_by is None:
         raise ValueError('paid_by je obavezan za privatno podmirenje plaćenog troška.')
 
