@@ -1,5 +1,6 @@
 from banking.parsers.camt053 import parse_camt053
 from banking.parsers.format_detection import detect_format
+from banking.parsers.otp_izv import parse_otp_izv
 from banking.parsers.types import ParsedBankStatement, ParsedBankTransaction
 
 __all__ = [
@@ -7,4 +8,5 @@ __all__ = [
     'ParsedBankTransaction',
     'detect_format',
     'parse_camt053',
+    'parse_otp_izv',
 ]

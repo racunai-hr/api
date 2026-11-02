@@ -115,7 +115,7 @@ class DocumentDetailView(_DocumentApiView):
     )
     def get(self, request, direction, pk):
         tenant = _require_tenant(request)
-        if direction not in ('outgoing', 'incoming', 'deposit'):
+        if direction not in ('outgoing', 'incoming', 'deposit', 'official'):
             raise Http404()
         return Response(get_document_detail(tenant, direction, pk))
 
@@ -182,6 +182,22 @@ class DocumentPdfView(_DocumentBinaryApiView):
     )
     def get(self, request, direction, pk):
         tenant = _require_tenant(request)
+        if direction == 'official':
+            from accounting.models import OfficialDocument
+
+            document = OfficialDocument.all_objects.filter(tenant=tenant, pk=pk).first()
+            if document is None or not document.original_file or not document.original_file.name:
+                raise Http404()
+            filename = safe_download_filename(document.original_filename or document.original_file.name)
+            try:
+                handle = document.original_file.open('rb')
+            except OSError as exc:
+                if is_missing_storage_error(exc):
+                    return Response(DOCUMENT_PDF_CONTENT_UNAVAILABLE, status=410)
+                raise
+            response = FileResponse(handle, as_attachment=True, filename=filename)
+            response['Content-Type'] = document.content_type or 'application/pdf'
+            return response
         if direction == 'deposit':
             raise Http404()
         if direction == 'incoming':

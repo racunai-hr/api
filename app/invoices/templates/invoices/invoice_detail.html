@@ -111,6 +111,12 @@
     }
 
     .footnote { color: var(--text-muted); font-size: .9rem; }
+    .payment-instructions { break-inside: avoid; }
+    .payment-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .1rem 1.5rem;
+    }
 
     .responsible-person {
         border: 1px solid var(--border-color);
@@ -190,6 +196,7 @@
             border-color: #000 !important;
             break-inside: avoid;
         }
+        .payment-instructions { break-inside: avoid; }
     }
 </style>
 
@@ -361,6 +368,20 @@
                 </div>
                 {% endif %}
             </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if payment_account %}
+    <div class="mb-3 payment-instructions">
+        <div class="fw-semibold mb-1">Upute za uplatu</div>
+        <div class="footnote payment-grid">
+            <div>Banka: {{ payment_account.bank_name }}</div>
+            {% if payment_account.swift_code %}
+            <div>BIC/SWIFT: {{ payment_account.swift_code }}</div>
+            {% endif %}
+            <div>IBAN: {{ payment_iban }}</div>
+            <div>Poziv na broj: {{ invoice.invoice_number }}</div>
         </div>
     </div>
     {% endif %}

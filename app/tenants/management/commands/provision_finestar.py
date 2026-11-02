@@ -30,19 +30,83 @@ TAX_RATES = [
     ('Oslobođeno', '0.00', False),
 ]
 
-EXPENSE_CATEGORIES = [
-    ('Hosting i infrastruktura', '4120'),
-    ('Software licence', '4120'),
-    ('Telekomunikacije', '4120'),
-    ('Uredski materijal', '4120'),
-    ('Ostalo', '4120'),
+# Provision-only RRiF mapping (not runtime sentinels). 4120 stays the opex
+# PostingRule fallback; it is not a dump for every FineStar category.
+# Codes must be postable leaves in RRiF-RP2025 (4199 is a parent → 41996).
+FINE_STAR_EXPENSE_CATEGORIES = [
+    ('Hosting i infrastruktura', '41493'),  # Usluge web sjedišta (hosting)
+    ('Software licence', '41491'),          # Usluga najma softvera
+    ('Telekomunikacije', '4100'),           # Troškovi telefona, interneta i sl.
+    ('Uredski materijal', '4010'),          # Uredski materijal
+    ('Sitni inventar / računalni pribor', '4040'),  # Troškovi uredskog sitnog inventara
+    ('Bankovne usluge / platni promet', '4650'),  # Troškovi platnog prometa
+    ('Ostalo', '41996'),                    # Troškovi ostalih usluga
 ]
+EXPENSE_CATEGORIES = FINE_STAR_EXPENSE_CATEGORIES
+
+# Classification-only. Seed identity is `code`; default_account stays NULL.
+# Do not map RRiF here — posting lifecycle is unchanged.
+FINE_STAR_VEHICLE_EXPENSE_CATEGORIES = [
+    ('vehicle_fuel', 'Gorivo'),
+    ('vehicle_service', 'Servis i održavanje'),
+    ('vehicle_repairs', 'Popravci'),
+    ('vehicle_parts', 'Rezervni dijelovi'),
+    ('vehicle_tires', 'Gume'),
+    ('vehicle_insurance_compulsory', 'Obvezno auto osiguranje'),
+    ('vehicle_insurance_casco', 'Kasko osiguranje'),
+    ('vehicle_registration', 'Registracija vozila'),
+    ('vehicle_technical_inspection', 'Tehnički pregled'),
+    ('vehicle_road_fees', 'Cestarine'),
+    ('vehicle_parking', 'Parking'),
+    ('vehicle_washing', 'Pranje i čišćenje'),
+    ('vehicle_rental', 'Najam/leasing vozila'),
+    ('vehicle_interest', 'Kamate i financijski troškovi vozila'),
+    ('vehicle_other', 'Ostali troškovi vozila'),
+]
+
+
+def apply_finestar_vehicle_expense_categories(tenant) -> list[str]:
+    applied: list[str] = []
+    for code, name in FINE_STAR_VEHICLE_EXPENSE_CATEGORIES:
+        ExpenseCategory.all_objects.update_or_create(
+            tenant=tenant,
+            code=code,
+            defaults={
+                'name': name,
+                'is_active': True,
+            },
+        )
+        applied.append(code)
+    return applied
+
+
+def apply_finestar_expense_categories(tenant) -> list[tuple[str, str | None]]:
+    applied: list[tuple[str, str | None]] = []
+    for cat_name, account_code in FINE_STAR_EXPENSE_CATEGORIES:
+        account = ChartOfAccounts.all_objects.filter(
+            tenant=tenant,
+            account_code=account_code,
+            is_active=True,
+            is_postable=True,
+        ).first()
+        ExpenseCategory.all_objects.update_or_create(
+            tenant=tenant,
+            name=cat_name,
+            defaults={
+                'default_account': account,
+                'is_active': True,
+            },
+        )
+        applied.append((cat_name, account.account_code if account is not None else None))
+    apply_finestar_vehicle_expense_categories(tenant)
+    return applied
+
 
 RESPONSIBLE_PERSON = {
     'title': 'director',
     'first_name': 'Toni',
     'last_name': 'Šupe',
-    'email': 'avrcan@finestar.hr',
+    'email': 'tsupe@finestar.hr',
 }
 
 
@@ -99,21 +163,22 @@ class Command(BaseCommand):
                 **RESPONSIBLE_PERSON,
             )
 
+        # MDM: thin provision — Partner/IBAN + director primary live in canonical helpers.
+        from domains.partners.services.ensure_toni_supe import (
+            ensure_finestar_director_toni_supe,
+            ensure_partner_toni_supe,
+        )
+
+        ensure_partner_toni_supe(tenant=tenant)
+        ensure_finestar_director_toni_supe(tenant=tenant)
+
         call_command('setup_accounting', tenant=slug)
 
-        for cat_name, account_code in EXPENSE_CATEGORIES:
-            account = ChartOfAccounts.all_objects.filter(
-                tenant=tenant,
-                account_code=account_code,
-            ).first()
-            ExpenseCategory.all_objects.update_or_create(
-                tenant=tenant,
-                name=cat_name,
-                defaults={
-                    'default_account': account,
-                    'is_active': True,
-                },
-            )
+        for cat_name, account_code in apply_finestar_expense_categories(tenant):
+            if account_code is None:
+                self.stdout.write(self.style.WARNING(
+                    f'Kategorija {cat_name}: RRiF konto nije knjiživo na tenantu'
+                ))
 
         self.stdout.write(
             'DIRECT konfiguracija: provjerite Admin → DIRECT eRačun konfiguracije '

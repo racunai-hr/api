@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.contenttypes.admin import GenericTabularInline
 from django.core.exceptions import ValidationError
@@ -21,6 +22,7 @@ from accounting.services.journal_markers import (
     document_type_label,
     iter_document_types,
 )
+from accounting.services.journal_lines import persist_journal_entry_line, validate_cost_center_for_account
 from accounting.services.posting import _next_entry_number
 from accounting.services.reports import close_fiscal_period
 from domains.assets.services.activation import activate_fixed_asset, can_activate
@@ -29,10 +31,13 @@ from tenants.mixins import TenantAdminMixin
 from .models import (
     AccountType,
     AnalyticAccount,
+    CostCenter,
     ChartOfAccounts,
     FiscalPeriod,
     FixedAsset,
+    FixedAssetJournalLink,
     JournalEntry,
+    Vehicle,
     JournalEntryLine,
     PDVSReturn,
     PostingRule,
@@ -45,21 +50,69 @@ from .models import (
     VATReturn,
     VATReturnStatus,
     ZPReturn,
+    TZ2Return,
+    JOPPDReturn,
 )
 from accounting.services.submission.events import get_submission_events
 from accounting.services.submission.service import AttachConfirmationError, SubmissionService
 
 
+class JournalEntryLineAdminForm(forms.ModelForm):
+    class Meta:
+        model = JournalEntryLine
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        account = cleaned.get('account')
+        cost_center = cleaned.get('cost_center')
+        if account is not None:
+            validate_cost_center_for_account(account, cost_center)
+        return cleaned
+
+
 class JournalEntryLineInline(admin.TabularInline):
     model = JournalEntryLine
+    form = JournalEntryLineAdminForm
     extra = 2
     readonly_fields = ('line_balance_display',)
+    autocomplete_fields = ('account', 'analytic_account', 'cost_center')
+
+    def save_new(self, form, commit=True):
+        if not commit:
+            return super().save_new(form, commit=False)
+        instance = form.save(commit=False)
+        return persist_journal_entry_line(
+            journal_entry=instance.journal_entry,
+            account=instance.account,
+            analytic_account=instance.analytic_account,
+            cost_center=instance.cost_center,
+            description=instance.description,
+            debit_amount=instance.debit_amount,
+            credit_amount=instance.credit_amount,
+        )
 
     @admin.display(description='Saldo')
     def line_balance_display(self, obj):
         if obj.pk:
             return obj.debit_amount or obj.credit_amount
         return '-'
+
+
+class FixedAssetJournalLinkInline(admin.TabularInline):
+    model = FixedAssetJournalLink
+    extra = 0
+    autocomplete_fields = ('journal_entry',)
+
+
+@admin.register(Vehicle)
+class VehicleAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('name', 'vin', 'registration_plate', 'fixed_asset', 'cost_center', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'vin', 'registration_plate')
+    list_select_related = ('fixed_asset', 'cost_center')
+    autocomplete_fields = ('fixed_asset', 'cost_center')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(FixedAsset)
@@ -72,6 +125,7 @@ class FixedAssetAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_filter = ('status', 'origin', 'purchase_date')
     search_fields = ('name', 'vin', 'inventory_number', 'registration_plate')
     actions = ['activate_fixed_assets']
+    inlines = [FixedAssetJournalLinkInline]
     list_select_related = (
         'purchase_journal_entry',
         'activation_journal_entry',
@@ -92,6 +146,7 @@ class FixedAssetAdmin(TenantAdminMixin, admin.ModelAdmin):
         'asset_account',
         'accumulated_depreciation_account',
         'depreciation_expense_account',
+        'cost_center',
         'purchase_journal_entry',
         'activation_journal_entry',
         'disposal_journal_entry',
@@ -119,6 +174,7 @@ class FixedAssetAdmin(TenantAdminMixin, admin.ModelAdmin):
                 'asset_account',
                 'accumulated_depreciation_account',
                 'depreciation_expense_account',
+                'cost_center',
                 'accumulated_depreciation_display',
                 'current_book_value_display',
             ),
@@ -200,6 +256,16 @@ class AccountTypeAdmin(TenantAdminMixin, admin.ModelAdmin):
     search_fields = ('description',)
 
 
+@admin.register(CostCenter)
+class CostCenterAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('code', 'name', 'kind', 'parent', 'is_active')
+    list_filter = ('kind', 'is_active')
+    search_fields = ('code', 'name')
+    list_select_related = ('parent',)
+    autocomplete_fields = ('parent',)
+    ordering = ('code',)
+
+
 @admin.register(ChartOfAccounts)
 class ChartOfAccountsAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
@@ -225,12 +291,13 @@ class ChartOfAccountsAdmin(TenantAdminMixin, admin.ModelAdmin):
 class AnalyticAccountAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
         'account_code', 'account_name', 'counterparty_type',
-        'partner', 'expense_payer', 'is_active',
+        'partner', 'expense_payer', 'vehicle', 'is_active',
     )
     list_filter = ('counterparty_type', 'is_active')
     search_fields = (
         'account_code', 'account_name',
         'expense_payer__name', 'expense_payer__oib',
+        'vehicle__vin', 'vehicle__registration_plate',
     )
 
 
@@ -246,12 +313,14 @@ class FiscalPeriodAdmin(TenantAdminMixin, admin.ModelAdmin):
         bl = reverse('accounting:bilanca_export', args=[obj.year, obj.month])
         rdg = reverse('accounting:rdg_export', args=[obj.year, obj.month])
         jn = reverse('accounting:journal_export', args=[obj.year, obj.month])
+        cc = reverse('accounting:cost_center_export', args=[obj.year, obj.month])
         return format_html(
-            '{} | {} | {} | {}',
+            '{} | {} | {} | {} | {}',
             format_html('<a href="{}">Bruto bilanca</a>', tb),
             format_html('<a href="{}">Bilanca</a>', bl),
             format_html('<a href="{}">RDG</a>', rdg),
             format_html('<a href="{}">Dnevnik</a>', jn),
+            format_html('<a href="{}">MT</a>', cc),
         )
 
     @admin.action(description='Zatvori razdoblje')
@@ -372,6 +441,7 @@ class JournalEntryLineAdmin(TenantAdminMixin, admin.ModelAdmin):
         'document_type_display',
         'account',
         'analytic_account',
+        'cost_center',
         'debit_amount',
         'credit_amount',
     )
@@ -380,6 +450,7 @@ class JournalEntryLineAdmin(TenantAdminMixin, admin.ModelAdmin):
         DocumentTypeFilter,
         ('account', admin.RelatedOnlyFieldListFilter),
         ('analytic_account', admin.RelatedOnlyFieldListFilter),
+        ('cost_center', admin.RelatedOnlyFieldListFilter),
         'journal_entry__status',
         'journal_entry__is_auto',
         ('journal_entry__entry_date', admin.DateFieldListFilter),
@@ -392,12 +463,15 @@ class JournalEntryLineAdmin(TenantAdminMixin, admin.ModelAdmin):
         'account__account_name',
         'analytic_account__account_code',
         'analytic_account__account_name',
+        'cost_center__code',
+        'cost_center__name',
         'description',
     )
     list_select_related = (
         'journal_entry',
         'account',
         'analytic_account',
+        'cost_center',
     )
     list_per_page = 50
     show_full_result_count = False
@@ -406,7 +480,23 @@ class JournalEntryLineAdmin(TenantAdminMixin, admin.ModelAdmin):
         '-journal_entry__entry_number',
         '-pk',
     )
-    autocomplete_fields = ('account', 'analytic_account')
+    form = JournalEntryLineAdminForm
+    autocomplete_fields = ('account', 'analytic_account', 'cost_center')
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            validate_cost_center_for_account(obj.account, obj.cost_center)
+            super().save_model(request, obj, form, change)
+            return
+        persist_journal_entry_line(
+            journal_entry=obj.journal_entry,
+            account=obj.account,
+            analytic_account=obj.analytic_account,
+            cost_center=obj.cost_center,
+            description=obj.description,
+            debit_amount=obj.debit_amount,
+            credit_amount=obj.credit_amount,
+        )
 
     @admin.display(description='Broj temeljnice', ordering='journal_entry__entry_number')
     def entry_number_link(self, obj):
@@ -622,7 +712,7 @@ class ZPReturnInline(admin.TabularInline):
 
 @admin.register(VATPeriod)
 class VATPeriodAdmin(TenantAdminMixin, admin.ModelAdmin):
-    list_display = ('year', 'month', 'status', 'submitted_at', 'vat_summary_display', 'export_link')
+    list_display = ('year', 'month', 'period_to', 'status', 'submitted_at', 'vat_summary_display', 'export_link')
     list_filter = ('status', 'year')
     actions = ['generate_ledger', 'generate_draft', 'generate_zp_draft', 'export_pdv_s']
     inlines = [VATReturnInline, PDVSReturnInline, ZPReturnInline]
@@ -1595,6 +1685,55 @@ class VATLedgerEntryAdmin(TenantAdminMixin, admin.ModelAdmin):
                 request,
                 VATLedgerEntry.all_objects.filter(pk__in=locked_pks),
             )
+
+
+@admin.register(TZ2Return)
+class TZ2ReturnAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('tax_year', 'version', 'payload_hash', 'created_at')
+    list_filter = ('tax_year',)
+    search_fields = ('payload_hash',)
+    readonly_fields = (
+        'tax_year',
+        'version',
+        'schema_version',
+        'mapping_version',
+        'payload_snapshot',
+        'payload_hash',
+        'payload_json',
+        'xml_unsigned',
+        'xml_submitted',
+        'unsigned_xml_sha256',
+        'prepared_by',
+        'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(JOPPDReturn)
+class JOPPDReturnAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('period_year', 'period_month', 'version', 'payload_hash', 'created_at')
+    list_filter = ('period_year', 'period_month')
+    search_fields = ('payload_hash',)
+    readonly_fields = (
+        'period_year',
+        'period_month',
+        'version',
+        'schema_version',
+        'mapping_version',
+        'payload_snapshot',
+        'payload_hash',
+        'payload_json',
+        'xml_unsigned',
+        'xml_submitted',
+        'unsigned_xml_sha256',
+        'prepared_by',
+        'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 
 from . import admin_subledger  # noqa: E402, F401 — SubledgerItem admin registracija

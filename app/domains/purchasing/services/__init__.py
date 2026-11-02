@@ -3,6 +3,7 @@
 from domains.purchasing.services.confirm import confirm_invoice_import
 from domains.purchasing.services.invoice_import import (
     apply_partner_updates,
+    apply_supplier,
     create_partner_from_import,
     discard_invoice_import,
     execute_invoice_import,
@@ -22,5 +23,6 @@ __all__ = [
     'discard_invoice_import',
     'create_partner_from_import',
     'apply_partner_updates',
+    'apply_supplier',
     'confirm_invoice_import',
 ]

@@ -1,7 +1,8 @@
-"""JOPPD builder — cross-domain aggregation (planned candidate v1.5).
+"""JOPPD builder — superseded by ``domains/tax/forms/joppd/`` (implemented).
 
-Collects DTOs from HR (Employee), Finance, and manual entry.
-Form implementation: domains/tax/forms/joppd/ (future).
-
-Gate: Sprint 3 completion + scope review. See docs/tax/FORM_REGISTRY.md.
+This stub package is kept only so historical imports/docs referencing
+``domains.tax.joppd_builder`` do not break. The real aggregation/build/
+render/validation/submission code lives in ``domains/tax/forms/joppd/``
+and consumes payroll data exclusively through ``domains.hr.facade`` DTOs
+(never ``payroll.models`` directly). See ``docs/tax/FORM_REGISTRY.md``.
 """

@@ -9,11 +9,19 @@ from accounting.services.tax_forms.pdv.mapping import (
     PDV_MAPPING,
     PDV_MAPPING_VERSION,
     RC_INPUT_BOXES,
+    cvh_mixed_25_amounts,
+    expense_matches_domestic_25,
     invoice_eu_outbound_box,
+    invoice_foreign_zero_box,
     invoice_rate_to_box,
+    is_ch_telecom_supplier,
+    is_cvh_stp_supplier,
     is_eu_customer,
+    is_eu_goods_acquisition,
     is_eu_outbound_invoice_line,
     is_eu_supplier,
+    is_hr_bank_supplier,
+    is_hr_insurance_supplier,
     journal_line_vat_rate,
     pretporez_base_from_vat,
     rc_output_box_for_input,
@@ -138,9 +146,9 @@ def _row(
     )
     recognized = tax if direction == Direction.INPUT and sign > 0 else Decimal('0.00')
     outputs: list[str] = ['pdv']
-    if box in {'101', '103'}:
+    if box in {'103', '104'}:
         outputs.append('zp')
-    if box in {'207', '612'}:
+    if box in {'207', '210'}:
         outputs.append('pdv_s')
     outputs.append('control_ira' if direction == Direction.OUTPUT else 'control_ura')
     return ProposedLedgerRow(
@@ -246,8 +254,35 @@ def _classify_invoice(
 
     partner = document.partner
     rate = document.vat_rate if document.vat_rate is not None else Decimal('0.00')
-    if partner is not None and is_eu_outbound_invoice_line(
-        partner=_PartnerView(partner),
+    partner_view = _PartnerView(partner) if partner is not None else None
+    foreign_box = invoice_foreign_zero_box(
+        partner=partner_view,
+        tax_rate=rate,
+        has_service_date=bool(document.supply_date),
+    )
+    if foreign_box is not None:
+        if foreign_box in {'103', '104'}:
+            reason = 'eu_outbound'
+            rule_code = f'INV_EU_{foreign_box}'
+        else:
+            reason = 'export_outbound'
+            rule_code = f'INV_EXPORT_{foreign_box}'
+        return _classified(
+            document,
+            (_row(
+                document,
+                box=foreign_box,
+                rule_code=rule_code,
+                base=document.base_amount,
+                tax=Decimal('0.00'),
+            ),),
+            reason=reason,
+            rule_code=rule_code,
+            warnings=warnings,
+        )
+
+    if partner_view is not None and is_eu_outbound_invoice_line(
+        partner=partner_view,
         tax_rate=rate,
     ):
         box = invoice_eu_outbound_box(has_service_date=bool(document.supply_date))
@@ -291,10 +326,25 @@ def _classify_invoice(
     )
 
 
+def _has_foreign_input_vat(document: TaxDocumentInput) -> bool:
+    amount = document.foreign_vat_amount or Decimal('0')
+    country = (document.foreign_vat_country or '').strip().upper()
+    return amount > 0 and country not in ('', 'HR')
+
+
 def _classify_expense(
     document: TaxDocumentInput,
     warnings: list[str],
 ) -> TaxClassificationResult:
+    if _has_foreign_input_vat(document):
+        return _empty(
+            document,
+            Outcome.NOT_TAX_RELEVANT,
+            'foreign_input_vat',
+            warnings,
+            rule_code='EXP_FOREIGN_INPUT_VAT',
+        )
+
     procedure = document.declared_procedure or VatSupplyProcedure.STANDARD
     if procedure == VatSupplyProcedure.IOSS:
         net = document.base_amount
@@ -315,30 +365,186 @@ def _classify_expense(
         )
 
     partner = document.partner
-    if (
-        partner is not None
-        and is_eu_supplier(_PartnerView(partner))
-        and not document.vat_amount
-    ):
+    partner_view = _PartnerView(partner) if partner is not None else None
+    if partner_view is not None and is_eu_supplier(partner_view) and not document.vat_amount:
+        if is_eu_goods_acquisition(
+            partner_view,
+            vat_amount=document.vat_amount,
+            base_amount=document.base_amount,
+            description=document.description,
+            supply_kind=document.supply_kind,
+        ):
+            vat_rc = rc_vat_from_base(document.base_amount, Decimal('25.00'))
+            return _classified(
+                document,
+                (
+                    _row(
+                        document,
+                        box='207',
+                        rule_code='EXP_EU_GOODS_207',
+                        base=document.base_amount,
+                        tax=Decimal('0.00'),
+                    ),
+                    _row(
+                        document,
+                        box='207',
+                        rule_code='EXP_EU_GOODS_207_VAT',
+                        base=Decimal('0.00'),
+                        tax=vat_rc,
+                    ),
+                    _row(
+                        document,
+                        box='307',
+                        rule_code='EXP_EU_GOODS_307',
+                        base=document.base_amount,
+                        tax=vat_rc,
+                    ),
+                ),
+                reason='eu_goods_acquisition',
+                rule_code='EXP_EU_GOODS_207_307',
+                warnings=warnings,
+            )
         if document.has_linked_journal_entry:
             return _empty(document, Outcome.NOT_TAX_RELEVANT, 'eu_expense_posted_via_journal', warnings)
         if document.base_amount > 0:
+            vat_rc = rc_vat_from_base(document.base_amount, Decimal('25.00'))
+            rows = [
+                _row(
+                    document,
+                    box='210',
+                    rule_code='EXP_EU_SERVICES_210',
+                    base=document.base_amount,
+                    tax=vat_rc,
+                ),
+            ]
+            if document.input_vat_deductible:
+                rows.append(
+                    _row(
+                        document,
+                        box='306',
+                        rule_code='EXP_EU_SERVICES_306',
+                        base=document.base_amount,
+                        tax=vat_rc,
+                    )
+                )
+                rule_code = 'EXP_EU_SERVICES_210_306'
+            else:
+                rule_code = 'EXP_EU_SERVICES_210'
             return _classified(
                 document,
-                (_row(
-                    document,
-                    box='614',
-                    rule_code='EXP_EU_614',
-                    base=document.base_amount,
-                    tax=Decimal('0.00'),
-                ),),
-                reason='eu_expense_placeholder',
-                rule_code='EXP_EU_614',
+                tuple(rows),
+                reason='eu_received_services',
+                rule_code=rule_code,
                 warnings=warnings,
             )
 
     if document.base_amount <= 0 and not document.vat_amount:
         return _empty(document, Outcome.NOT_TAX_RELEVANT, 'zero_expense', warnings)
+
+    # E means exempt from VAT (EN 16931), not "outside the VAT system" (that is O).
+    # NOT_TAX_RELEVANT here is only the terminal that emits no ledger row.
+    if (document.tax_category or '').upper() == 'E':
+        if not document.vat_amount:
+            return _empty(
+                document,
+                Outcome.NOT_TAX_RELEVANT,
+                'explicit_vat_exempt_e',
+                warnings,
+                rule_code='EXP_EXPLICIT_EXEMPT_E',
+            )
+        return _empty(
+            document,
+            Outcome.REVIEW_REQUIRED,
+            'explicit_vat_exempt_e_with_vat',
+            warnings,
+            rule_code='EXP_EXPLICIT_EXEMPT_E_WITH_VAT',
+        )
+
+    if (document.posting_profile or '') == 'company_passenger_vehicle':
+        return _empty(
+            document,
+            Outcome.REVIEW_REQUIRED,
+            'vehicle_limited_input_vat',
+            warnings,
+            rule_code='EXP_VEHICLE_LIMITED_VAT_REVIEW',
+        )
+
+    eu_charged = partner is not None and is_eu_supplier(_PartnerView(partner))
+    if not eu_charged and expense_matches_domestic_25(
+        base_amount=document.base_amount,
+        vat_amount=document.vat_amount,
+        vat_rate=document.vat_rate,
+    ):
+        return _classified(
+            document,
+            (_row(
+                document,
+                box='303',
+                rule_code='EXP_DOMESTIC_25_303',
+                base=document.base_amount,
+                tax=document.vat_amount,
+            ),),
+            reason='domestic_input_25',
+            rule_code='EXP_DOMESTIC_25_303',
+            warnings=warnings,
+        )
+
+    if (
+        not eu_charged
+        and partner is not None
+        and is_cvh_stp_supplier(partner)
+        and document.vat_amount > 0
+    ):
+        split = cvh_mixed_25_amounts(
+            base_amount=document.base_amount,
+            vat_amount=document.vat_amount,
+        )
+        if split is not None:
+            taxable_base, vat = split
+            return _classified(
+                document,
+                (_row(
+                    document,
+                    box='303',
+                    rule_code='EXP_CVH_MIXED_25_303',
+                    base=taxable_base,
+                    tax=vat,
+                ),),
+                reason='cvh_mixed_input_25',
+                rule_code='EXP_CVH_MIXED_25_303',
+                warnings=warnings,
+            )
+
+    if (
+        not eu_charged
+        and partner is not None
+        and document.base_amount > 0
+        and not document.vat_amount
+    ):
+        if is_hr_bank_supplier(partner):
+            return _empty(
+                document,
+                Outcome.NOT_TAX_RELEVANT,
+                'domestic_bank_no_vat',
+                warnings,
+                rule_code='EXP_DOMESTIC_BANK_NO_VAT',
+            )
+        if is_hr_insurance_supplier(partner):
+            return _empty(
+                document,
+                Outcome.NOT_TAX_RELEVANT,
+                'domestic_insurance_no_vat',
+                warnings,
+                rule_code='EXP_DOMESTIC_INSURANCE_NO_VAT',
+            )
+        if is_ch_telecom_supplier(partner):
+            return _empty(
+                document,
+                Outcome.NOT_TAX_RELEVANT,
+                'ch_telecom_no_vat',
+                warnings,
+                rule_code='EXP_CH_TELECOM_NO_VAT',
+            )
 
     return _empty(
         document,
@@ -376,6 +582,11 @@ def _classify_journal(
             rate = journal_line_vat_rate(account)
             vat = document.credit_amount
             base = Decimal('0.00') if box == '207' else pretporez_base_from_vat(vat, rate)
+        elif box == '210' and document.credit_amount > 0:
+            rate = journal_line_vat_rate(account)
+            vat = document.credit_amount
+            ap_base = _sibling_supplier_credit_amount(document)
+            base = ap_base if ap_base is not None else pretporez_base_from_vat(vat, rate)
         elif document.debit_amount > 0:
             vat = document.debit_amount
             rate = journal_line_vat_rate(account)
@@ -401,6 +612,26 @@ def _classify_journal(
             rule_code='UNMAPPED_TAX_ACCOUNT_NO_LONGER_SKIPPED',
         )
     return _empty(document, Outcome.NOT_TAX_RELEVANT, 'non_tax_journal_account', warnings)
+
+
+def _sibling_supplier_credit_amount(document: TaxDocumentInput) -> Decimal | None:
+    """AP credit on the same JE (2201 / 2201-Pxxxxx) is the invoice net for box 210."""
+    entry_id = document.source_document_id
+    if not entry_id:
+        return None
+    from accounting.models import JournalEntryLine
+
+    amounts = []
+    for line in JournalEntryLine.objects.filter(
+        journal_entry_id=entry_id,
+        credit_amount__gt=0,
+    ).select_related('account'):
+        code = (line.account.account_code or '').strip()
+        if code == '2201' or code.startswith('2201-'):
+            amounts.append(Decimal(line.credit_amount))
+    if len(amounts) == 1:
+        return amounts[0]
+    return None
 
 
 def reconcile_rc_bases(rows: tuple[ProposedLedgerRow, ...]) -> tuple[ProposedLedgerRow, ...]:
@@ -447,6 +678,8 @@ class _PartnerView:
 
     def __init__(self, snapshot) -> None:
         self.tax_number = snapshot.tax_number
+        self.vat_id = snapshot.vat_id
         self.vat_number = snapshot.vat_id
         self.country = snapshot.country
+        self.country_code = snapshot.country_code
         self.name = snapshot.name

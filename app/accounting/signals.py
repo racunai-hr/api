@@ -5,6 +5,38 @@ from django.dispatch import receiver
 from accounting.services.posting import post_document, post_invoice_payment
 
 
+def _bank_reconcile_cleared(instance) -> bool:
+    """Bank settlement already cleared the payable, so expense_paid would post it twice."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from accounting.models import JournalEntry
+
+    content_type = ContentType.objects.get_for_model(instance)
+    return JournalEntry.all_objects.filter(
+        tenant_id=instance.tenant_id,
+        source_content_type=content_type,
+        source_object_id=instance.pk,
+        description__startswith='[bank_reconcile:',
+        status='posted',
+    ).exists()
+
+
+def _private_funds_settled(instance) -> bool:
+    """A posted private-funds claim already swapped the supplier payable."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from accounting.models import PrivateFundsClaim
+
+    content_type = ContentType.objects.get_for_model(instance)
+    return PrivateFundsClaim.all_objects.filter(
+        tenant_id=instance.tenant_id,
+        related_content_type=content_type,
+        related_object_id=instance.pk,
+        claim_type=PrivateFundsClaim.CLAIM_SUPPLIER_PAYMENT,
+        status=PrivateFundsClaim.STATUS_POSTED,
+    ).exists()
+
+
 def _get_system_user(tenant):
     User = get_user_model()
     user = User.objects.filter(is_superuser=True).first()
@@ -32,12 +64,18 @@ def auto_post_invoice(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender='expenses.Expense')
 def auto_post_expense(sender, instance, created, **kwargs):
+    if getattr(instance, '_skip_auto_posting', False):
+        return
     user = _get_system_user(instance.tenant)
     if not user:
         return
     if instance.status in ('approved', 'paid'):
         post_document(instance.tenant, instance, 'expense_approved', user)
-    if instance.status == 'paid':
+    if (
+        instance.status == 'paid'
+        and not _bank_reconcile_cleared(instance)
+        and not _private_funds_settled(instance)
+    ):
         post_document(instance.tenant, instance, 'expense_paid', user)
 
 

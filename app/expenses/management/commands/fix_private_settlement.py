@@ -59,7 +59,11 @@ class Command(BaseCommand):
             if not paid_by:
                 raise CommandError(f'Platitelj s OIB-om "{options["paid_by_oib"]}" nije pronađen.')
 
-        private_methods = {SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH}
+        private_methods = {
+            SettlementMethod.PRIVATE_CARD,
+            SettlementMethod.PRIVATE_CASH,
+            SettlementMethod.PRIVATE_ACCOUNT,
+        }
         target_status = options['status'] or expense.status
         if options['settlement_method'] in private_methods and target_status == 'paid' and not paid_by:
             raise CommandError('paid_by_oib je obavezan za privatno podmirenje plaćenog troška.')

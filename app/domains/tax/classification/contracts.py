@@ -58,6 +58,7 @@ class PartnerSnapshot:
     tax_number: str
     vat_id: str
     provenance: PartnerProvenance
+    country_code: str = ''
 
 
 @dataclass(frozen=True)
@@ -131,7 +132,12 @@ class TaxDocumentInput:
     description: str
     period_year: int
     period_month: int
+    input_vat_deductible: bool
     input_hash: str
+    tax_category: str = ''
+    posting_profile: str = ''
+    foreign_vat_amount: Decimal | None = None
+    foreign_vat_country: str = ''
 
 
 @dataclass(frozen=True)

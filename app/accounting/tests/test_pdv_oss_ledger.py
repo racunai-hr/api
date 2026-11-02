@@ -99,13 +99,13 @@ class PdvOssLedgerTests(TestCase):
 
         self.assertEqual(boxes['215'].base, Decimal('100.00'))
         self.assertEqual(boxes['215'].vat, Decimal('19.00'))
-        self.assertEqual(boxes['101'].base, Decimal('0.00'))
         self.assertEqual(boxes['103'].base, Decimal('0.00'))
+        self.assertEqual(boxes['104'].base, Decimal('0.00'))
 
         cross = verify_zp_against_pdv_boxes(
             aggregate_zp_rows(period),
-            pdv_box_101=boxes['101'].base,
             pdv_box_103=boxes['103'].base,
+            pdv_box_104=boxes['104'].base,
         )
         self.assertTrue(cross.is_aligned)
 

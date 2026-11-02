@@ -18,7 +18,7 @@ LAYER_MATURITY = {
     'submission': 'L3',
     'validation': 'L2',
     'verification': 'L2',
-    'joppd_builder': 'L0',
+    'joppd_builder': 'L1',
     'ai': 'L0',
 }
 

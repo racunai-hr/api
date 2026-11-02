@@ -18,6 +18,11 @@ class ProviderProfileTests(TestCase):
         profile = get_provider_profile(IntegrationProvider.SUPER, IntegrationEnvironment.TEST)
         self.assertEqual(profile.api_base_url, 'https://apitest.super.hr')
 
+    def test_pondi_production_profile(self):
+        profile = get_provider_profile(IntegrationProvider.PONDI, IntegrationEnvironment.PRODUCTION)
+        self.assertEqual(profile.api_base_url, 'https://eracun.eposlovanje.hr')
+        self.assertEqual(profile.auth_scheme, 'api_key')
+
     def test_cis_env_mapping(self):
         self.assertEqual(cis_env_for_integration(IntegrationEnvironment.PRODUCTION), CIS_ENV_PROD)
         self.assertEqual(cis_env_for_integration(IntegrationEnvironment.TEST), CIS_ENV_DEMO)

@@ -26,7 +26,7 @@ def is_missing_storage_error(exc: BaseException) -> bool:
 
 
 def attachment_blob_available(attachment) -> bool:
-    field = getattr(attachment, 'file', None)
+    field = getattr(attachment, 'file', None) or getattr(attachment, 'original_file', None)
     if not field or not field.name:
         return False
     try:

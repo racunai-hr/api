@@ -173,6 +173,18 @@ class PrivateFundsClaimTests(TestCase):
             1,
         )
 
+    def test_ensure_partner_restores_overwritten_name(self):
+        partner = ensure_partner_ante_vrcan(tenant=self.tenant, user=self.owner)
+        partner.name = 'Test Kupac d.o.o.'
+        partner.partner_type = 'supplier'
+        partner.save(update_fields=['name', 'partner_type'])
+        restored = ensure_partner_ante_vrcan(tenant=self.tenant, user=self.owner)
+        self.assertEqual(restored.pk, partner.pk)
+        restored.refresh_from_db()
+        self.assertEqual(restored.name, 'Ante Vrcan')
+        self.assertEqual(restored.short_name, 'Ante')
+        self.assertEqual(restored.partner_type, 'other')
+
     def test_supplier_payment_creditor_swap_one_je(self):
         ante = ensure_partner_ante_vrcan(tenant=self.tenant, user=self.owner)
         expense, item = self._expense_partial()

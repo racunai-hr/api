@@ -79,13 +79,16 @@ class AmountsBlockSerializer(serializers.Serializer):
     net = serializers.CharField(allow_null=True)
     vat = serializers.CharField(allow_null=True)
     gross = serializers.CharField(allow_null=True)
+    book_gross = serializers.CharField(allow_null=True, required=False)
+    book_net = serializers.CharField(allow_null=True, required=False)
+    book_vat = serializers.CharField(allow_null=True, required=False)
     fx_rate = ProvenancedSerializer()
 
 
 class DocumentSummarySerializer(serializers.Serializer):
     id = serializers.IntegerField()
-    kind = serializers.ChoiceField(choices=['invoice', 'expense', 'deposit'])
-    direction = serializers.ChoiceField(choices=['incoming', 'outgoing', 'deposit'])
+    kind = serializers.ChoiceField(choices=['invoice', 'expense', 'deposit', 'official'])
+    direction = serializers.ChoiceField(choices=['incoming', 'outgoing', 'deposit', 'official'])
     internal_number = serializers.CharField(allow_blank=True, allow_null=True)
     source_number = serializers.CharField(allow_blank=True, allow_null=True)
     partner_name = serializers.CharField(allow_blank=True, allow_null=True)
@@ -254,15 +257,76 @@ class PaymentBlockSerializer(serializers.Serializer):
     matched = serializers.BooleanField()
     date = serializers.CharField(allow_null=True)
     amount = serializers.CharField(allow_null=True)
+    currency = serializers.CharField(allow_null=True, required=False)
+    book_amount = serializers.CharField(allow_null=True, required=False)
     account_mask = serializers.CharField(allow_null=True)
     reference = serializers.CharField(allow_null=True)
     reconcile_status = serializers.CharField(allow_null=True)
     bank_transaction_id = serializers.IntegerField(allow_null=True)
 
 
+class SettlementTrailObligationSerializer(serializers.Serializer):
+    amount = serializers.CharField(allow_null=True)
+    journal_entry_id = serializers.IntegerField(allow_null=True)
+    entry_number = serializers.CharField(allow_null=True)
+    entry_date = serializers.CharField(allow_null=True)
+
+
+class SettlementTrailClosingSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    amount = serializers.CharField(allow_null=True)
+    journal_entry_id = serializers.IntegerField(allow_null=True)
+    entry_number = serializers.CharField(allow_null=True)
+    allocation_id = serializers.IntegerField()
+    bank_transaction_id = serializers.IntegerField(allow_null=True)
+    bank_statement_id = serializers.IntegerField(allow_null=True)
+    counterparty_name = serializers.CharField(allow_null=True)
+    private_funds_claim_id = serializers.IntegerField(allow_null=True)
+    claim_number = serializers.CharField(allow_null=True)
+    partner_id = serializers.IntegerField(allow_null=True)
+    partner_name = serializers.CharField(allow_null=True)
+    storno_expense_id = serializers.IntegerField(required=False, allow_null=True)
+    storno_expense_number = serializers.CharField(required=False, allow_null=True)
+    label = serializers.CharField()
+
+
+class SettlementTrailSystemEntrySerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    amount = serializers.CharField(allow_null=True)
+    journal_entry_id = serializers.IntegerField()
+    entry_number = serializers.CharField(allow_null=True)
+    note = serializers.CharField()
+
+
+class SettlementTrailWarningSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    message = serializers.CharField()
+
+
+class SettlementTrailTotalsSerializer(serializers.Serializer):
+    obligation = serializers.CharField(allow_null=True)
+    allocated = serializers.CharField(allow_null=True)
+    open = serializers.CharField(allow_null=True)
+
+
+class SettlementTrailSerializer(serializers.Serializer):
+    obligation = SettlementTrailObligationSerializer(allow_null=True)
+    closings = SettlementTrailClosingSerializer(many=True)
+    system_entries = SettlementTrailSystemEntrySerializer(many=True)
+    warnings = SettlementTrailWarningSerializer(many=True)
+    totals = SettlementTrailTotalsSerializer()
+
+
 class LineClassificationSerializer(serializers.Serializer):
     scheme = serializers.CharField(allow_null=True)
     code = serializers.CharField(allow_null=True)
+
+
+class IncomingLineAccountSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    active = serializers.BooleanField()
 
 
 class IncomingLineSerializer(serializers.Serializer):
@@ -277,6 +341,11 @@ class IncomingLineSerializer(serializers.Serializer):
     net_amount = serializers.CharField(allow_null=True)
     vat_amount = serializers.CharField(allow_null=True)
     gross_amount = serializers.CharField(allow_null=True)
+    book_net_amount = serializers.CharField(allow_null=True, required=False)
+    book_vat_amount = serializers.CharField(allow_null=True, required=False)
+    book_gross_amount = serializers.CharField(allow_null=True, required=False)
+    id = serializers.IntegerField(allow_null=True, required=False)
+    posting_account = IncomingLineAccountSerializer(allow_null=True, required=False)
 
 
 class IncomingChargeSerializer(serializers.Serializer):
@@ -324,6 +393,21 @@ class TechnicalBlockSerializer(serializers.Serializer):
     source_hash = serializers.CharField(allow_null=True)
 
 
+class DocumentRejectActionSerializer(serializers.Serializer):
+    available = serializers.BooleanField()
+    reason_codes = serializers.ListField(child=serializers.CharField(), required=False)
+    unavailable_code = serializers.CharField(allow_null=True, required=False)
+
+
+class DocumentActionsSerializer(serializers.Serializer):
+    reject = DocumentRejectActionSerializer()
+
+
+class ReversalOfSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    number = serializers.CharField()
+
+
 class DocumentDetailSerializer(DocumentSummarySerializer):
     partner_id = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True, allow_null=True)
@@ -353,11 +437,19 @@ class DocumentDetailSerializer(DocumentSummarySerializer):
     references = DocumentReferenceSerializer(many=True, required=False)
     integration = IntegrationBlockSerializer(required=False)
     technical = TechnicalBlockSerializer(required=False)
+    actions = DocumentActionsSerializer(required=False)
     # PR C accounting context (incoming only; avoid colliding with provenanced vat/subledger)
     accounting = AccountingBlockSerializer(required=False)
     vat_context = VatContextSerializer(required=False)
     subledger_context = SubledgerContextSerializer(required=False)
     payment = PaymentBlockSerializer(required=False)
+    settlement_trail = SettlementTrailSerializer(required=False)
+    reversal_of = ReversalOfSerializer(required=False, allow_null=True)
+    official_kind = serializers.CharField(required=False, allow_null=True)
+    related_fixed_asset_id = serializers.IntegerField(required=False, allow_null=True)
+    posting_profile_id = serializers.IntegerField(required=False, allow_null=True)
+    posting_profile_code = serializers.CharField(required=False, allow_null=True)
+    posting_profile_name = serializers.CharField(required=False, allow_null=True)
 
 
 class CurrencySummarySerializer(serializers.Serializer):
@@ -387,13 +479,26 @@ DOCUMENT_LIST_PARAMS = [
         'direction',
         OpenApiTypes.STR,
         OpenApiParameter.QUERY,
-        enum=['incoming', 'outgoing', 'deposit'],
+        description='Jedan identitet ili skup odvojen zarezom, npr. incoming,official.',
+        enum=['incoming', 'outgoing', 'deposit', 'official'],
     ),
     OpenApiParameter('status', OpenApiTypes.STR, OpenApiParameter.QUERY),
     OpenApiParameter('search', OpenApiTypes.STR, OpenApiParameter.QUERY),
     OpenApiParameter('year', OpenApiTypes.INT, OpenApiParameter.QUERY),
     OpenApiParameter('month', OpenApiTypes.INT, OpenApiParameter.QUERY),
     OpenApiParameter('partner', OpenApiTypes.INT, OpenApiParameter.QUERY, description='Partner id'),
+    OpenApiParameter(
+        'cost_center',
+        OpenApiTypes.INT,
+        OpenApiParameter.QUERY,
+        description='Documents whose posted journal has a line on this cost center',
+    ),
+    OpenApiParameter(
+        'fixed_asset',
+        OpenApiTypes.INT,
+        OpenApiParameter.QUERY,
+        description='Official documents on this asset, or expenses on its vehicle',
+    ),
     OpenApiParameter('oib', OpenApiTypes.STR, OpenApiParameter.QUERY),
     OpenApiParameter('date_from', OpenApiTypes.DATE, OpenApiParameter.QUERY),
     OpenApiParameter('date_to', OpenApiTypes.DATE, OpenApiParameter.QUERY),

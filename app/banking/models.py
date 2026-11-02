@@ -52,6 +52,7 @@ class BankStatement(TenantMixin, models.Model):
         verbose_name="Bankovni račun",
     )
     statement_date = models.DateField(verbose_name="Datum izvoda")
+    currency = models.CharField(max_length=3, default='EUR', verbose_name="Valuta izvoda")
     opening_balance = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Početno stanje")
     closing_balance = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Završno stanje")
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='imported', verbose_name="Status")
@@ -109,6 +110,14 @@ class BankTransaction(TenantMixin, models.Model):
         verbose_name="Iznos",
     )
     currency = models.CharField(max_length=3, default='EUR', verbose_name="Valuta")
+    amount_eur = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Iznos u EUR",
+        help_text="Knjigovodstveni iznos. Za HRK zamrznut po tečaju 7,53450.",
+    )
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPES, verbose_name="Tip")
     description = models.TextField(blank=True, verbose_name="Opis")
     reference = models.CharField(max_length=100, blank=True, verbose_name="Poziv na broj")

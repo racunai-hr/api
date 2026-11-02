@@ -352,13 +352,23 @@ class ProjectionPrepareTests(TestCase):
         self._assert_no_writes(period, before)
 
     def test_generic_expense_303_rejected(self):
-        self._generic_expense()
+        self._generic_expense(amount=Decimal('13.94'), tax=Decimal('0.00'))
         period = self._period()
         before = self._ledger_guard(period)
         candidate = prepare_vat_projection(period)
         self.assertEqual(candidate.status, VatProjectionStatus.REJECTED)
         self.assertEqual(candidate.primary_rejection_code, 'EXPENSE_GENERIC_303_REMOVED')
         self.assertFalse(candidate.writable)
+        self._assert_no_writes(period, before)
+
+    def test_domestic_25_expense_ready(self):
+        self._generic_expense()
+        period = self._period()
+        before = self._ledger_guard(period)
+        candidate = prepare_vat_projection(period)
+        self.assertEqual(candidate.status, VatProjectionStatus.READY)
+        self.assertTrue(candidate.writable)
+        self.assertIn('303', {row.box for row in candidate.rows})
         self._assert_no_writes(period, before)
 
     def test_clean_submitted_period_ready_not_writable(self):
@@ -384,7 +394,7 @@ class ProjectionPrepareTests(TestCase):
         self._assert_no_writes(period, before)
 
     def test_submitted_generic_303_rejected_for_review_not_lifecycle(self):
-        self._generic_expense(number='EXP-sub')
+        self._generic_expense(number='EXP-sub', amount=Decimal('13.94'), tax=Decimal('0.00'))
         generate_vat_ledger(self.tenant, 2026, 4, replace=True)
         period = VATPeriod.all_objects.get(tenant=self.tenant, year=2026, month=4)
         period.status = 'submitted'
@@ -416,7 +426,7 @@ class ProjectionPrepareTests(TestCase):
 
     def test_two_issues_sorted_primary_is_first(self):
         self._sent_invoice(rate=Decimal('10.00'), price=Decimal('80.00'), day=7)
-        self._generic_expense(number='EXP-two')
+        self._generic_expense(number='EXP-two', amount=Decimal('13.94'), tax=Decimal('0.00'))
         period = self._period()
         before = self._ledger_guard(period)
         candidate = prepare_vat_projection(period)

@@ -9,6 +9,12 @@ from django.utils.html import format_html, format_html_join
 from fiscal_gateway.models import As4DocumentLink
 from fiscal_gateway.services.inbound_as4_actions import InboundExpenseError
 from integrations.admin_display import expense_integration_status
+from integrations.errors import IntegrationError
+from integrations.manager import IntegrationManager
+from integrations.services.inbound_rejection import (
+    InboundRejectionError,
+    reject_inbound_expense_from_admin,
+)
 from super_integration.models import SuperDocumentLink
 from accounting.admin_subledger import SubledgerSourceInline
 from tenants.mixins import TenantAdminMixin
@@ -31,9 +37,9 @@ from .services.import_service import import_expense_rows
 
 @admin.register(ExpenseCategory)
 class ExpenseCategoryAdmin(TenantAdminMixin, admin.ModelAdmin):
-    list_display = ('name', 'default_account', 'is_active', 'created_at')
+    list_display = ('name', 'code', 'default_account', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'code', 'description')
 
 
 class ExpenseAttachmentInline(admin.TabularInline):
@@ -118,13 +124,15 @@ class ExpensePayerAdmin(TenantAdminMixin, admin.ModelAdmin):
 class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
     list_display = (
         'expense_number', 'status', 'paid_by', 'settlement_method', 'reimbursement_status',
-        'amount', 'currency', 'supplier', 'category', 'expense_date',
+        'amount', 'currency', 'supplier', 'category', 'vehicle', 'posting_profile', 'expense_date',
     )
     list_filter = (
         'status', 'paid_by', 'settlement_method', 'reimbursement_status',
-        'source', 'payment_method', 'category', 'currency', 'expense_date',
+        'source', 'payment_method', 'category', 'vehicle', 'posting_profile', 'currency',
+        'expense_date',
     )
     search_fields = ('expense_number', 'description', 'supplier__name', 'receipt_number')
+    autocomplete_fields = ('vehicle',)
     date_hierarchy = 'expense_date'
     readonly_fields = ('attachment_links', 'integration_status')
     change_list_template = 'admin/expenses/expense/change_list.html'
@@ -141,7 +149,10 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     fieldsets = (
         ('Osnovni podaci', {
-            'fields': ('expense_number', 'status', 'source', 'category', 'supplier')
+            'fields': (
+                'expense_number', 'status', 'source', 'category', 'posting_profile', 'supplier',
+                'expense_account', 'expense_account_source', 'vehicle',
+            )
         }),
         ('Plaćanje dobavljaču', {
             'fields': ('payment_method',),
@@ -193,7 +204,11 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
             if paid_by_id:
                 paid_by = ExpensePayer.all_objects.filter(tenant=tenant, pk=paid_by_id).first()
 
-            if settlement_method in (SettlementMethod.PRIVATE_CARD, SettlementMethod.PRIVATE_CASH):
+            if settlement_method in (
+                SettlementMethod.PRIVATE_CARD,
+                SettlementMethod.PRIVATE_CASH,
+                SettlementMethod.PRIVATE_ACCOUNT,
+            ):
                 if mark_paid and not paid_by:
                     messages.error(request, 'Platitelj je obavezan za privatno podmirenje plaćenih troškova.')
                     return render(request, 'admin/expenses/expense/import_f1.html', {
@@ -324,15 +339,30 @@ class ExpenseAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     @admin.action(description='Odbij ulazni eRačun')
     def reject_inbound_action(self, request, queryset):
-        rejected = 0
+        rejected_as4 = 0
+        rejected_gateway = 0
         for expense in queryset:
             try:
-                IntegrationManager.reject_inbound_expense(expense)
-                rejected += 1
-            except (IntegrationError, InboundExpenseError) as exc:
-                self.message_user(request, f'{expense}: {exc}', level=messages.ERROR)
-        if rejected:
-            self.message_user(request, f'Odbijeno {rejected} troškova.', level=messages.SUCCESS)
+                channel = reject_inbound_expense_from_admin(expense)
+                if channel == 'gateway':
+                    rejected_gateway += 1
+                else:
+                    rejected_as4 += 1
+            except (InboundRejectionError, IntegrationError, InboundExpenseError) as exc:
+                detail = getattr(exc, 'detail', str(exc))
+                self.message_user(request, f'{expense}: {detail}', level=messages.ERROR)
+        if rejected_as4:
+            self.message_user(
+                request,
+                f'Odbijeno {rejected_as4} troškova (AS4).',
+                level=messages.SUCCESS,
+            )
+        if rejected_gateway:
+            self.message_user(
+                request,
+                f'Zaprimljeno odbijanje za {rejected_gateway} troškova (gateway).',
+                level=messages.SUCCESS,
+            )
 
 
 @admin.register(IncomingInvoiceImport)

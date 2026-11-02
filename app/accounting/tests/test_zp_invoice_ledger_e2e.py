@@ -75,7 +75,7 @@ class ZpInvoiceLedgerE2ETests(TestCase):
     def _create_invoice_from_ledger_entry(self, *, entry: dict, index: int) -> None:
         partner = self._partner_for_vat_id(entry['partner_vat_id'])
         entry_date = date.fromisoformat(entry['entry_date'])
-        is_service = entry['vat_box'] == '103'
+        is_service = entry['vat_box'] == '104'
         invoice = Invoice.all_objects.create(
             tenant=self.tenant,
             company_to=partner,
@@ -117,8 +117,8 @@ class ZpInvoiceLedgerE2ETests(TestCase):
         boxes = aggregate_vat_boxes(period)
         result = verify_zp_against_pdv_boxes(
             payload,
-            pdv_box_101=boxes['101'].base,
             pdv_box_103=boxes['103'].base,
+            pdv_box_104=boxes['104'].base,
         )
         self.assertTrue(result.is_aligned)
 

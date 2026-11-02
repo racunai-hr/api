@@ -47,11 +47,9 @@ class Command(BaseCommand):
         year = options['year']
         month = options['month']
 
-        period, _ = VATPeriod.all_objects.get_or_create(
-            tenant=tenant,
-            year=year,
-            month=month,
-        )
+        from accounting.services.vat import get_or_create_vat_period
+
+        period = get_or_create_vat_period(tenant, year, month)
 
         timings: dict[str, float] = {}
 
@@ -76,8 +74,8 @@ class Command(BaseCommand):
         boxes = aggregate_vat_boxes(period)
         cross_check = verify_zp_against_pdv_boxes(
             erp_payload,
-            pdv_box_101=boxes['101'].base,
             pdv_box_103=boxes['103'].base,
+            pdv_box_104=boxes['104'].base,
         )
 
         if options['benchmark']:
@@ -91,19 +89,19 @@ class Command(BaseCommand):
             f'Redova: {len(erp_payload.rows)}\n'
             f'Zbroj dobara (I1): {erp_payload.total_goods}\n'
             f'Zbroj usluga (I4): {erp_payload.total_services}\n'
-            f'PDV 101 (ledger): {cross_check.pdv_box_101}\n'
             f'PDV 103 (ledger): {cross_check.pdv_box_103}\n'
-            f'Usklađenost ZP ↔ PDV 101/103: '
+            f'PDV 104 (ledger): {cross_check.pdv_box_104}\n'
+            f'Usklađenost ZP ↔ PDV 103/104: '
             f'{"OK" if cross_check.is_aligned else "RAZLIKA"}\n'
         )
 
         if not cross_check.is_aligned:
             self.stderr.write(
                 self.style.ERROR(
-                    'ZP zbrojevi ne odgovaraju PDV ledger boxovima 101/103.'
+                    'ZP zbrojevi ne odgovaraju PDV ledger boxovima 103/104.'
                 )
             )
-            raise CommandError('Cross-form provjera nije prošla — ZP != PDV 101/103.')
+            raise CommandError('Cross-form provjera nije prošla — ZP != PDV 103/104.')
 
         xml_path = options.get('xml')
         if xml_path:

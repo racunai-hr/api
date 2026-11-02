@@ -24,6 +24,7 @@ def _partner(snapshot: PartnerSnapshot | None) -> dict[str, Any]:
         'country': snapshot.country,
         'tax_number': snapshot.tax_number,
         'vat_id': snapshot.vat_id,
+        'country_code': snapshot.country_code,
         'provenance': snapshot.provenance.value,
     }
 
@@ -74,6 +75,11 @@ def hash_tax_input(document: TaxDocumentInput) -> str:
         'description': document.description,
         'period_year': document.period_year,
         'period_month': document.period_month,
+        'input_vat_deductible': document.input_vat_deductible,
+        'tax_category': document.tax_category or '',
+        'posting_profile': document.posting_profile or '',
+        'foreign_vat_amount': _dec(document.foreign_vat_amount),
+        'foreign_vat_country': document.foreign_vat_country or '',
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
     return hashlib.sha256(encoded.encode('utf-8')).hexdigest()

@@ -1,8 +1,4 @@
-"""Cross-form CI: build_zp_payload vs aggregate_vat_boxes boxes 101/103.
-
-Uses the same VAT ledger as PDV aggregation — does NOT assert build_pdv_payload()
-field_scalar('101'/'103') which remain ZERO until a future PDV mapping sprint.
-"""
+"""Cross-form CI: build_zp_payload vs aggregate_vat_boxes boxes 103/104."""
 
 from __future__ import annotations
 
@@ -62,23 +58,23 @@ class ZpPdvCrossCheckTests(TestCase):
         if scenario_id == 'pdv_mismatch_101_103':
             aligned = verify_zp_against_pdv_boxes(
                 zp,
-                pdv_box_101=boxes['101'].base,
                 pdv_box_103=boxes['103'].base,
+                pdv_box_104=boxes['104'].base,
             )
             self.assertTrue(aligned.is_aligned)
 
             mismatched = verify_zp_against_pdv_boxes(
                 zp,
-                pdv_box_101=Decimal(pdv['fields']['101']),
                 pdv_box_103=Decimal(pdv['fields']['103']),
+                pdv_box_104=Decimal(pdv['fields']['104']),
             )
             self.assertEqual(mismatched.is_aligned, pdv['must_match_zp_totals'])
             return
 
         result = verify_zp_against_pdv_boxes(
             zp,
-            pdv_box_101=boxes['101'].base,
             pdv_box_103=boxes['103'].base,
+            pdv_box_104=boxes['104'].base,
         )
         self.assertEqual(result.is_aligned, pdv['must_match_zp_totals'])
 

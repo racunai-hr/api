@@ -260,6 +260,25 @@ class ProjectionApplyTests(TestCase):
         self.assertEqual(run.status, VATProjectionRunStatus.STALE)
         self.assertEqual(self._guard(period)[:2], before[:2])
 
+    def test_prepare_apply_prepare_apply_same_engine_is_idempotent(self):
+        self._sent_invoice(day=18)
+        period = self._period(status='open')
+        first = prepare_vat_projection(period)
+        run1 = apply_vat_projection(period, first, self.user)
+        second = prepare_vat_projection(period)
+        self.assertEqual(first.engine_version, PROJECTION_ENGINE_VERSION)
+        self.assertEqual(second.engine_version, PROJECTION_ENGINE_VERSION)
+        self.assertEqual(first.input_fingerprint, second.input_fingerprint)
+        self.assertEqual(first.output_fingerprint, second.output_fingerprint)
+        run2 = apply_vat_projection(period, second, self.user)
+        self.assertEqual(run1.pk, run2.pk)
+        self.assertEqual(
+            VATProjectionRun.all_objects.filter(
+                vat_period=period, status=VATProjectionRunStatus.APPLIED,
+            ).count(),
+            1,
+        )
+
     def test_idempotent_second_apply_returns_same_run(self):
         self._sent_invoice(day=14)
         period = self._period(status='open')

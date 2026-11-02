@@ -5,6 +5,7 @@
 from django.db import models
 from django.db.models import Q
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 
@@ -87,6 +88,14 @@ class Partner(TenantMixin, models.Model):
         verbose_name="Popust (%)"
     )
     
+    default_expense_category = models.ForeignKey(
+        'expenses.ExpenseCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='partners_with_default_category',
+        verbose_name='Zadana vrsta troška',
+    )
     notes = models.TextField(blank=True, verbose_name="Napomene")
     internal_notes = models.TextField(blank=True, verbose_name="Interne napomene")
     
@@ -126,6 +135,14 @@ class Partner(TenantMixin, models.Model):
     @property
     def is_supplier(self):
         return self.partner_type in ['supplier', 'both']
+
+    def clean(self):
+        super().clean()
+        category = self.default_expense_category
+        if category is not None and category.tenant_id != self.tenant_id:
+            raise ValidationError({
+                'default_expense_category': 'Vrsta troška ne pripada istom tenantu.',
+            })
 
     def save(self, *args, **kwargs):
         if self.country_code:

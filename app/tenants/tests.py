@@ -12,6 +12,7 @@ from tenants.models import Tenant, TenantInvitation, TenantMembership
 from tenants.permissions import get_role, role_can_write, role_can_write_model
 from tenants.resolution import (
     get_cached_custom_domains,
+    header_tenant_override,
     invalidate_custom_domain_cache,
     is_platform_admin_host,
     resolve_platform_tenant,
@@ -115,6 +116,85 @@ class TenantMiddlewareTests(TestCase):
         response = self.middleware(request)
         self.assertTrue(response.is_platform_admin)
         self.assertIsNone(response.tenant)
+
+
+@override_settings(
+    DEBUG=True,
+    TENANT_ALLOW_HEADER_OVERRIDE=True,
+    TENANT_DEFAULT_SLUG='finestar',
+    TENANT_PLATFORM_DOMAIN='racunai.hr',
+    TENANT_RESERVED_SLUGS=['app', 'admin', 'www', 'api', 'mail', 'static'],
+    ALLOWED_HOSTS=['localhost', '127.0.0.1', 'erp.finestar.hr', 'demo.racunai.hr'],
+)
+class TenantHeaderOverrideTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.finestar, _ = Tenant.objects.get_or_create(
+            slug='finestar',
+            defaults={'name': 'Fine Star d.o.o.'},
+        )
+        cls.alma = Tenant.objects.create(slug='alma-cizmic', name='Alma Cizmić')
+        cls.inactive = Tenant.objects.create(
+            slug='header-inactive',
+            name='Inactive Header Co',
+            is_active=False,
+        )
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = TenantMiddleware(lambda request: request)
+
+    def _request(self, slug=None, host='localhost'):
+        extra = {'HTTP_HOST': host}
+        if slug is not None:
+            extra['HTTP_X_TENANT_SLUG'] = slug
+        return self.factory.get('/', **extra)
+
+    def test_known_active_slug_overrides_localhost_host(self):
+        request = self._request('alma-cizmic')
+        present, tenant = header_tenant_override(request)
+        self.assertTrue(present)
+        self.assertEqual(tenant, self.alma)
+        response = self.middleware(request)
+        self.assertEqual(response.tenant, self.alma)
+
+    def test_unknown_slug_is_404_not_default(self):
+        request = self._request('alma-cizmci')
+        present, tenant = header_tenant_override(request)
+        self.assertTrue(present)
+        self.assertIsNone(tenant)
+        with self.assertRaises(Http404):
+            self.middleware(request)
+
+    def test_inactive_slug_is_404(self):
+        request = self._request('header-inactive')
+        with self.assertRaises(Http404):
+            self.middleware(request)
+
+    def test_reserved_slug_is_404(self):
+        request = self._request('admin')
+        present, tenant = header_tenant_override(request)
+        self.assertTrue(present)
+        self.assertIsNone(tenant)
+        with self.assertRaises(Http404):
+            self.middleware(request)
+
+    def test_no_header_uses_host_default(self):
+        request = self._request()
+        present, tenant = header_tenant_override(request)
+        self.assertFalse(present)
+        self.assertIsNone(tenant)
+        response = self.middleware(request)
+        self.assertEqual(response.tenant, self.finestar)
+
+    def test_flag_off_ignores_header(self):
+        with override_settings(TENANT_ALLOW_HEADER_OVERRIDE=False):
+            request = self._request('alma-cizmic')
+            present, tenant = header_tenant_override(request)
+            self.assertFalse(present)
+            self.assertIsNone(tenant)
+            response = self.middleware(request)
+            self.assertEqual(response.tenant, self.finestar)
 
 
 @override_settings(TENANT_RESERVED_SLUGS=['app', 'admin', 'www', 'api'])

@@ -1,0 +1,99 @@
+<ObrazacPDVispravak verzijaSheme="1.0" xmlns="http://e-porezna.porezna-uprava.hr/sheme/zahtjevi/ObrazacPDVispravak/v1-0">
+	<Metapodaci xmlns="http://e-porezna.porezna-uprava.hr/sheme/Metapodaci/v2-0">
+		<Naslov dc="http://purl.org/dc/elements/1.1/title">Obrazac PDV-ispravak</Naslov>
+		<Autor dc="http://purl.org/dc/elements/1.1/creator">IVAN HORVAT</Autor>
+		<Datum dc="http://purl.org/dc/elements/1.1/date">2024-12-13T12:50:57</Datum>
+		<Format dc="http://purl.org/dc/elements/1.1/format">text/xml</Format>
+		<Jezik dc="http://purl.org/dc/elements/1.1/language">hr-HR</Jezik>
+		<Identifikator dc="http://purl.org/dc/elements/1.1/identifier">e0bf5722-72d4-4a86-852a-e2ea952f8c9a</Identifikator>
+		<Uskladjenost dc="http://purl.org/dc/terms/conformsTo">ObrazacPDVispravak-v1-0</Uskladjenost>
+		<Tip dc="http://purl.org/dc/elements/1.1/type">Elektronički obrazac</Tip>
+		<Adresant>Ministarstvo Financija, Porezna uprava, Zagreb</Adresant>
+	</Metapodaci>
+	<Zaglavlje>
+		<Obveznik>
+			<Ime>IVANA</Ime>
+			<Prezime>HORVAT</Prezime>
+			<OIB>00000000001</OIB>
+			<Adresa>
+				<Mjesto>ZAGREB</Mjesto>
+				<Ulica>ULICA</Ulica>
+				<Broj>0002</Broj>
+			</Adresa>
+			<Telefon>+385133333333</Telefon>
+			<Email>test@test.hr</Email>
+		</Obveznik>
+		<ObracunSastavio>
+			<Ime>IVAN</Ime>
+			<Prezime>HORVAT</Prezime>
+			<Mjesto>ZAGREB</Mjesto>
+			<Datum>2025-02-01</Datum>
+		</ObracunSastavio>
+		<Razdoblje>
+			<DatumOd>2025-01-01</DatumOd>
+			<DatumDo>2025-01-31</DatumDo>
+		</Razdoblje>
+	</Zaglavlje>
+	<Tijelo>
+		<Racuni>
+			<Stavka>
+				<RedniBroj>1</RedniBroj>
+				<BrojRacuna>2024-01</BrojRacuna>
+				<DatumRacuna>2024-12-13</DatumRacuna>
+				<OznakaIdentifikatora>1</OznakaIdentifikatora>
+				<Identifikator>00000000001</Identifikator>
+				<NazivImePrezime>DOBRA TVRTKA D.O.O.</NazivImePrezime>
+				<Isporuka5Osnovica>100.00</Isporuka5Osnovica>
+				<Isporuka5Ispravak>2.33</Isporuka5Ispravak>
+				<Isporuka13Osnovica>101.23</Isporuka13Osnovica>
+				<Isporuka13Ispravak>15.00</Isporuka13Ispravak>
+				<Isporuka25Osnovica>250.00</Isporuka25Osnovica>
+				<Isporuka25Ispravak>22.00</Isporuka25Ispravak>
+				<UkupnoOsnovica>451.23</UkupnoOsnovica>
+				<UkupnoIspravak>39.33</UkupnoIspravak>
+			</Stavka>
+			<Stavka>
+				<RedniBroj>2</RedniBroj>
+				<BrojRacuna>2024-02</BrojRacuna>
+				<DatumRacuna>2024-12-13</DatumRacuna>
+				<OznakaIdentifikatora>2</OznakaIdentifikatora>
+				<Identifikator>HR00000000001</Identifikator>
+				<NazivImePrezime>DOBRA TVRTKA D.O.O.</NazivImePrezime>
+				<Isporuka5Osnovica>100.00</Isporuka5Osnovica>
+				<Isporuka5Ispravak>2.33</Isporuka5Ispravak>
+				<Isporuka13Osnovica>101.23</Isporuka13Osnovica>
+				<Isporuka13Ispravak>15.00</Isporuka13Ispravak>
+				<Isporuka25Osnovica>250.00</Isporuka25Osnovica>
+				<Isporuka25Ispravak>22.00</Isporuka25Ispravak>
+				<UkupnoOsnovica>451.23</UkupnoOsnovica>
+				<UkupnoIspravak>39.33</UkupnoIspravak>
+			</Stavka>
+			<Stavka>
+				<RedniBroj>3</RedniBroj>
+				<BrojRacuna>2024-03</BrojRacuna>
+				<DatumRacuna>2024-12-13</DatumRacuna>
+				<OznakaIdentifikatora>3</OznakaIdentifikatora>
+				<Identifikator>00000000000001</Identifikator>
+				<NazivImePrezime>DOBRA TVRTKA D.O.O.</NazivImePrezime>
+				<Isporuka5Osnovica>100.00</Isporuka5Osnovica>
+				<Isporuka5Ispravak>2.33</Isporuka5Ispravak>
+				<Isporuka13Osnovica>101.23</Isporuka13Osnovica>
+				<Isporuka13Ispravak>15.00</Isporuka13Ispravak>
+				<Isporuka25Osnovica>250.00</Isporuka25Osnovica>
+				<Isporuka25Ispravak>22.00</Isporuka25Ispravak>
+				<UkupnoOsnovica>451.23</UkupnoOsnovica>
+				<UkupnoIspravak>39.33</UkupnoIspravak>
+			</Stavka>
+		</Racuni>
+		<Ukupno>
+			<UkupnoOsnovica5>300.00</UkupnoOsnovica5>
+			<UkupnoIspravak5>6.99</UkupnoIspravak5>
+			<UkupnoOsnovica13>303.69</UkupnoOsnovica13>
+			<UkupnoIspravak13>45.00</UkupnoIspravak13>
+			<UkupnoOsnovica25>750.00</UkupnoOsnovica25>
+			<UkupnoIspravak25>66.00</UkupnoIspravak25>
+			<UkupnoOsnovicaUkupno>1353.69</UkupnoOsnovicaUkupno>
+			<UkupnoIspravakUkupno>117.99</UkupnoIspravakUkupno>
+		</Ukupno>
+	</Tijelo>
+</ObrazacPDVispravak>

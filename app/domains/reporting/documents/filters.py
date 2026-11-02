@@ -42,14 +42,19 @@ EXPORT_COLUMNS = (
 )
 
 
+DIRECTIONS = frozenset({'incoming', 'outgoing', 'deposit', 'official'})
+
+
 @dataclass(frozen=True)
 class DocumentListFilters:
-    direction: str | None = None
+    direction: frozenset[str] | None = None
     status: str | None = None
     search: str | None = None
     year: int | None = None
     month: int | None = None
     partner_id: int | None = None
+    cost_center_id: int | None = None
+    fixed_asset_id: int | None = None
     oib: str | None = None
     date_from: date | None = None
     date_to: date | None = None
@@ -84,10 +89,21 @@ def _date(raw: str | None) -> date | None:
     return date.fromisoformat(raw)
 
 
+def includes_direction(filters: DocumentListFilters, name: str) -> bool:
+    if filters.direction is None:
+        return True
+    return name in filters.direction
+
+
 def parse_filters(query) -> DocumentListFilters:
-    direction = query.get('direction') or None
-    if direction not in (None, 'incoming', 'outgoing', 'deposit'):
-        raise ValueError('direction mora biti incoming, outgoing ili deposit')
+    raw = query.get('direction') or None
+    direction = None
+    if raw:
+        parts = [part.strip() for part in raw.split(',') if part.strip()]
+        unknown = [part for part in parts if part not in DIRECTIONS]
+        if unknown or not parts:
+            raise ValueError('direction mora biti incoming, outgoing, deposit ili official')
+        direction = frozenset(parts)
     view = query.get('view') or None
     if view and view not in SYSTEM_VIEWS:
         raise ValueError(f'Nepoznat view: {view}')
@@ -97,6 +113,8 @@ def parse_filters(query) -> DocumentListFilters:
     year = _int(query.get('year'))
     month = _int(query.get('month'))
     partner_id = _int(query.get('partner'))
+    cost_center_id = _int(query.get('cost_center'))
+    fixed_asset_id = _int(query.get('fixed_asset'))
     return DocumentListFilters(
         direction=direction,
         status=query.get('status') or None,
@@ -104,6 +122,8 @@ def parse_filters(query) -> DocumentListFilters:
         year=year,
         month=month,
         partner_id=partner_id,
+        cost_center_id=cost_center_id,
+        fixed_asset_id=fixed_asset_id,
         oib=(query.get('oib') or '').strip() or None,
         date_from=_date(query.get('date_from')),
         date_to=_date(query.get('date_to')),

@@ -47,11 +47,10 @@ def require_country_code(*, country_code: str = '', country: str = '') -> str:
     return code
 
 
-def supplier_from_payload(payload: dict) -> dict:
-    raw = payload.get('supplier') if isinstance(payload, dict) else {}
+def party_from_raw(raw, *, fallback_iban: str = '') -> dict:
     if not isinstance(raw, dict):
         raw = {}
-    iban = normalize_iban(str(raw.get('iban') or payload.get('iban') or ''))
+    iban = normalize_iban(str(raw.get('iban') or fallback_iban or ''))
     country = str(raw.get('country') or '').strip()
     country_code = resolve_country_code(
         country_code=str(raw.get('country_code') or ''),
@@ -59,7 +58,7 @@ def supplier_from_payload(payload: dict) -> dict:
     ) or ''
     return {
         'name': str(raw.get('name') or '').strip(),
-        'oib': normalize_oib(str(raw.get('oib') or '')),
+        'oib': normalize_oib(str(raw.get('oib') or raw.get('tax_number') or '')),
         'vat_number': normalize_vat_number(str(raw.get('vat_number') or '')),
         'address': str(raw.get('address') or '').strip(),
         'city': str(raw.get('city') or '').strip(),
@@ -68,6 +67,14 @@ def supplier_from_payload(payload: dict) -> dict:
         'country_code': country_code,
         'iban': iban,
     }
+
+
+def supplier_from_payload(payload: dict) -> dict:
+    raw = payload.get('supplier') if isinstance(payload, dict) else {}
+    if not isinstance(raw, dict) or not raw:
+        return party_from_raw({})
+    fallback = str((payload or {}).get('iban') or '')
+    return party_from_raw(raw, fallback_iban=fallback)
 
 
 def parse_money(value) -> Decimal | None:

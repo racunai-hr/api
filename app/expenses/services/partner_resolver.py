@@ -11,15 +11,28 @@ def resolve_partner(*, tenant, oib: str, name: str = '', partner_type: str = 'su
 
     partner = Partner.all_objects.filter(tenant=tenant, tax_number=oib).first()
     if partner:
-        if partner_type == 'supplier' and partner.partner_type == 'customer':
-            partner.partner_type = 'both'
-            partner.save(update_fields=['partner_type'])
-        elif partner_type == 'supplier' and partner.partner_type not in ('supplier', 'both'):
-            partner.partner_type = 'supplier'
-            partner.save(update_fields=['partner_type'])
-        if name and partner.name != name:
+        next_type = partner.partner_type
+        # `other` is a residual / natural-person identity (ADR-0026). Do not recast it
+        # just because an invoice matched the same OIB.
+        if partner.partner_type != 'other':
+            if partner_type in ('supplier', 'customer') and partner.partner_type in ('supplier', 'customer'):
+                if partner.partner_type != partner_type:
+                    next_type = 'both'
+            elif partner_type == 'supplier' and partner.partner_type not in ('supplier', 'both'):
+                next_type = 'supplier'
+            elif partner_type == 'customer' and partner.partner_type not in ('customer', 'both'):
+                next_type = 'customer'
+        updates = []
+        if next_type != partner.partner_type:
+            partner.partner_type = next_type
+            updates.append('partner_type')
+        # MDM name is canonical. Fill a blank; never overwrite an existing name from
+        # invoice/import payload (test UBL reused a real OIB as "Test Kupac d.o.o.").
+        if name and not (partner.name or '').strip():
             partner.name = name
-            partner.save(update_fields=['name'])
+            updates.append('name')
+        if updates:
+            partner.save(update_fields=updates)
         return partner
 
     display_name = name or f'OIB {oib}'

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "mapping_version": 1,
+  "period_from": "2021-01-01",
+  "period_to": "2021-12-31",
+  "taxpayer": {
+    "first_name": "IME",
+    "last_name": "PREZIME",
+    "oib": "00000000001",
+    "municipality_code": "003",
+    "city": "ZAGREB",
+    "street": "ULICA",
+    "house_number": "0001"
+  },
+  "podatak25": "392.50",
+  "podatak31": "392.50",
+  "podatak32": "1",
+  "podatak34": "0",
+  "podatak36": "10.00"
+}

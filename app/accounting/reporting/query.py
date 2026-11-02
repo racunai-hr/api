@@ -63,6 +63,8 @@ def reporting_lines_qs(
     month: int | None = None,
     cumulative: bool = False,
     mode: str = ReportMode.NET,
+    cost_center_id: int | None = None,
+    only_with_cost_center: bool = False,
 ) -> QuerySet[JournalEntryLine]:
     """Stavke temeljnice za agregatne izvještaje (bruto bilanca, bilanca, RDG)."""
     qs = JournalEntryLine.objects.filter(journal_entry__tenant=tenant)
@@ -73,6 +75,10 @@ def reporting_lines_qs(
         cumulative=cumulative,
         date_field_prefix='journal_entry__entry_date',
     )
+    if cost_center_id is not None:
+        qs = qs.filter(cost_center_id=cost_center_id)
+    if only_with_cost_center:
+        qs = qs.filter(cost_center_id__isnull=False)
 
     if mode == ReportMode.NET:
         return qs.filter(

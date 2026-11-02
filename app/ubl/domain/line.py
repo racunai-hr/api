@@ -15,6 +15,8 @@ class InvoiceLine(BaseModel):
     item_name: str
     tax_category: str = 'S'
     tax_name: str
+    tax_scheme: str = 'VAT'
+    tax_exemption_reason: str | None = None
     tax_percent: Decimal
     unit_price: Decimal
     base_quantity: Decimal = Field(default=Decimal('1'))

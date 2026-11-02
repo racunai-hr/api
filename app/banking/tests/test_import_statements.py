@@ -13,11 +13,52 @@ from banking.models import BankStatement, BankTransaction
 from banking.parsers.camt053 import parse_camt053
 from banking.parsers.format_detection import detect_format
 from banking.services.import_statements import import_bank_statement_file
+from domains.banking.read.dto import statement_list_dto, transaction_dto
 from payments.models import BankAccount
 from tenants.models import Tenant
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 SAMPLE_XML = (FIXTURES / 'otp_camt053_sample.xml').read_bytes()
+HRK_CAMT = b"""<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr>
+      <MsgId>HRK1</MsgId>
+      <CreDtTm>2026-10-30T01:20:56.721</CreDtTm>
+    </GrpHdr>
+    <Stmt>
+      <Id>81276237</Id>
+      <CreDtTm>2026-10-30T01:20:56.721</CreDtTm>
+      <FrToDt>
+        <FrDtTm>2022-10-05T00:00:00.000</FrDtTm>
+        <ToDtTm>2022-10-05T23:59:59.999</ToDtTm>
+      </FrToDt>
+      <Acct>
+        <Id><IBAN>HR6124070001100204771</IBAN></Id>
+        <Ccy>HRK</Ccy>
+      </Acct>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="HRK">0.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2022-10-05</Dt></Dt>
+      </Bal>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="HRK">81.44</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2022-10-05</Dt></Dt>
+      </Bal>
+      <Ntry>
+        <Amt Ccy="HRK">3180.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <BookgDt><Dt>2022-10-05</Dt></BookgDt>
+        <AcctSvcrRef>IUP 33459032</AcctSvcrRef>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>
+"""
 KNOWN_IBAN = 'HR6124070001100204771'
 UNKNOWN_IBAN = 'HR0012345678901234567'
 
@@ -99,6 +140,39 @@ class BankStatementImportTests(TestCase):
             BankTransaction.all_objects.filter(tenant=self.tenant).count(),
             7,
         )
+        tx = BankTransaction.all_objects.filter(tenant=self.tenant).first()
+        self.assertEqual(tx.currency, 'EUR')
+        self.assertEqual(tx.amount_eur, tx.amount)
+        stmt = tx.bank_statement
+        self.assertEqual(stmt.currency, 'EUR')
+
+    def test_hrk_statement_books_eur_on_the_eur_account(self):
+        result = self._import(content=HRK_CAMT, filename='BCS.hrk.xml')
+        self.assertEqual(result.errors, ())
+        self.assertEqual(result.statements_created, 1)
+        self.assertEqual(result.transactions_created, 1)
+        self.assertTrue(any('kunama' in warning for warning in result.warnings))
+
+        stmt = BankStatement.all_objects.get(tenant=self.tenant, statement_number='81276237')
+        self.assertEqual(stmt.bank_account_id, self.bank_account.pk)
+        self.assertEqual(stmt.currency, 'HRK')
+        self.assertEqual(stmt.opening_balance, Decimal('0.00'))
+        self.assertEqual(stmt.closing_balance, Decimal('81.44'))
+        payload = statement_list_dto(stmt)
+        self.assertEqual(payload['currency'], 'HRK')
+        self.assertEqual(payload['opening_balance'], '0.00')
+        self.assertEqual(payload['opening_balance_eur'], '0.00')
+        self.assertEqual(payload['closing_balance'], '81.44')
+        self.assertEqual(payload['closing_balance_eur'], '10.81')
+
+        tx = stmt.transactions.get()
+        self.assertEqual(tx.amount, Decimal('3180.00'))
+        self.assertEqual(tx.currency, 'HRK')
+        self.assertEqual(tx.amount_eur, Decimal('422.06'))
+        tx_payload = transaction_dto(tx)
+        self.assertEqual(tx_payload['amount'], '3180.00')
+        self.assertEqual(tx_payload['currency'], 'HRK')
+        self.assertEqual(tx_payload['amount_eur'], '422.06')
 
     def test_reimport_skips_transactions_and_warns_on_balances(self):
         first = self._import()

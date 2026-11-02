@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 
-PROJECTION_ENGINE_VERSION = 1
+PROJECTION_ENGINE_VERSION = 2
 
 
 class VatProjectionStatus(StrEnum):

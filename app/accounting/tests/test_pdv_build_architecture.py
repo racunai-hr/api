@@ -62,3 +62,46 @@ class BuildPdvPayloadArchitectureTests(TestCase):
 
         self.assertEqual(payload.field_pair('203').vrijednost, Decimal('100.00'))
         self.assertEqual(payload.field_scalar('400'), Decimal('-59.11'))
+        self.assertEqual(payload.field_scalar('000'), Decimal('100.00'))
+        self.assertTrue(payload.field_bool('660'))
+
+    def test_000_is_i_plus_ii_and_660_is_true_with_eu_acquisition(self):
+        boxes = {box.code: BoxTotals(Decimal('0.00'), Decimal('0.00')) for box in active_boxes()}
+        boxes['203'] = BoxTotals(Decimal('3360.00'), Decimal('840.00'))
+        boxes['207'] = BoxTotals(Decimal('33000.00'), Decimal('8250.00'))
+        boxes['307'] = BoxTotals(Decimal('33000.00'), Decimal('8250.00'))
+        from accounting.services.tax_forms.pdv.build import map_boxes_to_pdv_fields
+
+        fields = map_boxes_to_pdv_fields(boxes)
+        self.assertEqual(fields['000'], Decimal('36360.00'))
+        self.assertEqual(fields['200'].vrijednost, Decimal('36360.00'))
+        self.assertEqual(fields['400'], Decimal('840.00'))
+        self.assertTrue(fields['660'])
+
+    def test_103_feeds_100_and_000(self):
+        boxes = {box.code: BoxTotals(Decimal('0.00'), Decimal('0.00')) for box in active_boxes()}
+        boxes['103'] = BoxTotals(Decimal('25000.00'), Decimal('0.00'))
+        boxes['203'] = BoxTotals(Decimal('3360.00'), Decimal('840.00'))
+        boxes['207'] = BoxTotals(Decimal('33000.00'), Decimal('8250.00'))
+        boxes['307'] = BoxTotals(Decimal('33000.00'), Decimal('8250.00'))
+        from accounting.services.tax_forms.pdv.build import map_boxes_to_pdv_fields
+
+        fields = map_boxes_to_pdv_fields(boxes)
+        self.assertEqual(fields['103'], Decimal('25000.00'))
+        self.assertEqual(fields['100'], Decimal('25000.00'))
+        self.assertEqual(fields['111'], Decimal('0.00'))
+        self.assertEqual(fields['200'].vrijednost, Decimal('36360.00'))
+        self.assertEqual(fields['000'], Decimal('61360.00'))
+        self.assertEqual(fields['400'], Decimal('840.00'))
+
+    def test_spanish_service_104_is_only_section_i_line(self):
+        boxes = {box.code: BoxTotals(Decimal('0.00'), Decimal('0.00')) for box in active_boxes()}
+        boxes['104'] = BoxTotals(Decimal('10000.00'), Decimal('0.00'))
+        from accounting.services.tax_forms.pdv.build import map_boxes_to_pdv_fields
+
+        fields = map_boxes_to_pdv_fields(boxes)
+        self.assertEqual(fields['104'], Decimal('10000.00'))
+        self.assertEqual(fields['100'], Decimal('10000.00'))
+        self.assertEqual(fields['000'], Decimal('10000.00'))
+        self.assertEqual(fields['103'], Decimal('0.00'))
+        self.assertEqual(fields['111'], Decimal('0.00'))

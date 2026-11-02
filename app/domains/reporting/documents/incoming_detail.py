@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from banking.book import transaction_book_amount
 from domains.reporting.documents.projection import money
+from domains.reporting.documents.settlement_trail import build_settlement_trail
+from integrations.services.inbound_rejection import (
+    build_actions_reject_block,
+    get_pending_rejection,
+)
 from lxml import etree
 from ubl.parser.invoice import PARSER_VERSION, ParsedInvoice, UblMonetaryError, parse_invoice_ubl
 from super_integration.portal import build_super_external_view_url
@@ -102,7 +108,10 @@ def build_supplier_block(partner, parsed: ParsedInvoice | None, rel) -> dict:
 def build_document_meta(document, parsed: ParsedInvoice | None, *, source: str | None) -> dict:
     source_label = None
     fmt = None
-    if source == 'super':
+    if source == 'eracun':
+        source_label = 'eRačun'
+        fmt = 'UBL'
+    elif source == 'super':
         source_label = 'SUPER eRačun'
         fmt = 'UBL'
     elif source == 'as4':
@@ -198,6 +207,51 @@ def build_lifecycle_status(
     }
 
 
+def _account_ref(account) -> dict | None:
+    if account is None:
+        return None
+    return {
+        'id': account.pk,
+        'code': account.account_code,
+        'name': account.account_name,
+        'active': account.is_active,
+    }
+
+
+def _book_face(document, raw) -> str | None:
+    if (getattr(document, 'currency', None) or '').strip().upper() != 'HRK' or raw is None:
+        return None
+    from accounting.services.fx import to_eur_amount
+
+    return _money_str(to_eur_amount(raw, 'HRK'))
+
+
+def build_expense_lines_block(document) -> list[dict]:
+    rows = []
+    for line in document.lines.all():
+        rows.append(
+            {
+                'id': line.pk,
+                'position': line.position,
+                'classification': None,
+                'name': line.description,
+                'description': None,
+                'unit': None,
+                'quantity': None,
+                'unit_price': None,
+                'vat_rate': None,
+                'net_amount': _money_str(line.net_amount),
+                'vat_amount': _money_str(line.vat_amount),
+                'gross_amount': _money_str(line.gross_amount),
+                'book_net_amount': _book_face(document, line.net_amount),
+                'book_vat_amount': _book_face(document, line.vat_amount),
+                'book_gross_amount': _book_face(document, line.gross_amount),
+                'posting_account': _account_ref(line.posting_account),
+            }
+        )
+    return rows
+
+
 def build_lines_block(parsed: ParsedInvoice | None) -> list[dict]:
     if not parsed:
         return []
@@ -211,6 +265,7 @@ def build_lines_block(parsed: ParsedInvoice | None) -> list[dict]:
             }
         rows.append(
             {
+                'id': None,
                 'position': line.position,
                 'classification': classif,
                 'name': line.name,
@@ -223,6 +278,7 @@ def build_lines_block(parsed: ParsedInvoice | None) -> list[dict]:
                 'net_amount': _money_str(line.line_extension_amount),
                 'vat_amount': None,
                 'gross_amount': None,
+                'posting_account': None,
             }
         )
     return rows
@@ -453,6 +509,8 @@ def build_payment_block(*, bank_txs, match_status: str | None) -> dict:
         'matched': match_status == 'matched',
         'date': primary.transaction_date.isoformat() if primary and primary.transaction_date else None,
         'amount': _money_str(primary.amount) if primary else None,
+        'currency': (primary.currency or None) if primary else None,
+        'book_amount': _money_str(transaction_book_amount(primary)) if primary else None,
         'account_mask': account_mask,
         'reference': (primary.reference or None) if primary else None,
         'reconcile_status': match_status,
@@ -476,6 +534,7 @@ def enrich_incoming_detail_payload(
     bank_txs=None,
     match_status: str | None = None,
     period_label: str | None = None,
+    sibling_jes=None,
 ) -> dict:
     """Attach PR A + PR C blocks onto an incoming DocumentDetail payload."""
     source = document.source
@@ -484,6 +543,7 @@ def enrich_incoming_detail_payload(
     allocations = allocations or []
     bank_txs = bank_txs or []
     ledger_rows = ledger_rows or []
+    sibling_jes = sibling_jes if sibling_jes is not None else []
 
     payload['number'] = document.receipt_number or document.expense_number
     payload['supplier'] = build_supplier_block(partner, parsed, rel)
@@ -496,7 +556,13 @@ def enrich_incoming_detail_payload(
         ledger_rows=ledger_rows,
         match_status=match_status,
     )
-    payload['lines'] = build_lines_block(parsed)
+    if get_pending_rejection(document) is not None and document.status != 'rejected':
+        payload['status']['workflow'] = 'rejection_pending'
+    payload['actions'] = {
+        'reject': build_actions_reject_block(document),
+    }
+    expense_lines = build_expense_lines_block(document)
+    payload['lines'] = expense_lines or build_lines_block(parsed)
     payload['charges'] = build_charges_block(parsed)
     payload['tax_summary'] = build_tax_summary_block(parsed)
     payload['totals'] = build_totals_block(document, parsed)
@@ -519,6 +585,17 @@ def enrich_incoming_detail_payload(
         allocations=allocations,
     )
     payload['payment'] = build_payment_block(bank_txs=bank_txs, match_status=match_status)
+    payload['settlement_trail'] = build_settlement_trail(
+        subledger=subledger,
+        allocations=allocations,
+        sibling_jes=sibling_jes,
+        lines_by_je=rel.get('lines_by_je') or {},
+        bank_by_je=rel.get('bank_by_je') or {},
+        pfc_by_je=rel.get('pfc_by_je') or {},
+        settlement_method=getattr(document, 'settlement_method', None) or None,
+        storno_by_je=rel.get('storno_by_je') or {},
+    )
+    payload['reversal_of'] = (rel.get('reversal_by_expense') or {}).get(document.pk)
     if parsed and parsed.notes and not (payload.get('notes') or '').strip():
         payload['notes'] = '\n'.join(parsed.notes)
     return payload

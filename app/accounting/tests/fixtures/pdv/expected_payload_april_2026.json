@@ -167,7 +167,7 @@
       "prodajna_vrijednost": "0.00"
     }
   },
-  "mapping_version": 7,
+  "mapping_version": 15,
   "period_from": "2026-04-01",
   "period_to": "2026-04-30",
   "schema_version": "11.0",

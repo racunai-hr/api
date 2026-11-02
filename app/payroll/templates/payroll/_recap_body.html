@@ -1,0 +1,78 @@
+{% load payroll_format %}
+<div class="section-title">Elementi obračuna</div>
+<table class="data">
+  <tr><th>Broj djelatnika</th><th>Broj dokumenata</th></tr>
+  <tr><td>{{ totals.employee_count }}</td><td>{{ totals.document_count }}</td></tr>
+</table>
+
+<div class="section-title">Radni sati</div>
+<table class="data">
+  <thead><tr><th>Naziv naknade</th><th class="num">Sati</th><th class="num">Brutto plaća</th></tr></thead>
+  <tbody>
+    {% for earning in totals.earnings %}
+    <tr><td>{{ earning.name }}</td><td class="num">{{ earning.hours|hr_amount }}</td><td class="num">{{ earning.gross_amount|hr_amount }}</td></tr>
+    {% endfor %}
+    <tr class="totals-row"><td>UKUPNO</td><td class="num">{{ total_hours|hr_amount }}</td><td class="num">{{ totals.gross_total|hr_amount }}</td></tr>
+  </tbody>
+</table>
+
+<div class="section-title">Doprinosi</div>
+<table class="data">
+  <thead><tr><th>Naziv doprinosa</th><th class="num">Doprinos iz plaće</th><th class="num">Doprinos na plaću</th><th class="num">Ukupno</th></tr></thead>
+  <tbody>
+    {% for c in totals.contributions %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td class="num">{{ c.amount_from_salary|hr_amount }}</td>
+      <td class="num">{{ c.amount_on_salary|hr_amount }}</td>
+      <td class="num">{{ c.total|hr_amount }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="totals-row">
+      <td>UKUPNO</td>
+      <td class="num">{{ contributions_from_total|hr_amount }}</td>
+      <td class="num">{{ totals.zo_total|hr_amount }}</td>
+      <td class="num">{{ contributions_grand_total|hr_amount }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">Osnovica za porez na dohodak</div>
+<table class="data">
+  <tr><th>Plaća prije poreza — dohodak</th><th>Osobni odbitak</th><th>Porezna osnovica</th></tr>
+  <tr>
+    <td class="num">{{ totals.income_base_total|hr_amount }}</td>
+    <td class="num">{{ totals.personal_allowance_total|hr_amount }}</td>
+    <td class="num">{{ totals.tax_base_total|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Porez, prirez i neto plaća</div>
+<table class="data">
+  <tr><th>Porez na dohodak</th><th>Prirez</th><th>Dodaci/obustave</th><th>Netto plaća</th></tr>
+  <tr>
+    <td class="num">{{ totals.income_tax_total|hr_amount }}</td>
+    <td class="num">{{ totals.surtax_total|hr_amount }}</td>
+    <td class="num">{{ totals.adjustments_total|hr_amount }}</td>
+    <td class="num">{{ totals.net_total|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Iznos za isplatu</div>
+<table class="data">
+  <tr><th>Brutto plaća</th><th>Ukupni trošak rada</th><th>Iznos za isplatu</th></tr>
+  <tr>
+    <td class="num">{{ totals.gross_total|hr_amount }}</td>
+    <td class="num">{{ totals.total_labor_cost|hr_amount }}</td>
+    <td class="num">{{ totals.net_total|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Zaštićeni račun</div>
+<table class="data">
+  <tr><th>Ukupan zaštićeni iznos</th><th>Redovni račun</th></tr>
+  <tr>
+    <td class="num">{{ totals.protected_total|hr_amount }}</td>
+    <td class="num">{{ totals.regular_account_total|hr_amount }}</td>
+  </tr>
+</table>

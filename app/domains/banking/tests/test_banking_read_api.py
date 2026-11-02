@@ -19,6 +19,7 @@ from tenants.models import Tenant, TenantMembership
 
 HOST = 'bankread.racunai.hr'
 OTHER_HOST = 'bankother.racunai.hr'
+SEARCH_HOST = 'banksearch.racunai.hr'
 IBAN = 'HR6124070001100204771'
 
 
@@ -294,3 +295,132 @@ class BankingReadApiTests(TestCase):
         balances = rows[stale_account.pk]['balances']
         self.assertTrue(balances[0]['is_stale'])
         self.assertEqual(balances[0]['amount'], '2.00')
+
+
+@override_settings(
+    ALLOWED_HOSTS=[HOST, OTHER_HOST, SEARCH_HOST, 'testserver'],
+    TENANT_PLATFORM_DOMAIN='racunai.hr',
+    TENANT_STAGE_INFIX='',
+    TENANT_RESERVED_SLUGS=['app', 'admin', 'www', 'api'],
+    SECURE_SSL_REDIRECT=False,
+)
+class BankingTransactionSearchTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.tenant = Tenant.objects.create(slug='banksearch', name='Bank Search Co')
+        User = get_user_model()
+        cls.viewer = User.objects.create_user(username='bank-search-viewer', password='test')
+        TenantMembership.objects.create(user=cls.viewer, tenant=cls.tenant, role='viewer')
+
+        cls.account = BankAccount.all_objects.create(
+            tenant=cls.tenant,
+            account_name='Poslovni EUR',
+            bank_name='OTP',
+            account_number='0204772',
+            iban='HR6124070001100204772',
+            currency='EUR',
+        )
+        cls.statement = BankStatement.all_objects.create(
+            tenant=cls.tenant,
+            statement_number='ST-SEARCH',
+            bank_account=cls.account,
+            statement_date=date(2026, 6, 1),
+            opening_balance=Decimal('1000.00'),
+            closing_balance=Decimal('1000.00'),
+            imported_by=cls.viewer,
+        )
+
+        cls.tx_counterparty = BankTransaction.all_objects.create(
+            tenant=cls.tenant,
+            bank_statement=cls.statement,
+            transaction_date=date(2026, 6, 1),
+            amount=Decimal('400.00'),
+            transaction_type='debit',
+            description='Invoice payment',
+            counterparty_name='Telecom26 AG',
+            currency='EUR',
+            match_status='unmatched',
+            external_id='search-tx-a',
+        )
+        cls.tx_description = BankTransaction.all_objects.create(
+            tenant=cls.tenant,
+            bank_statement=cls.statement,
+            transaction_date=date(2026, 6, 2),
+            amount=Decimal('500.00'),
+            transaction_type='debit',
+            description='Prepayment customer Fine Star Telecom26 prepaid top-up',
+            counterparty_name='Some Vendor',
+            currency='EUR',
+            match_status='unmatched',
+            external_id='search-tx-b',
+        )
+        cls.tx_matched = BankTransaction.all_objects.create(
+            tenant=cls.tenant,
+            bank_statement=cls.statement,
+            transaction_date=date(2026, 6, 3),
+            amount=Decimal('750.00'),
+            transaction_type='debit',
+            description='Telecom26 historical payment',
+            counterparty_name='Other Vendor',
+            currency='EUR',
+            match_status='matched',
+            external_id='search-tx-c',
+        )
+        BankTransaction.all_objects.create(
+            tenant=cls.tenant,
+            bank_statement=cls.statement,
+            transaction_date=date(2026, 6, 4),
+            amount=Decimal('100.00'),
+            transaction_type='debit',
+            description='Unrelated supplier payment',
+            counterparty_name='Acme GmbH',
+            currency='EUR',
+            match_status='unmatched',
+            external_id='search-tx-noise',
+        )
+
+    def _auth_client(self):
+        client = APIClient()
+        token = RefreshToken.for_user(self.viewer).access_token
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        client.defaults['HTTP_HOST'] = SEARCH_HOST
+        return client
+
+    def test_search_finds_by_counterparty_name(self):
+        client = self._auth_client()
+        response = client.get('/api/banking/transactions/', {'search': 'Telecom26'})
+        self.assertEqual(response.status_code, 200)
+        ids = {row['id'] for row in response.json()['results']}
+        self.assertIn(self.tx_counterparty.pk, ids)
+        self.assertNotIn(
+            BankTransaction.all_objects.get(external_id='search-tx-noise').pk,
+            ids,
+        )
+
+    def test_search_finds_by_description_only(self):
+        client = self._auth_client()
+        response = client.get('/api/banking/transactions/', {'search': 'Telecom26'})
+        self.assertEqual(response.status_code, 200)
+        ids = {row['id'] for row in response.json()['results']}
+        self.assertIn(self.tx_description.pk, ids)
+        self.assertEqual(self.tx_description.counterparty_name, 'Some Vendor')
+
+    def test_search_with_match_status_unmatched(self):
+        client = self._auth_client()
+        response = client.get(
+            '/api/banking/transactions/',
+            {'match_status': 'unmatched', 'search': 'Telecom26'},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['count'], 2)
+        ids = {row['id'] for row in data['results']}
+        self.assertEqual(ids, {self.tx_counterparty.pk, self.tx_description.pk})
+        self.assertNotIn(self.tx_matched.pk, ids)
+
+    def test_search_no_results(self):
+        client = self._auth_client()
+        response = client.get('/api/banking/transactions/', {'search': 'NoSuchVendorXYZ'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['count'], 0)
+        self.assertEqual(response.json()['results'], [])

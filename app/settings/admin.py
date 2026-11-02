@@ -68,7 +68,14 @@ class CompanySettingsAdmin(TenantAdminMixin, admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Porezni podaci', {
-            'fields': ('vat_number', 'tax_number', 'registration_number', 'tax_office')
+            'fields': (
+                'vat_registration_status',
+                'vat_number',
+                'vat_id',
+                'tax_number',
+                'registration_number',
+                'tax_office',
+            )
         }),
         ('Financijske postavke', {
             'fields': ('default_currency', 'default_tax_rate')

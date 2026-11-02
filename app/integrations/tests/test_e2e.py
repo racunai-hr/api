@@ -15,8 +15,7 @@ from integrations.manager import IntegrationManager
 from integrations.models import IntegrationConfig
 from integrations.registry import discover_connectors, registered_pairs
 from fiscal_gateway.connector import CisFiscalizationConnector
-from fiscal_gateway.models import FiscalTenantConfig
-from super_integration.models import SuperTenantConfig
+from fiscal_gateway.models import DirectTenantConfig, FiscalTenantConfig
 from tenants.models import Tenant
 from ubl.domain.document import UblDocument
 
@@ -29,27 +28,25 @@ def _load_document(name: str) -> UblDocument:
 
 
 @override_settings(TENANT_PLATFORM_DOMAIN='racunai.hr', USE_FISKAL_PLATFORM=False)
-class SuperOutboundE2ETests(TestCase):
+class EracunOutboundE2ETests(TestCase):
     def setUp(self):
         discover_connectors()
-        self.tenant = Tenant.objects.create(slug='e2e-super', name='E2E SUPER')
-        SuperTenantConfig.all_objects.create(
+        self.tenant = Tenant.objects.create(slug='e2e-eracun', name='E2E eRačun')
+        DirectTenantConfig.all_objects.create(
             tenant=self.tenant,
-            username='user',
-            password='pass',
-            company_guid='guid-e2e',
+            oib='36619131370',
             is_active=True,
         )
         IntegrationConfig.all_objects.create(
             tenant=self.tenant,
             integration_type=IntegrationType.ERACUN,
-            provider=IntegrationProvider.SUPER,
+            provider=IntegrationProvider.DIRECT,
             environment=IntegrationEnvironment.PRODUCTION,
             is_active=True,
         )
 
     @patch('integrations.manager.EracunDocumentService.build_from_invoice')
-    def test_super_outbound_validates_ubl_before_send(self, mock_build):
+    def test_eracun_outbound_validates_ubl_before_send(self, mock_build):
         invoice = MagicMock(tenant=self.tenant)
         document = MagicMock(spec=UblDocument)
         ubl_xml = '<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"/>'
@@ -70,11 +67,9 @@ class DualConnectorE2ETests(TestCase):
     def setUp(self):
         discover_connectors()
         self.tenant = Tenant.objects.create(slug='e2e-dual', name='E2E Dual')
-        SuperTenantConfig.all_objects.create(
+        DirectTenantConfig.all_objects.create(
             tenant=self.tenant,
-            username='user',
-            password='pass',
-            company_guid='guid-dual',
+            oib='36619131370',
             is_active=True,
         )
         FiscalTenantConfig.all_objects.create(
@@ -85,7 +80,7 @@ class DualConnectorE2ETests(TestCase):
         IntegrationConfig.all_objects.create(
             tenant=self.tenant,
             integration_type=IntegrationType.ERACUN,
-            provider=IntegrationProvider.SUPER,
+            provider=IntegrationProvider.DIRECT,
             environment=IntegrationEnvironment.PRODUCTION,
             is_active=True,
         )

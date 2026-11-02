@@ -1,0 +1,156 @@
+{% extends "payroll/_base.html" %}
+{% load payroll_format %}
+{% block content %}
+
+<div class="section-title">Poslodavac</div>
+<table class="data">
+  <tr><th>Naziv poslodavca</th><th>Sjedište</th><th>OIB</th><th>Žiro račun IBAN</th></tr>
+  <tr>
+    <td>{{ company.company_name }}</td>
+    <td>{{ company.formatted_street }}, {{ company.city }}</td>
+    <td>{{ company.vat_number }}</td>
+    <td>{{ payment_iban }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Radnik</div>
+<table class="data">
+  <tr><th>Šifra</th><th>Ime i prezime</th><th>Mjesto</th><th>OIB</th><th>Mjesto rada</th></tr>
+  <tr>
+    <td>{{ payslip.employee.code }}</td>
+    <td>{{ payslip.employee.full_name }}</td>
+    <td>{{ payslip.employee.city }}</td>
+    <td>{{ payslip.employee.oib }}</td>
+    <td>{{ payslip.employee.work_location }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Banka</div>
+<table class="data">
+  <tr><th>Naziv banke</th><th>IBAN radnika</th></tr>
+  <tr><td>{{ payslip.employee.bank_name }}</td><td>{{ payslip.employee.iban }}</td></tr>
+</table>
+
+<div class="section-title">Elementi obračuna</div>
+<table class="data">
+  <tr>
+    <th>Od dana</th><th>Do dana</th><th class="num">Brutto plaća</th>
+    <th>Prvi/zadnji mjesec</th><th>Način isplate</th><th>Datum isplate</th>
+    <th class="num">Ukupni troškovi rada</th>
+  </tr>
+  <tr>
+    <td>{{ payslip.date_from|hr_date }}</td>
+    <td>{{ payslip.date_to|hr_date }}</td>
+    <td class="num">{{ payslip.gross_salary|hr_amount }}</td>
+    <td>{% if payslip.is_first_month %}prvi mjesec{% endif %}{% if payslip.is_last_month %} zadnji mjesec{% endif %}</td>
+    <td>{{ payslip.get_payment_method_display }}</td>
+    <td>{{ payslip.period.payment_date|hr_date }}</td>
+    <td class="num">{{ payslip.total_labor_cost|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Radni sati</div>
+<table class="data">
+  <thead><tr><th>Naziv naknade</th><th class="num">Sati</th><th class="num">Faktor</th><th class="num">Brutto plaća</th><th>Napomena</th></tr></thead>
+  <tbody>
+    {% for line in payslip.earning_lines.all %}
+    <tr>
+      <td>{{ line.name }}</td>
+      <td class="num">{{ line.hours|hr_amount }}</td>
+      <td class="num">{{ line.factor|hr_amount }}</td>
+      <td class="num">{{ line.gross_amount|hr_amount }}</td>
+      <td>{{ line.note }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="section-title">Doprinosi</div>
+<table class="data">
+  <thead><tr><th>Naziv doprinosa</th><th class="num">Osnovica</th><th class="num">% iz plaće</th><th class="num">Doprinos iz plaće</th><th class="num">% na plaću</th><th class="num">Doprinos na plaću</th></tr></thead>
+  <tbody>
+    {% for line in payslip.contribution_lines.all %}
+    <tr>
+      <td>{{ line.name }}</td>
+      <td class="num">{{ line.base_amount|hr_amount }}</td>
+      <td class="num">{{ line.rate_from_salary|hr_amount }}</td>
+      <td class="num">{{ line.amount_from_salary|hr_amount }}</td>
+      <td class="num">{{ line.rate_on_salary|hr_amount }}</td>
+      <td class="num">{{ line.amount_on_salary|hr_amount }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="section-title">Osnovica za porez na dohodak</div>
+<table class="data">
+  <tr><th>Plaća prije poreza — dohodak</th><th>Osnovni osobni odbitak</th><th>Osobni koeficijent</th><th>Osobni odbitak</th><th>Porezna osnovica</th></tr>
+  <tr>
+    <td class="num">{{ payslip.income_base|hr_amount }}</td>
+    <td class="num">{{ tax_year.basic_personal_allowance|hr_amount }}</td>
+    <td class="num">{{ payslip.employee.personal_allowance_coefficient|hr_amount }}</td>
+    <td class="num">{{ payslip.personal_allowance_amount|hr_amount }}</td>
+    <td class="num">{{ payslip.tax_base|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Porez na dohodak</div>
+<table class="data">
+  <tr><th>Osnovica</th><th class="num">Stopa</th><th class="num">Porez</th></tr>
+  <tr>
+    <td class="num">{{ payslip.tax_base|hr_amount }}</td>
+    <td class="num">{{ payslip.income_tax_rate_used|hr_percent }}</td>
+    <td class="num">{{ payslip.income_tax_amount|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Prirez i neto plaća</div>
+<table class="data">
+  <tr><th>Porez</th><th>Prirez</th><th>Porez i prirez</th><th>Netto plaća</th></tr>
+  <tr>
+    <td class="num">{{ payslip.income_tax_amount|hr_amount }}</td>
+    <td class="num">{{ payslip.surtax_amount|hr_amount }}</td>
+    <td class="num">{{ income_tax_plus_surtax|hr_amount }}</td>
+    <td class="num">{{ payslip.net_salary|hr_amount }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Dodaci/obustave</div>
+<table class="data">
+  <thead><tr><th>Naziv dodatka/obustave</th><th class="num">Iznos</th><th>Oznaka</th></tr></thead>
+  <tbody>
+    {% for line in payslip.adjustment_lines.all %}
+    <tr><td>{{ line.name }}</td><td class="num">{{ line.amount|hr_amount }}</td><td>{{ line.note }}</td></tr>
+    {% endfor %}
+    <tr class="totals-row"><td colspan="2" class="num">{{ adjustments_total|hr_amount }}</td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="section-title">Isplata plaće</div>
+<table class="data">
+  <tr><th>Utvrđeni iznos za isplatu</th><th>Obrazac</th><th>Datum predaje radniku</th></tr>
+  <tr>
+    <td class="num">{{ payslip.net_salary|hr_amount }}</td>
+    <td>{{ payslip.delivery_form }}</td>
+    <td>{{ payslip.delivered_to_employee_at|hr_date }}</td>
+  </tr>
+</table>
+
+<div class="section-title">Zaštićeni račun</div>
+<table class="data">
+  <tr>
+    <th>Zaštićeno bolovanje HZZO</th><th>Zaštićeno bolovanje do 42. d.</th>
+    <th>Zaštićeni dodaci</th><th>Zaštićeni dio plaće</th>
+    <th>Ukupan zaštićeni iznos</th><th>Redovni račun</th>
+  </tr>
+  <tr>
+    <td class="num">{{ payslip.protected_sick_leave_hzzo|hr_amount }}</td>
+    <td class="num">{{ payslip.protected_sick_leave_42d|hr_amount }}</td>
+    <td class="num">{{ payslip.protected_adjustments|hr_amount }}</td>
+    <td class="num">{{ payslip.protected_salary_part|hr_amount }}</td>
+    <td class="num">{{ payslip.protected_total|hr_amount }}</td>
+    <td class="num">{{ payslip.regular_account_amount|hr_amount }}</td>
+  </tr>
+</table>
+
+{% endblock %}

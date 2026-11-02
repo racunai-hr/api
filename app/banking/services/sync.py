@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from accounting.services.fx import to_eur_amount
 from banking.adapters.normalizer import to_bank_transactions
 from banking.adapters.otp import get_adapter
 from banking.models import BankStatement, BankTransaction
@@ -37,12 +38,14 @@ def sync_connection_transactions(connection: BankConnection, *, days_back: int =
         system_user = User.objects.first()
 
     statement_number = f'OTP-{account_id}-{date_to.isoformat()}'
+    account_currency = (connection.bank_account.currency or 'EUR').strip().upper() or 'EUR'
     statement, _ = BankStatement.all_objects.get_or_create(
         tenant=connection.tenant,
         bank_account=connection.bank_account,
         statement_number=statement_number,
         defaults={
             'statement_date': date_to,
+            'currency': account_currency,
             'opening_balance': 0,
             'closing_balance': 0,
             'status': 'imported',
@@ -61,6 +64,7 @@ def sync_connection_transactions(connection: BankConnection, *, days_back: int =
                 'value_date': tx.value_date,
                 'amount': tx.amount,
                 'currency': tx.currency,
+                'amount_eur': to_eur_amount(tx.amount, tx.currency or account_currency),
                 'transaction_type': tx.transaction_type,
                 'description': tx.description,
                 'reference': tx.reference,

@@ -11,7 +11,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from accounting.reporting.query import ReportMode, journal_report_items, reporting_lines_qs
-from accounting.models import ChartOfAccounts, FiscalPeriod
+from accounting.models import ChartOfAccounts, CostCenter, FiscalPeriod
 from domains.finance.services.aging import (
     AGING_BUCKET_KEYS,
     AGING_BUCKET_LABELS,
@@ -188,6 +188,149 @@ def _group_by_class(rows: list[dict]) -> list[dict]:
         }
         for ac in sorted(totals.keys())
     ]
+
+
+def cost_center_report(tenant, year: int, month: int, *, cumulative: bool = True) -> dict:
+    """RDG presjek po mjestu troška. Kanonski trag je JournalEntryLine.cost_center."""
+    lines = reporting_lines_qs(
+        tenant,
+        year=year,
+        month=month,
+        cumulative=cumulative,
+        mode=ReportMode.NET,
+    ).values('cost_center_id', 'account_id').annotate(
+        debit=Sum('debit_amount'),
+        credit=Sum('credit_amount'),
+    )
+    account_ids = {row['account_id'] for row in lines}
+    accounts = {
+        account.pk: account
+        for account in ChartOfAccounts.all_objects.filter(tenant=tenant, id__in=account_ids)
+    }
+    cost_centers = {
+        row.pk: row
+        for row in CostCenter.all_objects.filter(tenant=tenant).select_related('parent')
+    }
+
+    groups: dict[int | None, dict] = {}
+    unassigned_total = Decimal('0')
+    assigned_total = Decimal('0')
+
+    for row in lines:
+        account = accounts.get(row['account_id'])
+        if account is None:
+            continue
+        klass = account.account_class or (account.account_code[:1] if account.account_code else '')
+        if klass not in RDG_EXPENSE_CLASSES and klass != RDG_CLASS_SEVEN:
+            continue
+        debit = row['debit'] or Decimal('0')
+        credit = row['credit'] or Decimal('0')
+        if klass in RDG_EXPENSE_CLASSES:
+            amount = debit - credit
+        else:
+            amount = credit - debit
+        cc_id = row['cost_center_id']
+        bucket = groups.setdefault(cc_id, {
+            'cost_center_id': cc_id,
+            'code': '',
+            'name': 'Bez MT',
+            'kind': '',
+            'parent_id': None,
+            'parent_code': None,
+            'total': Decimal('0'),
+            'accounts': [],
+        })
+        if cc_id is not None:
+            cc = cost_centers.get(cc_id)
+            if cc is not None:
+                bucket['code'] = cc.code
+                bucket['name'] = cc.name
+                bucket['kind'] = cc.kind
+                bucket['parent_id'] = cc.parent_id
+                bucket['parent_code'] = cc.parent.code if cc.parent_id else None
+            assigned_total += amount
+        else:
+            unassigned_total += amount
+        bucket['total'] += amount
+        bucket['accounts'].append({
+            'account_code': account.account_code,
+            'account_name': account.account_name,
+            'account_class': klass,
+            'amount': amount,
+        })
+
+    results = []
+    for bucket in groups.values():
+        bucket['total'] = f'{bucket["total"]:.2f}'
+        for item in bucket['accounts']:
+            item['amount'] = f'{item["amount"]:.2f}'
+        results.append(bucket)
+    results.sort(key=lambda item: (item['code'] == '', item['code'] or 'zzz', item['name']))
+
+    parents: dict[int, dict] = {}
+    for bucket in results:
+        parent_id = bucket['parent_id']
+        if parent_id is None:
+            continue
+        parent = cost_centers.get(parent_id)
+        if parent is None:
+            continue
+        rollup = parents.setdefault(parent_id, {
+            'cost_center_id': parent.pk,
+            'code': parent.code,
+            'name': parent.name,
+            'kind': parent.kind,
+            'total': Decimal('0'),
+        })
+        rollup['total'] += Decimal(bucket['total'])
+    parent_results = [
+        {**row, 'total': f'{row["total"]:.2f}'}
+        for row in sorted(parents.values(), key=lambda item: item['code'])
+    ]
+
+    return {
+        'year': year,
+        'month': month,
+        'cumulative': cumulative,
+        'total': f'{(assigned_total + unassigned_total):.2f}',
+        'assigned_total': f'{assigned_total:.2f}',
+        'unassigned_total': f'{unassigned_total:.2f}',
+        'groups': parent_results,
+        'results': results,
+    }
+
+
+def export_cost_center_xlsx(tenant, year: int, month: int, *, cumulative: bool = True) -> bytes:
+    import xlsxwriter
+
+    data = cost_center_report(tenant, year, month, cumulative=cumulative)
+    buffer = BytesIO()
+    workbook = xlsxwriter.Workbook(buffer, {'in_memory': True})
+    ws = workbook.add_worksheet('Mjesta troška')
+    header = workbook.add_format({'bold': True})
+    money = workbook.add_format({'num_format': '#,##0.00'})
+    period = f'siječanj–{month:02d}/{year}' if cumulative else f'{month:02d}/{year}'
+    ws.write(0, 0, f'RDG po mjestima troška ({period})', header)
+    cols = ['Šifra', 'Naziv', 'Vrsta', 'Grupa', 'Konto', 'Naziv konta', 'Iznos']
+    for col, title in enumerate(cols):
+        ws.write(2, col, title, header)
+    row = 3
+    for bucket in data['results']:
+        accounts = bucket['accounts'] or [{'account_code': '', 'account_name': '', 'amount': bucket['total']}]
+        for item in accounts:
+            ws.write(row, 0, bucket['code'])
+            ws.write(row, 1, bucket['name'])
+            ws.write(row, 2, bucket['kind'])
+            ws.write(row, 3, bucket['parent_code'] or '')
+            ws.write(row, 4, item.get('account_code') or '')
+            ws.write(row, 5, item.get('account_name') or '')
+            ws.write(row, 6, float(item['amount']), money)
+            row += 1
+    ws.write(row + 1, 1, 'Ukupno', header)
+    ws.write(row + 1, 6, float(data['total']), money)
+    workbook.close()
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def journal_report(tenant, year: int, month: int):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -13,19 +14,58 @@ from rest_framework.views import APIView
 from config.schema_common import ERROR_400, ERROR_401, ERROR_404, ERROR_409
 from domains.finance.api.authentication import FinanceJWTAuthentication
 from domains.finance.api.permissions import TenantFinanceReadPermission, TenantFinanceWritePermission
+from domains.finance.services.supplier_prepayment_api import (
+    PrepaymentApiError,
+    apply_prepayments_for_source,
+    list_prepayment_candidates,
+)
+from domains.finance.api.prepayment_schema import (
+    ApplyPrepaymentsResultSerializer,
+    ApplyPrepaymentsSerializer,
+    PrepaymentCandidateListSerializer,
+)
+from domains.finance.api.accounting_review_schema import (
+    AccountingReviewRequestSerializer,
+    AccountingReviewSerializer,
+    AccountingReviewVehicleSerializer,
+)
 from domains.finance.api.schema import (
+    JOURNAL_ENTRY_LIST_PARAMS,
+    PARTNER_STATEMENT_PARAMS,
+    PARTNER_SUBLEDGER_PARAMS,
+    CHART_OF_ACCOUNTS_PARAMS,
+    ChartOfAccountsListSerializer,
     CreateDepositSerializer,
+    CreateOfficialDocumentSerializer,
     CreatePrivateFundsClaimSerializer,
     DepositConflictSerializer,
     DepositListSerializer,
     DepositSerializer,
     ExpenseApproveResponseSerializer,
+    CostCenterListSerializer,
+    CostCenterPatchSerializer,
+    CostCenterReportSerializer,
+    CostCenterSerializer,
+    CostCenterWriteSerializer,
+    COST_CENTER_REPORT_PARAMS,
+    LinkOfficialDocumentJournalSerializer,
+    OfficialDocumentPostingProfileSerializer,
+    OfficialDocumentSerializer,
+    SetOfficialDocumentPostingProfileSerializer,
+    ExpenseDraftPatchSerializer,
+    ExpensePostingPreviewSerializer,
+    JournalEntryDetailSerializer,
+    PaginatedJournalEntriesSerializer,
     PartnerFinancialSummarySerializer,
+    PartnerStatementSerializer,
     PartnerSubledgerListSerializer,
     PrivateFundsClaimSerializer,
     ReturnDepositSerializer,
 )
+from domains.finance.read.filters import parse_journal_entry_filters
+from domains.finance.read.service import get_journal_entry, list_journal_entries
 from domains.finance.services.aging import partner_financial_summary, partner_subledger_items
+from domains.finance.services.statement import partner_statement
 from domains.finance.services.deposits import (
     DepositBadRequest,
     DepositConflict,
@@ -41,6 +81,29 @@ from domains.finance.services.expenses import (
     ExpenseApproveBadRequest,
     ExpenseApproveConflict,
     approve_expense_for_posting,
+    posting_preview,
+    update_draft_expense_posting,
+)
+from domains.finance.services.chart_accounts import list_postable_accounts
+from domains.finance.services.cost_centers import (
+    create_cost_center,
+    get_cost_center,
+    list_cost_centers,
+    update_cost_center,
+)
+from accounting.services.reports import cost_center_report
+from domains.finance.services.account_resolver import ExpenseAccountResolutionError
+from domains.finance.services.official_documents import (
+    OfficialDocumentBadRequest,
+    OfficialDocumentConflict,
+    cancel_official_document,
+    create_official_document,
+    get_official_document,
+    link_official_document_journal,
+    list_official_document_posting_profiles,
+    post_official_document,
+    register_official_document,
+    set_official_document_posting_profile,
 )
 from domains.finance.services.private_funds import (
     PrivateFundsBadRequest,
@@ -71,12 +134,18 @@ def _require_idempotency_key(request) -> str:
     return key
 
 
-def _conflict(exc: DepositConflict):
+def _conflict(exc):
     return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_409_CONFLICT)
 
 
-def _bad_request(exc: DepositBadRequest):
+def _bad_request(exc):
     return Response({'code': exc.code, 'detail': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _resolution_error(exc: ExpenseAccountResolutionError):
+    if getattr(exc, 'message_dict', None):
+        return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class _FinanceReadApiView(APIView):
@@ -100,6 +169,41 @@ class _FinanceWriteApiView(APIView):
         super().permission_denied(request, message=message, code=code)
 
 
+class JournalEntryListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_journal_entries_list',
+        parameters=JOURNAL_ENTRY_LIST_PARAMS,
+        responses={
+            200: PaginatedJournalEntriesSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request):
+        tenant = _require_tenant(request)
+        try:
+            filters = parse_journal_entry_filters(request.query_params)
+        except (ValueError, TypeError) as exc:
+            raise ValidationError({'detail': str(exc)}) from exc
+        return Response(list_journal_entries(tenant, filters))
+
+
+class JournalEntryDetailView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_journal_entries_retrieve',
+        responses={
+            200: JournalEntryDetailSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, pk: int):
+        return Response(get_journal_entry(_require_tenant(request), pk))
+
+
 class PartnerFinancialSummaryView(_FinanceReadApiView):
     @extend_schema(
         tags=['finance'],
@@ -112,16 +216,40 @@ class PartnerFinancialSummaryView(_FinanceReadApiView):
         return Response(partner_financial_summary(tenant, pk))
 
 
+def _query_flag_true(value) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 class PartnerSubledgerView(_FinanceReadApiView):
     @extend_schema(
         tags=['finance'],
         operation_id='finance_partner_subledger',
+        parameters=PARTNER_SUBLEDGER_PARAMS,
         responses={200: PartnerSubledgerListSerializer, 401: ERROR_401, 404: ERROR_404},
     )
     def get(self, request, pk: int):
         tenant = _require_tenant(request)
         _require_partner(tenant, pk)
-        return Response(partner_subledger_items(tenant, pk))
+        include_closed = _query_flag_true(request.query_params.get('include_closed'))
+        return Response(partner_subledger_items(tenant, pk, include_closed=include_closed))
+
+
+class PartnerStatementView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_partner_statement',
+        parameters=PARTNER_STATEMENT_PARAMS,
+        responses={200: PartnerStatementSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        tenant = _require_tenant(request)
+        _require_partner(tenant, pk)
+        raw_year = request.query_params.get('year')
+        year = int(raw_year) if raw_year not in (None, '') else None
+        direction = request.query_params.get('direction') or 'all'
+        return Response(partner_statement(tenant, pk, year=year, direction=direction))
 
 
 class DepositListCreateView(APIView):
@@ -286,6 +414,188 @@ class DepositReverseView(_FinanceWriteApiView):
             return _bad_request(exc)
 
 
+class OfficialDocumentCreateView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_create',
+        request=CreateOfficialDocumentSerializer,
+        responses={
+            201: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request):
+        try:
+            return Response(
+                create_official_document(
+                    tenant=_require_tenant(request),
+                    data=request.data,
+                    file=request.FILES.get('file'),
+                    user=request.user,
+                ),
+                status=status.HTTP_201_CREATED,
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentDetailView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_retrieve',
+        responses={200: OfficialDocumentSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        return Response(get_official_document(tenant=_require_tenant(request), document_id=pk))
+
+
+class OfficialDocumentRegisterView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_register',
+        request=CreateOfficialDocumentSerializer,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(
+                register_official_document(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    file=request.FILES.get('file'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentCancelView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_cancel',
+        request=None,
+        responses={
+            200: OfficialDocumentSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(cancel_official_document(tenant=_require_tenant(request), document_id=pk))
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+
+
+class OfficialDocumentLinkJournalView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_link_journal',
+        request=LinkOfficialDocumentJournalSerializer,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(
+                link_official_document_journal(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    journal_entry_id=request.data.get('journal_entry_id'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentPostingProfileListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_document_posting_profiles_list',
+        responses={200: OfficialDocumentPostingProfileSerializer(many=True), 401: ERROR_401},
+    )
+    def get(self, request):
+        return Response(list_official_document_posting_profiles(tenant=_require_tenant(request)))
+
+
+class OfficialDocumentSetPostingProfileView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_set_posting_profile',
+        request=SetOfficialDocumentPostingProfileSerializer,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        try:
+            return Response(
+                set_official_document_posting_profile(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    posting_profile_id=request.data.get('posting_profile_id'),
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
+class OfficialDocumentPostView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_official_documents_post',
+        request=None,
+        responses={
+            200: OfficialDocumentSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+        },
+    )
+    def post(self, request, pk: int):
+        _require_idempotency_key(request)
+        try:
+            return Response(
+                post_official_document(
+                    tenant=_require_tenant(request),
+                    document_id=pk,
+                    user=request.user,
+                )
+            )
+        except OfficialDocumentConflict as exc:
+            return _conflict(exc)
+        except OfficialDocumentBadRequest as exc:
+            return _bad_request(exc)
+
+
 class DepositCancelView(_FinanceWriteApiView):
     @extend_schema(
         tags=['finance'],
@@ -337,6 +647,97 @@ class ExpenseApproveView(_FinanceWriteApiView):
                 {'code': exc.code, 'detail': exc.detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        except DjangoValidationError as exc:
+            messages = getattr(exc, 'messages', None) or [str(exc)]
+            return Response(
+                {'code': 'posting_rejected', 'detail': messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ChartOfAccountsListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_chart_of_accounts_list',
+        parameters=CHART_OF_ACCOUNTS_PARAMS,
+        responses={200: ChartOfAccountsListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        return Response(
+            list_postable_accounts(
+                tenant=_require_tenant(request),
+                search=request.query_params.get('search') or '',
+            )
+        )
+
+
+class ExpensePostingPreviewView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_expenses_posting_preview',
+        responses={
+            200: ExpensePostingPreviewSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def get(self, request, pk: int):
+        try:
+            return Response(posting_preview(tenant=_require_tenant(request), expense_id=pk))
+        except ExpenseAccountResolutionError as exc:
+            return _resolution_error(exc)
+
+
+class ExpenseDraftPatchView(_FinanceWriteApiView):
+    http_method_names = ['patch', 'head', 'options']
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_expenses_draft_patch',
+        request=ExpenseDraftPatchSerializer,
+        responses={
+            200: ExpenseApproveResponseSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: DepositConflictSerializer,
+        },
+    )
+    def patch(self, request, pk: int):
+        ser = ExpenseDraftPatchSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        kwargs = {}
+        if 'category_id' in ser.validated_data:
+            kwargs['category_id'] = ser.validated_data['category_id']
+        if 'expense_account_id' in ser.validated_data:
+            kwargs['expense_account_id'] = ser.validated_data['expense_account_id']
+        if 'cost_center_id' in ser.validated_data:
+            kwargs['cost_center_id'] = ser.validated_data['cost_center_id']
+        if 'line_accounts' in ser.validated_data:
+            kwargs['line_accounts'] = ser.validated_data['line_accounts']
+        try:
+            return Response(
+                update_draft_expense_posting(
+                    tenant=_require_tenant(request),
+                    expense_id=pk,
+                    **kwargs,
+                )
+            )
+        except ExpenseApproveConflict as exc:
+            return Response(
+                {'code': exc.code, 'detail': exc.detail},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except ExpenseApproveBadRequest as exc:
+            return Response(
+                {'code': exc.code, 'detail': exc.detail},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ExpenseAccountResolutionError as exc:
+            return _resolution_error(exc)
+        except DjangoValidationError as exc:
+            return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
 
 
 def _pf_conflict(exc: PrivateFundsConflict):
@@ -414,3 +815,209 @@ class PrivateFundsClaimPostView(_FinanceWriteApiView):
             return _pf_conflict(exc)
         except PrivateFundsBadRequest as exc:
             return _pf_bad_request(exc)
+
+
+class CostCenterListCreateView(APIView):
+    authentication_classes = [FinanceJWTAuthentication]
+    permission_classes = [IsAuthenticated, TenantFinanceReadPermission]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), TenantFinanceWritePermission()]
+        return super().get_permissions()
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_list',
+        responses={200: CostCenterListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        include_inactive = str(request.query_params.get('include_inactive') or '').lower() in {
+            '1', 'true', 'yes',
+        }
+        return Response(
+            list_cost_centers(tenant=_require_tenant(request), include_inactive=include_inactive)
+        )
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_create',
+        request=CostCenterWriteSerializer,
+        responses={201: CostCenterSerializer, 400: ERROR_400, 401: ERROR_401, 404: ERROR_404},
+    )
+    def post(self, request):
+        ser = CostCenterWriteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                create_cost_center(tenant=_require_tenant(request), data=ser.validated_data),
+                status=status.HTTP_201_CREATED,
+            )
+        except DjangoValidationError as exc:
+            return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CostCenterDetailView(APIView):
+    authentication_classes = [FinanceJWTAuthentication]
+    permission_classes = [IsAuthenticated, TenantFinanceReadPermission]
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [IsAuthenticated(), TenantFinanceWritePermission()]
+        return super().get_permissions()
+
+    def permission_denied(self, request, message=None, code=None):
+        if getattr(request, 'user', None) and request.user.is_authenticated:
+            raise Http404()
+        super().permission_denied(request, message=message, code=code)
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_retrieve',
+        responses={200: CostCenterSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, pk: int):
+        return Response(get_cost_center(tenant=_require_tenant(request), cost_center_id=pk))
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_partial_update',
+        request=CostCenterPatchSerializer,
+        responses={200: CostCenterSerializer, 400: ERROR_400, 401: ERROR_401, 404: ERROR_404},
+    )
+    def patch(self, request, pk: int):
+        ser = CostCenterPatchSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                update_cost_center(
+                    tenant=_require_tenant(request),
+                    cost_center_id=pk,
+                    data=ser.validated_data,
+                )
+            )
+        except DjangoValidationError as exc:
+            return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CostCenterReportView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_cost_centers_report',
+        parameters=COST_CENTER_REPORT_PARAMS,
+        responses={200: CostCenterReportSerializer, 400: ERROR_400, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        try:
+            year = int(request.query_params.get('year'))
+            month = int(request.query_params.get('month'))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'year i month su obavezni.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if month < 1 or month > 12:
+            return Response({'detail': 'month mora biti 1–12.'}, status=status.HTTP_400_BAD_REQUEST)
+        cumulative = str(request.query_params.get('cumulative') or '1').lower() not in {
+            '0', 'false', 'no',
+        }
+        return Response(
+            cost_center_report(
+                _require_tenant(request),
+                year,
+                month,
+                cumulative=cumulative,
+            )
+        )
+
+
+class PayablePrepaymentCandidatesView(_FinanceWriteApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_payable_prepayment_candidates',
+        responses={200: PrepaymentCandidateListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request, source_type: str, pk: int):
+        try:
+            payload = list_prepayment_candidates(_require_tenant(request), source_type, pk)
+        except PrepaymentApiError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
+
+
+class PayableApplyPrepaymentsView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_payable_apply_prepayments',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=ApplyPrepaymentsSerializer,
+        responses={
+            200: ApplyPrepaymentsResultSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: ERROR_409,
+            422: ERROR_400,
+        },
+    )
+    def post(self, request, source_type: str, pk: int):
+        ser = ApplyPrepaymentsSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            payload = apply_prepayments_for_source(
+                tenant=_require_tenant(request),
+                user=request.user,
+                source_type=source_type,
+                source_id=pk,
+                applications=ser.validated_data['applications'],
+                lines=ser.validated_data.get('lines'),
+                remember=bool(ser.validated_data.get('remember')),
+                idempotency_key=request.headers.get('Idempotency-Key', ''),
+                answers=ser.validated_data.get('answers'),
+            )
+        except PrepaymentApiError as exc:
+            return Response({'detail': exc.detail}, status=exc.status_code)
+        return Response(payload)
+
+
+class VehicleListView(_FinanceReadApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_vehicles_list',
+        responses={200: AccountingReviewVehicleSerializer(many=True), 401: ERROR_401},
+    )
+    def get(self, request):
+        from domains.finance.services.accounting_review import list_active_vehicles
+
+        return Response(list_active_vehicles(_require_tenant(request)))
+
+
+class ExpenseAccountingReviewView(_FinanceWriteApiView):
+    @extend_schema(
+        tags=['finance'],
+        operation_id='finance_expense_accounting_review',
+        request=AccountingReviewRequestSerializer,
+        responses={200: AccountingReviewSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def post(self, request, pk: int):
+        from expenses.models import Expense
+        from domains.finance.services.accounting_review import review_expense
+
+        ser = AccountingReviewRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        tenant = _require_tenant(request)
+        expense = Expense.all_objects.filter(tenant=tenant, pk=pk).first()
+        if expense is None:
+            raise Http404()
+        return Response(
+            review_expense(tenant, expense, ser.validated_data.get('answers'), request.user)
+        )

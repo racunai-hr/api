@@ -6,4 +6,12 @@ def normalize_iban(value: str) -> str:
     return (value or '').replace(' ', '').upper()
 
 
-__all__ = ['normalize_iban']
+def format_iban_display(value: str | None) -> str:
+    """Group a normalized IBAN into 4-character blocks for display."""
+    compact = normalize_iban(value)
+    if not compact:
+        return ''
+    return ' '.join(compact[i : i + 4] for i in range(0, len(compact), 4))
+
+
+__all__ = ['format_iban_display', 'normalize_iban']

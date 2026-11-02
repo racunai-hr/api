@@ -10,8 +10,8 @@ from accounting.services.tax_forms.zp.payload import ZpPayload
 
 @dataclass(frozen=True)
 class ZpPdvCrossCheckResult:
-    pdv_box_101: Decimal
     pdv_box_103: Decimal
+    pdv_box_104: Decimal
     zp_total_goods: Decimal
     zp_total_services: Decimal
     is_aligned: bool
@@ -20,18 +20,18 @@ class ZpPdvCrossCheckResult:
 def verify_zp_against_pdv_boxes(
     payload: ZpPayload,
     *,
-    pdv_box_101: Decimal,
     pdv_box_103: Decimal,
+    pdv_box_104: Decimal,
 ) -> ZpPdvCrossCheckResult:
-    """Compare ZP totals with PDV Podatak101 / Podatak103."""
+    """Compare ZP totals with PDV Podatak103 (goods) and Podatak104 (services)."""
     goods = payload.total_goods
     services = payload.total_services
     return ZpPdvCrossCheckResult(
-        pdv_box_101=pdv_box_101,
         pdv_box_103=pdv_box_103,
+        pdv_box_104=pdv_box_104,
         zp_total_goods=goods,
         zp_total_services=services,
-        is_aligned=(goods == pdv_box_101 and services == pdv_box_103),
+        is_aligned=(goods == pdv_box_103 and services == pdv_box_104),
     )
 
 

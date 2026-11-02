@@ -6,38 +6,132 @@ from datetime import date
 
 from domains.reporting.documents.attachments import download_available_field
 from domains.reporting.documents.evidence import incoming_pdf_available, incoming_ubl_available
-from domains.reporting.documents.incoming_detail import enrich_incoming_detail_payload
+from domains.reporting.documents.incoming_detail import (
+    build_subledger_context,
+    enrich_incoming_detail_payload,
+)
 from domains.reporting.documents.provenance import provenanced
 from domains.reporting.documents.projection import (
     bank_block,
     bank_expected,
+    book_eur_amount,
     build_subledger_block,
     collect_controls,
     money,
+    collect_official_controls,
+    expense_vat_not_applicable,
     operational_deposit,
     operational_incoming,
+    operational_official,
     operational_outgoing,
     payment_order_block,
     period_returns_context,
     posting_block,
     vat_lifecycle,
 )
+from domains.reporting.documents.tax_active import expense_tax_active
+from accounting.services.journal_markers import extract_document_type
 from fiscal_gateway.models import As4DocumentLink
 from integrations.models import IntegrationOutboxMessage
+
+OBLIGATION_DOCUMENT_TYPES = frozenset({
+    'expense_approved',
+    'invoice_issued',
+    'official_document_posted',
+})
 
 
 def _primary_subledger(rows):
     if not rows:
         return None
     active = [row for row in rows if row.status != 'cancelled']
-    return active[0] if active else rows[0]
+    return active[0] if active else None
 
 
-def _primary_posting(rows):
+def _primary_posting(rows, *, bank_by_je=None):
     if not rows:
         return None
     posted = [row for row in rows if row.status == 'posted']
-    return posted[0] if posted else rows[0]
+    candidates = posted or list(rows)
+    obligations = [
+        row
+        for row in candidates
+        if extract_document_type(getattr(row, 'description', None) or '')
+        in OBLIGATION_DOCUMENT_TYPES
+    ]
+    if obligations:
+        obligations.sort(key=lambda je: (je.posted_at or je.created_at, je.pk))
+        return obligations[0]
+    if bank_by_je:
+        for row in candidates:
+            txs = bank_by_je.get(row.pk) or []
+            if any(getattr(tx, 'match_status', None) == 'matched' for tx in txs):
+                return row
+    return candidates[0]
+
+
+def _allocation_owned_elsewhere(alloc, document_id: int) -> bool:
+    """True when this journal closes another document, not the one being read."""
+    item = getattr(alloc, 'subledger_item', None)
+    if item is None:
+        return False
+    content_type = getattr(item, 'source_content_type', None)
+    if content_type is None or content_type.model != 'expense':
+        return True
+    return item.source_object_id != document_id
+
+
+def _incoming_payment_journals(*, document, subledger, sibling_jes, alloc_by_sub, alloc_by_je):
+    """Bank evidence follows the subledger the payment closes.
+
+    A journal sourced on the advance stays there in the books, but once its
+    allocation sits on the final invoice the payment is shown only there.
+    """
+    journals = []
+    seen: set[int] = set()
+    for je in sibling_jes or []:
+        alloc = alloc_by_je.get(je.pk)
+        if alloc is not None and _allocation_owned_elsewhere(alloc, document.pk):
+            continue
+        seen.add(je.pk)
+        journals.append(je)
+    if subledger is not None:
+        for alloc in alloc_by_sub.get(subledger.pk, []):
+            je = getattr(alloc, 'journal_entry', None)
+            if je is None or je.pk in seen:
+                continue
+            seen.add(je.pk)
+            journals.append(je)
+    return journals
+
+
+def _collect_bank_txs(*, payments, payment_bank_map, journal_entries, je_bank_map) -> list:
+    """Union bank txs linked via payments or any sibling JE (deduped by pk)."""
+    bank_txs = []
+    seen: set[int] = set()
+    for pay in payments:
+        for tx in payment_bank_map.get(pay.pk, []):
+            if tx.pk not in seen:
+                seen.add(tx.pk)
+                bank_txs.append(tx)
+    for je in journal_entries or []:
+        for tx in je_bank_map.get(je.pk, []):
+            if tx.pk not in seen:
+                seen.add(tx.pk)
+                bank_txs.append(tx)
+    return bank_txs
+
+
+def _subledger_block_for_row(*, document, direction, subledger, as_of_day, applied_reversal: bool):
+    if applied_reversal and direction == 'incoming':
+        return {
+            'state': provenanced('closed', source='subledger_allocation'),
+            'open_amount': provenanced(money(0), source='subledger_allocation'),
+            'original_amount': provenanced(money(getattr(document, 'amount', None)), source='subledger_allocation'),
+            'aging_bucket': provenanced(None, reason='not_applicable'),
+            'days': provenanced(None, reason='not_applicable'),
+        }
+    return build_subledger_block(subledger, as_of_day)
 
 
 def _latest_as4(links):
@@ -46,13 +140,36 @@ def _latest_as4(links):
     return sorted(links, key=lambda link: link.created_at, reverse=True)[0]
 
 
+def _amounts_block(document, currency, net, vat, gross) -> dict:
+    book_net = None
+    book_vat = None
+    if (currency or '').strip().upper() == 'HRK':
+        from accounting.services.fx import to_eur_amount
+
+        if net is not None:
+            book_net = money(to_eur_amount(net, 'HRK'))
+        if vat is not None:
+            book_vat = money(to_eur_amount(vat, 'HRK'))
+    return {
+        'currency': currency,
+        'net': money(net),
+        'vat': money(vat),
+        'gross': money(gross),
+        'book_gross': money(book_eur_amount(document)),
+        'book_net': book_net,
+        'book_vat': book_vat,
+        'fx_rate': provenanced(None, reason='not_recorded'),
+    }
+
+
 def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool) -> dict:
     if direction == 'outgoing':
         partner = rel['partners'].get(document.company_to_id)
         items = rel['items_by_invoice'].get(document.pk, [])
         ledger_rows = rel['vat_out'].get(document.pk, [])
         subledger = _primary_subledger(rel['sub_out'].get(document.pk, []))
-        posting = _primary_posting(rel['je_out'].get(document.pk, []))
+        sibling_jes = rel['je_out'].get(document.pk, [])
+        posting = _primary_posting(sibling_jes, bank_by_je=rel['bank_by_je'])
         as4_links = rel['as4_out'].get(document.pk, [])
         super_links = rel['super_out'].get(document.pk, [])
         payments = rel['payments_by_invoice'].get(document.pk, [])
@@ -75,7 +192,8 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         items = []
         ledger_rows = rel['vat_in'].get(document.pk, [])
         subledger = _primary_subledger(rel['sub_in'].get(document.pk, []))
-        posting = _primary_posting(rel['je_in'].get(document.pk, []))
+        sibling_jes = rel['je_in'].get(document.pk, [])
+        posting = _primary_posting(sibling_jes, bank_by_je=rel['bank_by_je'])
         as4_links = rel['as4_in'].get(document.pk, [])
         super_links = rel['super_in'].get(document.pk, [])
         payments = []
@@ -90,18 +208,32 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         source = document.source
         fiscal_logs = []
         outbox = []
-        has_pdf_xml = bool(attachments) or any(link.ubl_xml for link in as4_links) or any(
-            link.ubl_xml or link.pdf_path for link in super_links
+        # Electronic fiscal imports carry their own evidence — PDF scan is not required:
+        # AS4 / Fiskalizacija 2 (UBL), F1 CSV / prior intermediary (JIR fiscal receipt).
+        has_pdf_xml = (
+            bool(attachments)
+            or bool(as4_links)
+            or source == 'f1_csv'
+            or any(link.ubl_xml or link.pdf_path for link in super_links)
         )
 
+    payment_journals = sibling_jes
+    if direction == 'incoming':
+        payment_journals = _incoming_payment_journals(
+            document=document,
+            subledger=subledger,
+            sibling_jes=sibling_jes,
+            alloc_by_sub=rel.get('alloc_by_sub') or {},
+            alloc_by_je=rel.get('alloc_by_je') or {},
+        )
     as4 = _latest_as4(as4_links)
     as4_status = as4.as4_status if as4 else None
-    payment_ids = [p.pk for p in payments]
-    bank_txs = []
-    for pay in payments:
-        bank_txs.extend(rel['bank_by_payment'].get(pay.pk, []))
-    if posting is not None:
-        bank_txs.extend(rel['bank_by_je'].get(posting.pk, []))
+    bank_txs = _collect_bank_txs(
+        payments=payments,
+        payment_bank_map=rel['bank_by_payment'],
+        journal_entries=payment_journals,
+        je_bank_map=rel['bank_by_je'],
+    )
     match_status = None
     if any(tx.match_status == 'matched' for tx in bank_txs):
         match_status = 'matched'
@@ -151,20 +283,35 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             as_of_day=as_of_day,
         )
     else:
+        storno_by_je = rel.get('storno_by_je') or {}
+        closed_by_storno = bool(allocations) and all(
+            alloc.journal_entry_id in storno_by_je for alloc in allocations
+        )
         operational = operational_incoming(
             document=document,
             subledger=subledger,
             disputed=disputed,
             as_of_day=as_of_day,
             has_receipt_evidence=has_receipt,
+            posting=posting,
+            bank_matched=match_status == 'matched',
+            applied_reversal=bool((rel.get('reversal_by_expense') or {}).get(document.pk)),
+            closed_by_storno=closed_by_storno,
         )
 
+    vat_not_applicable = (
+        direction == 'incoming'
+        and not ledger_rows
+        and expense_tax_active(document.status)
+        and expense_vat_not_applicable(document)
+    )
     alerts, notices = collect_controls({
         'document': document,
         'direction': direction,
         'partner': partner,
         'subledger': subledger,
         'ledger_rows': ledger_rows,
+        'vat_not_applicable': vat_not_applicable,
         'as_of_day': as_of_day,
         'as4_status': as4_status,
         'posting_entry': posting,
@@ -201,14 +348,25 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         'document_status': provenanced(document.status, source='document_status'),
         'operational_status': operational,
         'posting': posting_block(posting),
-        'subledger': build_subledger_block(subledger, as_of_day),
+        'subledger': _subledger_block_for_row(
+            document=document,
+            direction=direction,
+            subledger=subledger,
+            as_of_day=as_of_day,
+            applied_reversal=bool((rel.get('reversal_by_expense') or {}).get(document.pk)),
+        ),
         'bank': bank_block(match_status=match_status, expected=expected_bank),
         'payment_order': payment_order_block(order),
         'vat': {
-            'lifecycle': vat_lifecycle(direction=direction, document=document, ledger_rows=ledger_rows),
-            'ledger_type': provenanced(ledger_type, source='vat_ledger_entry') if ledger_type else provenanced(None, reason='not_recorded'),
-            'period': provenanced(period_label, source='vat_ledger_entry') if period_label else provenanced(None, reason='not_recorded'),
-            'boxes': provenanced(boxes, source='vat_ledger_entry') if boxes else provenanced(None, reason='not_recorded'),
+            'lifecycle': vat_lifecycle(
+                direction=direction,
+                document=document,
+                ledger_rows=ledger_rows,
+                not_tax_relevant=vat_not_applicable,
+            ),
+            'ledger_type': provenanced(ledger_type, source='vat_ledger_entry') if ledger_type else provenanced(None, reason='not_applicable' if vat_not_applicable else 'not_recorded'),
+            'period': provenanced(period_label, source='vat_ledger_entry') if period_label else provenanced(None, reason='not_applicable' if vat_not_applicable else 'not_recorded'),
+            'boxes': provenanced(boxes, source='vat_ledger_entry') if boxes else provenanced(None, reason='not_applicable' if vat_not_applicable else 'not_recorded'),
             'document_in_submitted_return': provenanced(None, reason='not_provable'),
             'period_returns': versions,
             'disclaimer': disclaimer,
@@ -224,13 +382,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         },
         'controls': alerts,
         'notices': notices,
-        'amounts': {
-            'currency': currency,
-            'net': money(net),
-            'vat': money(vat),
-            'gross': money(gross),
-            'fx_rate': provenanced(None, reason='not_recorded'),
-        },
+        'amounts': _amounts_block(document, currency, net, vat, gross),
     }
     if not detail:
         return payload
@@ -341,6 +493,7 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
             bank_txs=bank_txs,
             match_status=match_status,
             period_label=period_label,
+            sibling_jes=sibling_jes,
         )
     else:
         # Outgoing: on-demand generated PDF (existing DocumentPdfView contract).
@@ -348,6 +501,129 @@ def assemble_row(direction: str, document, rel, as_of_day: date, *, detail: bool
         payload['ubl_available'] = any(
             bool((link.ubl_xml or '').strip()) for link in as4_links + super_links
         )
+    return payload
+
+
+def assemble_official_row(document, rel, as_of_day: date, *, detail: bool) -> dict:
+    partner = rel['partners'].get(document.issuer_id)
+    posting = _primary_posting(rel['je_off'].get(document.pk, []), bank_by_je=rel.get('bank_by_je'))
+    journal_entries = rel['je_off'].get(document.pk, [])
+    bank_txs = _collect_bank_txs(
+        payments=[],
+        payment_bank_map={},
+        journal_entries=journal_entries,
+        je_bank_map=rel.get('bank_by_je') or {},
+    )
+    bank_matched = any(getattr(tx, 'match_status', None) == 'matched' for tx in bank_txs)
+    has_pdf = bool(document.original_file and document.original_file.name)
+    if has_pdf:
+        from domains.reporting.documents.attachments import attachment_blob_available
+
+        has_pdf = attachment_blob_available(document)
+    subledger_rows = rel.get('sub_off', {}).get(document.pk, [])
+    subledger = _primary_subledger(subledger_rows)
+    operational = operational_official(
+        document=document,
+        posting=posting,
+        bank_matched=bank_matched,
+        subledger=subledger,
+    )
+    payload = {
+        'id': document.pk,
+        'kind': 'official',
+        'direction': 'official',
+        'internal_number': document.document_number,
+        'source_number': document.document_number,
+        'partner_name': partner.name if partner else None,
+        'partner_oib': partner.tax_number if partner else None,
+        'partner_vat_number': partner.vat_number if partner else None,
+        'document_date': document.issue_date.isoformat() if document.issue_date else None,
+        'due_date': document.due_date.isoformat() if document.due_date else None,
+        'document_status': provenanced(document.status, source='document_status'),
+        'operational_status': operational,
+        'posting': posting_block(posting),
+        'subledger': build_subledger_block(subledger, as_of_day),
+        'bank': bank_block(match_status='matched' if bank_matched else None, expected=False),
+        'payment_order': payment_order_block(None),
+        'vat': {
+            'lifecycle': provenanced('not_tax_active', source='official_document'),
+            'ledger_type': provenanced(None, reason='not_applicable'),
+            'period': provenanced(None, reason='not_applicable'),
+            'boxes': provenanced(None, reason='not_applicable'),
+            'document_in_submitted_return': provenanced(None, reason='not_applicable'),
+            'period_returns': [],
+            'disclaimer': None,
+        },
+        'eracun': {
+            'as4_status': provenanced(None, reason='not_applicable'),
+            'message_id': provenanced(None, reason='not_applicable'),
+            'source': provenanced(None, reason='not_applicable'),
+        },
+        'fiscal': {
+            'jir': provenanced(None, reason='not_applicable'),
+            'zki': provenanced(None, reason='not_applicable'),
+        },
+        'controls': collect_official_controls(document, has_pdf=has_pdf),
+        'notices': [],
+        'amounts': {
+            'currency': document.currency or 'EUR',
+            'net': money(document.amount),
+            'vat': money(0),
+            'gross': money(document.amount),
+            'book_gross': money(book_eur_amount(document)),
+            'fx_rate': provenanced(None, reason='not_applicable'),
+        },
+    }
+    if not detail:
+        return payload
+    payload['partner_id'] = partner.pk if partner else None
+    payload['description'] = document.reference or ''
+    payload['notes'] = document.notes or ''
+    payload['created_at'] = document.created_at.isoformat() if document.created_at else None
+    payload['updated_at'] = document.updated_at.isoformat() if document.updated_at else None
+    payload['created_by'] = document.created_by.username if document.created_by_id else None
+    payload['related_fixed_asset_id'] = document.related_fixed_asset_id
+    payload['official_kind'] = document.kind
+    profile = getattr(document, 'posting_profile', None)
+    payload['posting_profile_id'] = profile.pk if profile else None
+    payload['posting_profile_code'] = profile.code if profile else None
+    payload['posting_profile_name'] = profile.name if profile else None
+    allocations = rel.get('alloc_by_sub', {}).get(subledger.pk, []) if subledger else []
+    payload['subledger_context'] = build_subledger_context(
+        subledger=subledger,
+        allocations=allocations,
+    )
+    payload['items'] = []
+    payload['service_date'] = None
+    payload['journal_lines'] = []
+    if posting is not None:
+        payload['journal_lines'] = [
+            {
+                'account_code': line.account.account_code if line.account_id else None,
+                'account_name': line.account.account_name if line.account_id else None,
+                'debit': money(line.debit_amount),
+                'credit': money(line.credit_amount),
+                'description': line.description,
+            }
+            for line in rel['lines_by_je'].get(posting.pk, [])
+        ]
+    payload['payments'] = []
+    payload['allocations'] = []
+    payload['ledger_entries'] = []
+    payload['attachments'] = []
+    if document.original_file and document.original_file.name:
+        payload['attachments'] = [
+            {
+                'id': document.pk,
+                'original_filename': document.original_filename or 'document.pdf',
+                'created_at': document.created_at.isoformat() if document.created_at else None,
+                'uploaded_by': payload['created_by'],
+                'download_available': download_available_field(document),
+                'kind': 'original',
+            }
+        ]
+    payload['ubl_available'] = False
+    payload['pdf_available'] = has_pdf
     return payload
 
 
@@ -400,6 +676,7 @@ def assemble_deposit_row(document, rel, as_of_day: date, *, detail: bool) -> dic
             'net': money(document.amount),
             'vat': money(0),
             'gross': money(document.amount),
+            'book_gross': money(book_eur_amount(document)),
             'fx_rate': provenanced(None, reason='not_applicable'),
         },
     }
@@ -450,6 +727,12 @@ def documents_from_keys(tenant, keys, rel, as_of_day: date, *, detail: bool) -> 
             if document is None:
                 continue
             rows.append(assemble_deposit_row(document, rel, as_of_day, detail=detail))
+            continue
+        if direction == 'official':
+            document = rel['official_docs'].get(pk)
+            if document is None:
+                continue
+            rows.append(assemble_official_row(document, rel, as_of_day, detail=detail))
             continue
         document = (
             rel['invoices'].get(pk) if direction == 'outgoing' else rel['expenses'].get(pk)

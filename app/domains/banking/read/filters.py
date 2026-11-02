@@ -43,6 +43,7 @@ class TransactionListFilters:
     transaction_type: str | None = None
     date_from: date | None = None
     date_to: date | None = None
+    search: str = ''
     page: int = 1
     page_size: int = 20
 
@@ -92,6 +93,7 @@ def parse_transaction_filters(query) -> TransactionListFilters:
         transaction_type=transaction_type,
         date_from=_date(query.get('date_from')),
         date_to=_date(query.get('date_to')),
+        search=(query.get('search') or '').strip(),
         page=page,
         page_size=page_size,
     )

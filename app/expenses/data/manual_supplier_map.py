@@ -7,6 +7,7 @@ MANUAL_SUPPLIER_MAP = {
         'city': 'Gelsenkirchen',
         'postal_code': '45886',
         'country': 'Germany',
+        'country_code': 'DE',
         'email': 'info@automobile-hadzic.de',
         'phone': '+49 209 167990',
         'notes': 'Njemački prodavatelj rabljenih vozila; T-Cross račun 70025237, Golf 70025249.',
@@ -17,6 +18,7 @@ MANUAL_SUPPLIER_MAP = {
         'city': 'Sinsheim',
         'postal_code': '74889',
         'country': 'Germany',
+        'country_code': 'DE',
         'email': 'info@sam-automobile.de',
         'phone': '+49 7261 6590055',
         'notes': (
@@ -30,12 +32,27 @@ MANUAL_SUPPLIER_MAP = {
         'city': 'Šibenik',
         'postal_code': '22000',
         'country': 'Croatia',
+        'country_code': 'HR',
         'email': '',
         'phone': '',
         'notes': (
             'PPMV — rješenje i prijava. Uplata na Državni proračun RH: '
             'IBAN HR1210010051863000160, model HR68, poziv 1147-{OIB tvrtke}. '
             'Na izvodu: DRŽAVNI PRORAČUN REPUBLIKE HRVATSKE.'
+        ),
+    },
+    '85828625994': {
+        'name': 'Fond za zaštitu okoliša i energetsku učinkovitost',
+        'address': 'Radnička cesta 80',
+        'city': 'Zagreb',
+        'postal_code': '10000',
+        'country': 'Croatia',
+        'country_code': 'HR',
+        'email': '',
+        'phone': '',
+        'notes': (
+            'FZOEU — naknada gospodarenja otpadom (RPPO). '
+            'IBAN HR5424020061100971754, Erste (BIC ESBCHR22).'
         ),
     },
 }

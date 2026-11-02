@@ -1,6 +1,30 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:sac="urn:oasis:names:specification:ubl:schema:xsd:SignatureAggregateComponents-2" xmlns:sig="urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2">
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:hrextac="urn:mfin.gov.hr:schema:xsd:HRExtensionAggregateComponents-1" xmlns:sac="urn:oasis:names:specification:ubl:schema:xsd:SignatureAggregateComponents-2" xmlns:sig="urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2">
   <ext:UBLExtensions>
+    <ext:UBLExtension>
+      <ext:ExtensionContent>
+        <hrextac:HRFISK20Data>
+          <hrextac:HRTaxTotal>
+            <cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>
+            <hrextac:HRTaxSubtotal>
+              <cbc:TaxableAmount currencyID="EUR">1000.00</cbc:TaxableAmount>
+              <cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>
+              <hrextac:HRTaxCategory>
+                <cbc:ID>AE</cbc:ID>
+                <cbc:Percent>0</cbc:Percent>
+                <hrextac:HRTaxScheme>
+                  <cbc:ID>VAT</cbc:ID>
+                </hrextac:HRTaxScheme>
+              </hrextac:HRTaxCategory>
+            </hrextac:HRTaxSubtotal>
+          </hrextac:HRTaxTotal>
+          <hrextac:HRLegalMonetaryTotal>
+            <cbc:TaxExclusiveAmount currencyID="EUR">1000.00</cbc:TaxExclusiveAmount>
+            <hrextac:OutOfScopeOfVATAmount currencyID="EUR">0.00</hrextac:OutOfScopeOfVATAmount>
+          </hrextac:HRLegalMonetaryTotal>
+        </hrextac:HRFISK20Data>
+      </ext:ExtensionContent>
+    </ext:UBLExtension>
     <ext:UBLExtension>
       <ext:ExtensionContent>
         <sig:UBLDocumentSignatures>
@@ -18,6 +42,9 @@
   <cac:AccountingSupplierParty>
     <cac:Party>
       <cbc:EndpointID schemeID="9934">36619131370</cbc:EndpointID>
+      <cac:PartyName>
+        <cbc:Name>Dobavljač d.o.o.</cbc:Name>
+      </cac:PartyName>
       <cac:PostalAddress>
         <cbc:StreetName>Ulica 1</cbc:StreetName>
         <cbc:CityName>Zagreb</cbc:CityName>
@@ -40,6 +67,9 @@
   <cac:AccountingCustomerParty>
     <cac:Party>
       <cbc:EndpointID schemeID="9934">11111111119</cbc:EndpointID>
+      <cac:PartyName>
+        <cbc:Name>Kupac d.o.o.</cbc:Name>
+      </cac:PartyName>
       <cac:PostalAddress>
         <cbc:StreetName>Ulica 2</cbc:StreetName>
         <cbc:CityName>Zagreb</cbc:CityName>
@@ -66,7 +96,7 @@
       <cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>
       <cac:TaxCategory>
         <cbc:ID>AE</cbc:ID>
-        <cbc:Percent>0.00</cbc:Percent>
+        <cbc:Percent>0</cbc:Percent>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>

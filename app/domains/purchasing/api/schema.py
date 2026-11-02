@@ -30,8 +30,25 @@ class SupplierExtractedSerializer(serializers.Serializer):
     iban = serializers.CharField(allow_blank=True)
 
 
+class PartyCandidateSerializer(SupplierExtractedSerializer):
+    role = serializers.CharField()
+    is_own_company = serializers.BooleanField()
+    suspected_own_company = serializers.BooleanField()
+    blank = serializers.BooleanField()
+
+
+class AllocatedOcrLineSerializer(serializers.Serializer):
+    position = serializers.IntegerField()
+    description = serializers.CharField()
+    net_amount = serializers.CharField()
+    vat_amount = serializers.CharField()
+    gross_amount = serializers.CharField()
+
+
 class ExtractedInvoiceSerializer(serializers.Serializer):
     supplier = SupplierExtractedSerializer()
+    issuer = SupplierExtractedSerializer()
+    buyer = SupplierExtractedSerializer()
     invoice_number = serializers.CharField(allow_blank=True)
     issue_date = serializers.CharField(allow_blank=True)
     due_date = serializers.CharField(allow_null=True, required=False)
@@ -42,6 +59,7 @@ class ExtractedInvoiceSerializer(serializers.Serializer):
     iban = serializers.CharField(allow_blank=True)
     vat_breakdown = serializers.ListField(child=serializers.DictField(), required=False)
     line_items = serializers.ListField(child=serializers.DictField(), required=False)
+    allocated_lines = AllocatedOcrLineSerializer(many=True, required=False)
 
 
 class PartnerMatchSerializer(serializers.Serializer):
@@ -60,6 +78,14 @@ class DuplicateSerializer(serializers.Serializer):
     detail = serializers.DictField()
 
 
+class DirectionSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    supplier_source = serializers.CharField(allow_blank=True)
+    override_required = serializers.BooleanField()
+    unresolved = serializers.BooleanField()
+    party_candidates = PartyCandidateSerializer(many=True)
+
+
 class IncomingInvoiceImportSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     status = serializers.CharField()
@@ -72,6 +98,7 @@ class IncomingInvoiceImportSerializer(serializers.Serializer):
     ocr_schema_version = serializers.CharField(allow_blank=True)
     ocr_extracted_at = serializers.CharField(allow_null=True)
     extracted = ExtractedInvoiceSerializer()
+    direction = DirectionSerializer()
     warnings = serializers.ListField(child=serializers.CharField())
     partner = PartnerMatchSerializer()
     duplicate = DuplicateSerializer()
@@ -96,6 +123,11 @@ class CreatePartnerFromImportSerializer(serializers.Serializer):
     vat_number = serializers.CharField(required=False, allow_blank=True)
 
 
+class ConfirmLineAccountSerializer(serializers.Serializer):
+    position = serializers.IntegerField(min_value=1)
+    posting_account_id = serializers.IntegerField(allow_null=True)
+
+
 class ConfirmInvoiceImportSerializer(serializers.Serializer):
     invoice_number = serializers.CharField(required=False)
     issue_date = serializers.CharField(required=False)
@@ -107,3 +139,94 @@ class ConfirmInvoiceImportSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     iban = serializers.CharField(required=False, allow_blank=True)
     duplicate_override = serializers.BooleanField(required=False)
+    category_id = serializers.IntegerField(required=False, allow_null=True)
+    expense_account_id = serializers.IntegerField(required=False, allow_null=True)
+    cost_center_id = serializers.IntegerField(required=False, allow_null=True)
+    remember_category_for_partner = serializers.BooleanField(required=False)
+    direction_override = serializers.BooleanField(required=False)
+    line_accounts = ConfirmLineAccountSerializer(many=True, required=False)
+    posting_profile = serializers.CharField(required=False, allow_blank=True)
+    vehicle_id = serializers.IntegerField(required=False, allow_null=True)
+    answers = serializers.DictField(required=False)
+
+
+class ApplySupplierSerializer(serializers.Serializer):
+    source = serializers.ChoiceField(choices=['issuer', 'buyer', 'manual'])
+    supplier = serializers.DictField(required=False)
+
+
+class EracunRejectionRequestSerializer(serializers.Serializer):
+    reason_code = serializers.ChoiceField(
+        choices=[
+            'REJECTED_BY_RECIPIENT',
+            'TAX_NEUTRAL_MISMATCH',
+            'TAX_AFFECTING_MISMATCH',
+            'OTHER',
+        ]
+    )
+    reason_text = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+
+class EracunRejectionEReportingSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    attempt_id = serializers.CharField(allow_null=True)
+
+
+class EracunRejectionLifecycleSerializer(serializers.Serializer):
+    document = serializers.CharField(allow_null=True)
+    workflow = serializers.CharField(allow_null=True)
+
+
+class EracunRejectionResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    status = serializers.CharField()
+    e_reporting = EracunRejectionEReportingSerializer()
+    lifecycle = EracunRejectionLifecycleSerializer()
+
+
+class EracunImportErrorSerializer(serializers.Serializer):
+    invoice_guid = serializers.CharField(required=False)
+    document_id = serializers.CharField(required=False)
+    detail = serializers.CharField()
+
+
+class EracunInboundImportResponseSerializer(serializers.Serializer):
+    scanned = serializers.IntegerField()
+    imported = serializers.IntegerField()
+    merged = serializers.IntegerField()
+    skipped = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    remaining_importable = serializers.IntegerField()
+    errors = EracunImportErrorSerializer(many=True)
+
+
+class EracunInboxRefreshResponseSerializer(serializers.Serializer):
+    reconciliation_id = serializers.CharField(allow_blank=True)
+    status = serializers.CharField(allow_blank=True)
+    detail = serializers.CharField(allow_blank=True)
+
+
+class ExpenseCategoryAccountRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    active = serializers.BooleanField()
+
+
+class ExpenseCategorySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    code = serializers.CharField(allow_null=True)
+    is_active = serializers.BooleanField()
+    default_account = ExpenseCategoryAccountRefSerializer(allow_null=True)
+    default_cost_center = serializers.DictField(allow_null=True)
+
+
+class ExpenseCategoryListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = ExpenseCategorySerializer(many=True)
+
+
+class ExpenseCategoryPatchSerializer(serializers.Serializer):
+    default_account_id = serializers.IntegerField(required=False, allow_null=True)
+    default_cost_center_id = serializers.IntegerField(required=False, allow_null=True)

@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
-from django.db import transaction
+from decimal import Decimal
 
-from accounting.services.posting import post_document
-from expenses.models import Expense, SettlementMethod
+from django.db import transaction
+from django.http import Http404
+
+from accounting.services.posting import build_document_posting_plan, post_document
+from domains.finance.services.account_resolver import (
+    classify_expense_line_allocation,
+    load_postable_account,
+    load_tenant_category,
+)
+from domains.finance.services.cost_centers import cost_center_ref
+from domains.finance.services.cost_center_resolver import load_bookable_cost_center
+from expenses.models import Expense, ExpenseAccountSource, SettlementMethod
+
+# Sentinel: omit ``settlement_method`` → keep legacy fill-in (blank → business_account).
+_USE_EXISTING_SETTLEMENT_DEFAULT = object()
+_OMIT = object()
 
 
 class ExpenseApproveBadRequest(Exception):
@@ -22,6 +36,21 @@ class ExpenseApproveConflict(Exception):
         self.detail = detail
 
 
+def _money(value) -> str:
+    return f'{Decimal(value):.2f}'
+
+
+def _account_ref(account) -> dict | None:
+    if account is None:
+        return None
+    return {
+        'id': account.pk,
+        'code': account.account_code,
+        'name': account.account_name,
+        'active': account.is_active,
+    }
+
+
 def expense_dto(expense: Expense) -> dict:
     return {
         'id': expense.pk,
@@ -32,17 +61,234 @@ def expense_dto(expense: Expense) -> dict:
         'expense_date': expense.expense_date.isoformat() if expense.expense_date else None,
         'due_date': expense.due_date.isoformat() if expense.due_date else None,
         'supplier_id': expense.supplier_id,
+        'category_id': expense.category_id,
+        'expense_account_id': expense.expense_account_id,
+        'expense_account_source': expense.expense_account_source,
+        'cost_center_id': expense.cost_center_id,
         'settlement_method': expense.settlement_method or '',
         'approved_by_id': expense.approved_by_id,
     }
 
 
+def serialize_document_posting_plan(expense: Expense, plan) -> dict:
+    """Map ``build_document_posting_plan`` (+ expense identity) to a preview DTO.
+
+    Does not resolve accounts. ``plan`` is the only source of GL lines.
+    """
+    category = getattr(expense, 'category', None)
+    resolved_account = plan.expense_account if plan is not None else expense.expense_account
+    allocation = classify_expense_line_allocation(expense)
+    lines = []
+    if plan is not None:
+        for line in plan.lines:
+            lines.append({
+                'amount_field': line.amount_field,
+                'description': line.description,
+                'amount': _money(line.amount),
+                'document_amount': (
+                    _money(line.document_amount) if line.document_amount is not None else None
+                ),
+                'debit': _account_ref(line.debit_account),
+                'credit': _account_ref(line.credit_account),
+                'debit_cost_center': cost_center_ref(line.debit_cost_center),
+                'credit_cost_center': cost_center_ref(line.credit_cost_center),
+            })
+    warnings = list(plan.warnings) if plan is not None else []
+    if allocation.warning and allocation.warning not in warnings:
+        warnings.append(allocation.warning)
+    return {
+        'category': (
+            {'id': category.pk, 'name': category.name} if category is not None else None
+        ),
+        'expense_account': _account_ref(resolved_account),
+        'account_source': plan.account_source if plan is not None else expense.expense_account_source,
+        'warnings': warnings,
+        'can_approve': (
+            expense.status == 'draft'
+            and expense.supplier_id is not None
+            and plan is not None
+            and allocation.kind != 'blocked'
+        ),
+        'lines': lines,
+    }
+
+
+def posting_preview(*, tenant, expense_id: int) -> dict:
+    expense = (
+        Expense.all_objects.filter(tenant=tenant, pk=expense_id)
+        .select_related('category', 'category__default_account', 'expense_account', 'supplier')
+        .prefetch_related('lines__posting_account')
+        .first()
+    )
+    if expense is None:
+        raise Http404()
+    plan = build_document_posting_plan(tenant, expense, 'expense_approved')
+    return serialize_document_posting_plan(expense, plan)
+
+
 @transaction.atomic
-def approve_expense_for_posting(*, tenant, expense_id: int, user) -> dict:
+def update_draft_expense_posting(
+    *,
+    tenant,
+    expense_id: int,
+    category_id=_OMIT,
+    expense_account_id=_OMIT,
+    cost_center_id=_OMIT,
+    line_accounts=_OMIT,
+) -> dict:
+    expense = (
+        Expense.all_objects.select_for_update(of=('self',))
+        .filter(tenant=tenant, pk=expense_id)
+        .select_related('category', 'expense_account')
+        .first()
+    )
+    if expense is None:
+        raise Http404()
+    if expense.status != 'draft':
+        raise ExpenseApproveConflict(
+            'not_draft',
+            'Vrsta troška i konto mogu se mijenjati samo dok je nalog u nacrtu.',
+        )
+    if (
+        category_id is _OMIT
+        and expense_account_id is _OMIT
+        and cost_center_id is _OMIT
+        and line_accounts is _OMIT
+    ):
+        raise ExpenseApproveBadRequest(
+            'empty_patch',
+            'Potrebna je category_id, expense_account_id, cost_center_id ili line_accounts.',
+        )
+
+    if category_id is not _OMIT:
+        expense.category = load_tenant_category(tenant, category_id)
+        if expense.expense_account_id is None:
+            expense.expense_account_source = ExpenseAccountSource.CATEGORY_DEFAULT
+
+    if expense_account_id is not _OMIT:
+        if expense_account_id is None:
+            expense.expense_account = None
+            expense.expense_account_source = ExpenseAccountSource.CATEGORY_DEFAULT
+        else:
+            expense.expense_account = load_postable_account(tenant, expense_account_id)
+            expense.expense_account_source = ExpenseAccountSource.MANUAL_OVERRIDE
+
+    if cost_center_id is not _OMIT:
+        if cost_center_id is None:
+            expense.cost_center = None
+        else:
+            expense.cost_center = load_bookable_cost_center(tenant, cost_center_id)
+
+    update_fields = ['updated_at']
+    if category_id is not _OMIT:
+        update_fields.extend(['category', 'expense_account_source'])
+    if expense_account_id is not _OMIT:
+        update_fields.extend(['expense_account', 'expense_account_source'])
+    if cost_center_id is not _OMIT:
+        update_fields.append('cost_center')
+    expense.save(update_fields=list(dict.fromkeys(update_fields)))
+
+    if line_accounts is not _OMIT:
+        _apply_line_accounts(tenant=tenant, expense=expense, line_accounts=line_accounts)
+
+    expense.refresh_from_db()
+    return expense_dto(expense)
+
+
+def _apply_line_accounts(*, tenant, expense, line_accounts) -> None:
+    from expenses.models import ExpenseLine
+
+    if not isinstance(line_accounts, list) or not line_accounts:
+        raise ExpenseApproveBadRequest('empty_patch', 'line_accounts ne smije biti prazan.')
+    seen = set()
+    for item in line_accounts:
+        line_id = item.get('position')
+        if line_id in seen:
+            raise ExpenseApproveBadRequest('duplicate_line', 'Ista stavka ne smije se slati dvaput.')
+        seen.add(line_id)
+        line = (
+            ExpenseLine.all_objects.select_for_update(of=('self',))
+            .filter(tenant=tenant, expense=expense, position=line_id)
+            .first()
+        )
+        if line is None:
+            raise ExpenseApproveBadRequest('unknown_line', 'Stavka nije pronađena na ovom nalogu.')
+        account_id = item.get('posting_account_id')
+        if account_id is None:
+            line.posting_account = None
+        else:
+            line.posting_account = load_postable_account(
+                tenant,
+                int(account_id),
+                field='line_accounts',
+            )
+        line.save(update_fields=['posting_account', 'updated_at'])
+
+
+@transaction.atomic
+def _require_inventory_vehicle_context(expense: Expense) -> None:
+    from accounting.models import VehicleAccountingRole
+
+    profile = expense.posting_profile or ''
+    vehicle = expense.vehicle if expense.vehicle_id else None
+    if profile == 'vehicle_inventory_cost':
+        if vehicle is None:
+            raise ExpenseApproveBadRequest(
+                'missing_vehicle',
+                'Nabavna vrijednost vozila na zalihi ne može se knjižiti bez vozila.',
+            )
+        if vehicle.accounting_role != VehicleAccountingRole.INVENTORY_FOR_RESALE:
+            raise ExpenseApproveBadRequest(
+                'vehicle_role',
+                'Vozilo nije označeno kao vozilo za daljnju prodaju.',
+            )
+        if vehicle.fixed_asset_id:
+            raise ExpenseApproveBadRequest(
+                'vehicle_fixed_asset',
+                'Vozilo za daljnju prodaju ne smije biti vezano uz osnovno sredstvo.',
+            )
+    if (
+        profile == 'asset_purchase'
+        and vehicle is not None
+        and vehicle.accounting_role == VehicleAccountingRole.INVENTORY_FOR_RESALE
+    ):
+        raise ExpenseApproveBadRequest(
+            'inventory_vehicle_asset',
+            'Vozilo za daljnju prodaju ne može se knjižiti kao nabava imovine.',
+        )
+
+
+def approve_expense_for_posting(
+    *,
+    tenant,
+    expense_id: int,
+    user,
+    settlement_method=_USE_EXISTING_SETTLEMENT_DEFAULT,
+) -> dict:
     """draft → approved + post ``expense_approved`` (creates payable SubledgerItem).
 
     Idempotent when already approved with posted JE (heals missing subledger via post_document).
+
+    ``settlement_method``:
+    - omitted (default): legacy behaviour — if blank, set ``business_account``
+    - explicit value (including ``''`` / ``None``): store that value; blank stays blank
     """
+    with transaction.atomic():
+        return _approve_expense_for_posting(
+            tenant=tenant,
+            expense_id=expense_id,
+            user=user,
+            settlement_method=settlement_method,
+        )
+
+
+def _approve_expense_for_posting(
+    *,
+    tenant,
+    expense_id: int,
+    user,
+    settlement_method=_USE_EXISTING_SETTLEMENT_DEFAULT,
+) -> dict:
     expense = (
         Expense.all_objects.select_for_update()
         .filter(tenant=tenant, pk=expense_id)
@@ -57,11 +303,18 @@ def approve_expense_for_posting(*, tenant, expense_id: int, user) -> dict:
     if expense.status in ('rejected', 'cancelled'):
         raise ExpenseApproveConflict('invalid_status', 'Trošak nije u statusu koji se može odobriti.')
 
+    _require_inventory_vehicle_context(expense)
+
     if expense.status == 'draft':
         expense.status = 'approved'
         expense.approved_by = user if getattr(user, 'is_authenticated', False) else None
-        if not (expense.settlement_method or '').strip():
-            expense.settlement_method = SettlementMethod.BUSINESS_ACCOUNT
+        if settlement_method is _USE_EXISTING_SETTLEMENT_DEFAULT:
+            if not (expense.settlement_method or '').strip():
+                expense.settlement_method = SettlementMethod.BUSINESS_ACCOUNT
+        else:
+            expense.settlement_method = (
+                '' if settlement_method is None else str(settlement_method).strip()
+            )
         update_fields = ['status', 'approved_by', 'settlement_method', 'updated_at']
         expense.save(update_fields=update_fields)
     elif expense.status not in ('approved', 'paid'):
@@ -69,6 +322,13 @@ def approve_expense_for_posting(*, tenant, expense_id: int, user) -> dict:
 
     if expense.supplier_id is None:
         raise ExpenseApproveBadRequest('missing_supplier', 'Trošak nema dobavljača.')
+
+    allocation = classify_expense_line_allocation(expense)
+    if allocation.kind == 'blocked':
+        raise ExpenseApproveBadRequest(
+            allocation.code or 'line_accounts',
+            allocation.warning or 'Raspodjela stavki nije spremna za knjiženje.',
+        )
 
     post_document(tenant, expense, 'expense_approved', user)
     expense.refresh_from_db()

@@ -4,6 +4,7 @@ from integrations.constants import IntegrationProvider, IntegrationType
 from integrations.registry import register
 from fiscal_gateway.adapters.ubl_to_fiscal import ubl_document_to_fiscal_payload
 from fiscal_gateway.connector_eracun import DirectEracunConnector  # noqa: F401
+from fiscal_gateway.connector_pondi import PondiEracunConnector  # noqa: F401
 from fiscal_gateway.connector_platform import FiskalPlatformFiscalizationConnector  # noqa: F401
 from fiscal_gateway.services.outbound import submit_outgoing_invoice
 

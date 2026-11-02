@@ -9,11 +9,13 @@ from banking.importers.base import BankStatementImportResult, ImportResultBuilde
 from banking.importers.camt053_importer import Camt053Importer
 from banking.parsers.camt053 import parse_camt053
 from banking.parsers.format_detection import detect_format
+from banking.parsers.otp_izv import parse_otp_izv
 
 logger = logging.getLogger(__name__)
 
 IMPORTERS = {
     'camt053': Camt053Importer,
+    'otp_izv': Camt053Importer,
 }
 
 
@@ -52,7 +54,7 @@ def import_bank_statement_file(
         return result
 
     try:
-        parsed = _parse_for_format(fmt, content)
+        parsed, parse_warnings = _parse_for_format(fmt, content)
     except Exception as exc:
         duration_ms = int((time.monotonic() - started) * 1000)
         result = _error_result(
@@ -70,6 +72,8 @@ def import_bank_statement_file(
         statements=parsed,
         import_id=import_id,
     )
+    for message in parse_warnings:
+        builder.add_warning(message)
     duration_ms = int((time.monotonic() - started) * 1000)
     result = builder.build(format=fmt, duration_ms=duration_ms, import_id=import_id)
     _log_import_result(tenant, user, filename, result)
@@ -78,7 +82,10 @@ def import_bank_statement_file(
 
 def _parse_for_format(fmt: str, content: bytes | str):
     if fmt == 'camt053':
-        return parse_camt053(content)
+        return parse_camt053(content), []
+    if fmt == 'otp_izv':
+        parsed = parse_otp_izv(content)
+        return parsed.statements, list(parsed.warnings)
     raise ValueError(f'Parser nije implementiran za format: {fmt}')
 
 

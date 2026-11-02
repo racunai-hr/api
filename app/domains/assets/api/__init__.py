@@ -1,0 +1,1 @@
+"""Assets read API."""

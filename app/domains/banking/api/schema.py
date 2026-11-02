@@ -69,7 +69,9 @@ class StatementListItemSerializer(serializers.Serializer):
     bank_account_id = serializers.IntegerField()
     statement_date = serializers.DateField(allow_null=True)
     opening_balance = money_field()
+    opening_balance_eur = money_field(allow_null=True)
     closing_balance = money_field()
+    closing_balance_eur = money_field(allow_null=True)
     status = serializers.CharField()
     currency = serializers.CharField()
     imported_at = serializers.CharField(allow_null=True)
@@ -89,6 +91,7 @@ class TransactionSerializer(serializers.Serializer):
     transaction_date = serializers.DateField(allow_null=True)
     value_date = serializers.DateField(allow_null=True)
     amount = money_field()
+    amount_eur = money_field(allow_null=True)
     currency = serializers.CharField()
     transaction_type = serializers.CharField()
     description = serializers.CharField(allow_blank=True)
@@ -209,7 +212,7 @@ class MatchRequestSerializer(serializers.Serializer):
 
 
 class OpenItemCandidateSerializer(serializers.Serializer):
-    item_id = serializers.IntegerField()
+    item_id = serializers.IntegerField(allow_null=True)
     partner_id = serializers.IntegerField(allow_null=True)
     partner_name = serializers.CharField(allow_blank=True)
     direction = serializers.CharField()
@@ -219,6 +222,9 @@ class OpenItemCandidateSerializer(serializers.Serializer):
     open_amount = money_field()
     due_date = serializers.CharField(allow_null=True)
     action_label = serializers.CharField()
+    match_score = serializers.IntegerField()
+    match_reasons = serializers.ListField(child=serializers.CharField())
+    recommended = serializers.BooleanField()
 
 
 class OpenItemCandidateListSerializer(serializers.Serializer):
@@ -261,6 +267,7 @@ TRANSACTION_PARAMS = [
     ),
     OpenApiParameter('date_from', OpenApiTypes.DATE, OpenApiParameter.QUERY),
     OpenApiParameter('date_to', OpenApiTypes.DATE, OpenApiParameter.QUERY),
+    OpenApiParameter('search', OpenApiTypes.STR, OpenApiParameter.QUERY),
     PAGE,
     PAGE_SIZE,
 ]

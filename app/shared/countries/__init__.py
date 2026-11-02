@@ -130,6 +130,7 @@ LEGACY_COUNTRY_ALIASES: dict[str, str] = {
     'spain': 'ES',
     'españa': 'ES',
     'spanjolska': 'ES',
+    'španjolska': 'ES',
     'pt': 'PT',
     'portugal': 'PT',
     'gr': 'GR',

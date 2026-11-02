@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from decimal import Decimal
 
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
 
-from accounting.models import Deposit, PrivateFundsClaim, SubledgerItem
+from accounting.models import Deposit, OfficialDocument, PrivateFundsClaim, SubledgerItem
+from banking.book import transaction_book_amount, transaction_book_currency
 from banking.models import BankReconcileIdempotency, BankTransaction
 from banking.reconciliation import MatchConflict, match_transaction_to_journal_entry
 from domains.banking.read.dto import transaction_dto
@@ -31,7 +35,7 @@ class ReconcileIdempotencyConflict(MatchConflict):
 
 
 def _abs_amount(bank_tx: BankTransaction) -> Decimal:
-    return abs(Decimal(bank_tx.amount)).quantize(Decimal('0.01'))
+    return transaction_book_amount(bank_tx)
 
 
 def _expected_direction(transaction_type: str) -> str:
@@ -44,6 +48,154 @@ def _action_label(source_type: str, direction: str) -> str:
     if direction == 'receivable':
         return 'Zatvori potraživanje'
     return 'Zatvori obvezu'
+
+
+STRONG_IDENTITY_REASONS = frozenset({'reference_match', 'iban_match', 'partner_name_match'})
+
+_LEGAL_FORM_RE = re.compile(
+    r'\b(?:j\.?\s*d\.?\s*o\.?\s*o\.?|d\.?\s*o\.?\s*o\.?|d\.?\s*d\.?|jdoo|doo|dd)\b',
+    re.IGNORECASE,
+)
+_NON_ALNUM_RE = re.compile(r'[^0-9a-zA-ZčćžšđČĆŽŠĐ]+', re.UNICODE)
+_NAME_STOP_WORDS = frozenset({
+    'trade',
+    'servis',
+    'service',
+    'transport',
+    'hotel',
+    'auto',
+    'group',
+    'holding',
+})
+_CANDIDATE_SCAN_LIMIT = 300
+_CANDIDATE_RESULT_LIMIT = 50
+_SCORE_CAP = 100
+_RECOMMENDED_MIN_SCORE = 60
+_UNPOSTED_EXPENSE_STATUSES = ('draft', 'submitted', 'approved')
+_SORT_DATE_LAST = date(9999, 12, 31)
+
+
+def _digits_only(value: str | None) -> str:
+    return re.sub(r'\D', '', value or '')
+
+
+def _normalize_iban(value: str | None) -> str:
+    return re.sub(r'\s+', '', value or '').upper()
+
+
+def _normalize_text(value: str | None) -> str:
+    return ' '.join(_NON_ALNUM_RE.sub(' ', value or '').casefold().split())
+
+
+def _normalize_name(value: str | None) -> str:
+    stripped = _LEGAL_FORM_RE.sub(' ', value or '')
+    return _normalize_text(stripped)
+
+
+def _significant_name_tokens(normalized: str) -> set[str]:
+    return {token for token in normalized.split() if len(token) >= 5 and token not in _NAME_STOP_WORDS}
+
+
+def _score_candidate(bank_tx, item, source, source_label: str, amount: Decimal) -> tuple[int, list[str]]:
+    reasons: list[str] = []
+    score = 0
+
+    if item.open_amount == amount:
+        score += 50
+        reasons.append('amount_exact')
+
+    source_ref = _digits_only(getattr(source, 'reference', None) if source is not None else None)
+    bank_ref = _digits_only(bank_tx.reference)
+    if source_ref and len(source_ref) >= 6 and (source_ref == bank_ref or bank_ref.endswith(source_ref)):
+        score += 30
+        reasons.append('reference_match')
+
+    bank_iban = _normalize_iban(bank_tx.counterparty_iban)
+    if bank_iban and item.partner_id:
+        partner_ibans = {
+            _normalize_iban(account.iban)
+            for account in item.partner.bank_accounts.all()
+            if account.is_active
+        }
+        if bank_iban in partner_ibans:
+            score += 25
+            reasons.append('iban_match')
+
+    label = _normalize_text(source_label)
+    description = _normalize_text(bank_tx.description)
+    if label and len(label) >= 6 and label in description:
+        score += 15
+        reasons.append('description_match')
+
+    partner_name = _normalize_name(item.partner.name if item.partner_id else '')
+    counterparty_name = _normalize_name(bank_tx.counterparty_name)
+    if partner_name and counterparty_name:
+        if partner_name == counterparty_name:
+            score += 15
+            reasons.append('partner_name_match')
+        else:
+            shared = _significant_name_tokens(partner_name) & _significant_name_tokens(counterparty_name)
+            if len(shared) >= 2:
+                score += 15
+                reasons.append('partner_name_match')
+            elif len(shared) == 1:
+                score += 5
+                reasons.append('single_name_token_match')
+
+    if item.due_date and bank_tx.transaction_date:
+        if abs((item.due_date - bank_tx.transaction_date).days) <= 30:
+            score += 5
+            reasons.append('due_near')
+
+    return min(score, _SCORE_CAP), reasons
+
+
+def _is_recommended(score: int, reasons: list[str]) -> bool:
+    return score >= _RECOMMENDED_MIN_SCORE and bool(STRONG_IDENTITY_REASONS & set(reasons))
+
+
+def _is_likely_candidate(row: dict) -> bool:
+    return bool(row.get('recommended') or 'amount_exact' in (row.get('match_reasons') or []))
+
+
+class _ScoreTarget:
+    def __init__(self, *, open_amount, partner, due_date):
+        self.open_amount = open_amount
+        self.partner = partner
+        self.partner_id = partner.pk if partner is not None else None
+        self.due_date = due_date
+
+
+def _candidate_row(
+    *,
+    item_id,
+    partner,
+    direction: str,
+    source_type: str,
+    source_id: int,
+    source_label: str,
+    open_amount,
+    due_date,
+    match_score: int,
+    match_reasons: list[str],
+    action_label: str,
+) -> dict:
+    return {
+        'item_id': item_id,
+        'partner_id': partner.pk if partner is not None else None,
+        'partner_name': partner.name if partner is not None else '',
+        'direction': direction,
+        'source_type': source_type,
+        'source_id': source_id,
+        'source_label': source_label,
+        'open_amount': f'{open_amount:.2f}',
+        'due_date': due_date.isoformat() if due_date else None,
+        'action_label': action_label,
+        'match_score': match_score,
+        'match_reasons': match_reasons,
+        'recommended': _is_recommended(match_score, match_reasons),
+        '_sort_due': due_date,
+    }
 
 
 def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = None) -> dict:
@@ -64,6 +216,7 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
             direction=direction,
         )
         .select_related('partner', 'source_content_type')
+        .prefetch_related('partner__bank_accounts')
         .order_by('due_date', 'id')
     )
     if q:
@@ -75,32 +228,123 @@ def list_open_item_candidates(*, tenant, transaction_id: int, q: str | None = No
                 | Q(partner__vat_number__icontains=term)
             )
 
-    results = []
-    for item in qs[:80]:
+    scored = []
+    for item in qs[:_CANDIDATE_SCAN_LIMIT]:
         source_type = item.source_content_type.model if item.source_content_type_id else ''
         if source_type == 'deposit':
             if bank_tx.transaction_type != 'credit' or item.open_amount != amount:
                 continue
-        elif source_type in ('invoice', 'expense', 'privatefundsclaim'):
+        elif source_type in ('invoice', 'expense', 'privatefundsclaim', 'officialdocument'):
             if item.open_amount < amount:
                 continue
         else:
             continue
-        results.append({
-            'item_id': item.pk,
-            'partner_id': item.partner_id,
-            'partner_name': item.partner.name if item.partner_id else '',
-            'direction': item.direction,
-            'source_type': source_type,
-            'source_id': item.source_object_id,
-            'source_label': _subledger_source_label(item),
-            'open_amount': f'{item.open_amount:.2f}',
-            'due_date': item.due_date.isoformat() if item.due_date else None,
-            'action_label': _action_label(source_type, item.direction),
-        })
-        if len(results) >= 50:
-            break
+        source = item.source
+        source_label = _subledger_source_label(item)
+        match_score, match_reasons = _score_candidate(
+            bank_tx, item, source, source_label, amount
+        )
+        scored.append(
+            _candidate_row(
+                item_id=item.pk,
+                partner=item.partner,
+                direction=item.direction,
+                source_type=source_type,
+                source_id=item.source_object_id,
+                source_label=source_label,
+                open_amount=item.open_amount,
+                due_date=item.due_date,
+                match_score=match_score,
+                match_reasons=match_reasons,
+                action_label=_action_label(source_type, item.direction),
+            )
+        )
+    _append_unposted_expense_candidates(
+        scored,
+        tenant=tenant,
+        bank_tx=bank_tx,
+        amount=amount,
+        direction=direction,
+        q=q,
+    )
+    scored.sort(
+        key=lambda row: (
+            -row['match_score'],
+            row['_sort_due'] or _SORT_DATE_LAST,
+            row['item_id'] is None,
+            row['item_id'] or 0,
+            row['source_id'],
+        )
+    )
+    if not (q or '').strip() and any(_is_likely_candidate(row) for row in scored):
+        scored = [row for row in scored if _is_likely_candidate(row)]
+    results = []
+    for row in scored[:_CANDIDATE_RESULT_LIMIT]:
+        row.pop('_sort_due', None)
+        results.append(row)
     return {'count': len(results), 'results': results}
+
+
+def _append_unposted_expense_candidates(
+    scored: list,
+    *,
+    tenant,
+    bank_tx,
+    amount: Decimal,
+    direction: str,
+    q: str | None,
+) -> None:
+    if direction != 'payable':
+        return
+    expense_ct = ContentType.objects.get_for_model(Expense)
+    posted_ids = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        source_content_type=expense_ct,
+    ).values('source_object_id')
+    qs = (
+        Expense.all_objects.filter(
+            tenant=tenant,
+            status__in=_UNPOSTED_EXPENSE_STATUSES,
+        )
+        .exclude(pk__in=posted_ids)
+        .select_related('supplier')
+        .prefetch_related('supplier__bank_accounts')
+        .order_by('due_date', 'expense_date', 'id')
+    )
+    term = (q or '').strip()
+    if term:
+        qs = qs.filter(
+            Q(supplier__name__icontains=term)
+            | Q(supplier__tax_number__icontains=term)
+            | Q(supplier__vat_number__icontains=term)
+            | Q(expense_number__icontains=term)
+        )
+    for expense in qs[:_CANDIDATE_SCAN_LIMIT]:
+        open_amount = Decimal(expense.amount).quantize(Decimal('0.01'))
+        if open_amount < amount:
+            continue
+        partner = expense.supplier
+        due_date = expense.due_date or expense.expense_date
+        target = _ScoreTarget(open_amount=open_amount, partner=partner, due_date=due_date)
+        source_label = expense.expense_number
+        match_score, match_reasons = _score_candidate(
+            bank_tx, target, expense, source_label, amount
+        )
+        scored.append(
+            _candidate_row(
+                item_id=None,
+                partner=partner,
+                direction='payable',
+                source_type='expense',
+                source_id=expense.pk,
+                source_label=source_label,
+                open_amount=open_amount,
+                due_date=due_date,
+                match_score=match_score,
+                match_reasons=match_reasons,
+                action_label='Otvori dokument',
+            )
+        )
 
 
 def reconcile_open_item_api(
@@ -196,6 +440,15 @@ def reconcile_open_item_api(
             )
             if locked_source is None:
                 raise Http404()
+        elif model == 'officialdocument':
+            locked_source = (
+                OfficialDocument.all_objects.select_for_update(of=('self',))
+                .filter(tenant=tenant, pk=item.source_object_id)
+                .select_related('issuer')
+                .first()
+            )
+            if locked_source is None:
+                raise Http404()
         else:
             from django.core.exceptions import ValidationError
 
@@ -215,6 +468,8 @@ def reconcile_open_item_api(
                 transaction_type=bank_tx.transaction_type,
                 bank_transaction_id=bank_tx.pk,
                 locked_source=locked_source,
+                source_amount=bank_tx.amount,
+                source_currency=bank_tx.currency,
             )
         except SettlementConflict as exc:
             raise MatchConflict(exc.detail) from exc
@@ -238,3 +493,49 @@ def reconcile_open_item_api(
             result_payload=payload,
         )
         return payload
+
+
+def list_expense_close_payments(tenant, expense: Expense) -> list[dict]:
+    """Unmatched debit bank lines with the same currency and exact gross amount."""
+    amount = Decimal(expense.amount).quantize(Decimal('0.01'))
+    currency = (expense.currency or 'EUR').upper()
+    target = _ScoreTarget(
+        open_amount=amount,
+        partner=expense.supplier,
+        due_date=expense.due_date or expense.expense_date,
+    )
+    label = expense.expense_number or ''
+    scored: list[dict] = []
+    base = BankTransaction.all_objects.filter(
+        tenant=tenant,
+        transaction_type='debit',
+        match_status='unmatched',
+        matched_journal_entry__isnull=True,
+        matched_payment__isnull=True,
+    )
+    if currency == 'EUR':
+        amount_filter = Q(currency__iexact='EUR', amount=amount) | (
+            Q(amount_eur=amount) & ~Q(currency__iexact='EUR')
+        )
+    else:
+        amount_filter = Q(currency__iexact=currency, amount=amount, amount_eur__isnull=True)
+    rows = base.filter(amount_filter).order_by('-transaction_date', '-id')[:_CANDIDATE_SCAN_LIMIT]
+    for bank_tx in rows:
+        score, reasons = _score_candidate(bank_tx, target, expense, label, amount)
+        if 'amount_exact' not in reasons:
+            continue
+        scored.append({
+            'id': bank_tx.pk,
+            'transaction_date': bank_tx.transaction_date.isoformat(),
+            'amount': f'{amount:.2f}',
+            'currency': transaction_book_currency(bank_tx),
+            'counterparty_name': bank_tx.counterparty_name,
+            'description': bank_tx.description,
+            'reference': bank_tx.reference,
+            'match_score': score,
+            'match_reasons': reasons,
+            'recommended': _is_recommended(score, reasons),
+        })
+    scored.sort(key=lambda row: row['transaction_date'], reverse=True)
+    scored.sort(key=lambda row: row['match_score'], reverse=True)
+    return scored[:_CANDIDATE_RESULT_LIMIT]

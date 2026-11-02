@@ -11,6 +11,7 @@ class IntegrationType(models.TextChoices):
 class IntegrationProvider(models.TextChoices):
     SUPER = 'super', 'SUPER'
     DIRECT = 'direct', 'Direktno (racunAI)'
+    PONDI = 'pondi', 'Pondi'
     MER = 'mer', 'MER'
     CIS = 'cis', 'CIS (Porezna)'
     FISKAL_PLATFORM = 'fiskal_platform', 'Fiskal Platform'

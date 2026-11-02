@@ -9,6 +9,7 @@ import xlsxwriter
 from accounting.models import VATPeriod
 from accounting.services.reports import (
     export_bilanca_xlsx,
+    export_cost_center_xlsx,
     export_rdg_xlsx,
     export_trial_balance_xlsx,
     journal_report,
@@ -111,6 +112,21 @@ def bilanca_export(request, year, month):
         return HttpResponseForbidden('Tenant nije određen.')
     content = export_bilanca_xlsx(tenant, int(year), int(month))
     filename = f"Bilanca_{year}_{int(month):02d}.xlsx"
+    response = HttpResponse(
+        content,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@require_tenant_export
+def cost_center_export(request, year, month):
+    tenant = getattr(request, 'tenant', None)
+    if tenant is None:
+        return HttpResponseForbidden('Tenant nije određen.')
+    content = export_cost_center_xlsx(tenant, int(year), int(month))
+    filename = f"MT_{year}_{int(month):02d}.xlsx"
     response = HttpResponse(
         content,
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

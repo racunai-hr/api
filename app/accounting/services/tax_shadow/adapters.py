@@ -8,9 +8,10 @@ from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 
 from accounting.models import JournalEntry, JournalEntryLine, VATLedgerEntry, VATPeriod
-from accounting.services.tax_forms.pdv.mapping import partner_eu_vat_id
+from accounting.services.tax_forms.pdv.mapping import derived_expense_vat_rate, partner_eu_vat_id
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
 from accounting.services.tax_shadow.reversal_relevance import assess_reversal_relevance
+from settings.models import CompanySettings
 from domains.tax.classification.contracts import (
     Direction,
     EventKind,
@@ -22,6 +23,15 @@ from domains.tax.classification.contracts import (
     TaxRelevance,
 )
 from domains.tax.classification.hashing import hash_tax_input
+
+
+def _input_vat_deductible(tenant_id: int) -> bool:
+    settings = CompanySettings.all_objects.filter(tenant_id=tenant_id).only(
+        'vat_registration_status',
+    ).first()
+    if settings is None:
+        return True
+    return settings.input_vat_deductible
 
 
 def _finalize(document: TaxDocumentInput) -> TaxDocumentInput:
@@ -39,6 +49,7 @@ def _partner_snapshot(partner, *, provenance: PartnerProvenance) -> PartnerSnaps
         tax_number=getattr(partner, 'tax_number', '') or '',
         vat_id=vat_id,
         provenance=provenance,
+        country_code=(getattr(partner, 'country_code', '') or '').strip().upper(),
     )
 
 
@@ -80,6 +91,7 @@ def adapt_invoice_item(item, *, period: VATPeriod) -> TaxDocumentInput:
             description=item.item_name or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(invoice.tenant_id),
             input_hash='',
         )
     )
@@ -118,6 +130,7 @@ def adapt_invoice_header(invoice, *, period: VATPeriod) -> TaxDocumentInput:
             description=invoice.description or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(invoice.tenant_id),
             input_hash='',
         )
     )
@@ -131,6 +144,14 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
         source_object_id=expense.pk,
     ).exists()
     net = Decimal(expense.amount or 0) - Decimal(expense.tax_amount or 0)
+    vat_amount = Decimal(expense.tax_amount or 0)
+    book_currency = expense.currency or 'EUR'
+    if book_currency.strip().upper() == 'HRK':
+        from accounting.services.fx import to_eur_amount
+
+        net = to_eur_amount(net, 'HRK')
+        vat_amount = to_eur_amount(vat_amount, 'HRK')
+        book_currency = 'EUR'
     procedure = getattr(expense, 'vat_procedure', VatSupplyProcedure.STANDARD) or VatSupplyProcedure.STANDARD
     return _finalize(
         TaxDocumentInput(
@@ -145,9 +166,9 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
             supply_date=None,
             partner=_partner_snapshot(expense.supplier, provenance=PartnerProvenance.CURRENT_PARTNER),
             base_amount=net,
-            vat_rate=None,
-            vat_amount=Decimal(expense.tax_amount or 0),
-            currency=expense.currency or 'EUR',
+            vat_rate=derived_expense_vat_rate(base_amount=net, vat_amount=vat_amount),
+            vat_amount=vat_amount,
+            currency=book_currency,
             jurisdiction='',
             customer_type='B2B',
             supply_kind='unknown',
@@ -164,7 +185,12 @@ def adapt_expense(expense, *, period: VATPeriod) -> TaxDocumentInput:
             description=expense.description or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(expense.tenant_id),
             input_hash='',
+            tax_category=(getattr(expense, 'ubl_tax_category', '') or ''),
+            posting_profile=(getattr(expense, 'posting_profile', '') or ''),
+            foreign_vat_amount=getattr(expense, 'foreign_vat_amount', None),
+            foreign_vat_country=(getattr(expense, 'foreign_vat_country', '') or ''),
         )
     )
 
@@ -281,6 +307,7 @@ def adapt_journal_line(line: JournalEntryLine, *, period: VATPeriod) -> TaxDocum
             description=entry.description or '',
             period_year=period.year,
             period_month=period.month,
+            input_vat_deductible=_input_vat_deductible(entry.tenant_id),
             input_hash='',
         )
     )

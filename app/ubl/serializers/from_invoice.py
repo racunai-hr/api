@@ -20,7 +20,7 @@ def _clean_oib(value: str) -> str:
 
 
 def _party_identification(oib: str, suffix: str = '12345') -> str:
-    return f'{ENDPOINT_SCHEME_ID}:{oib}::HR99:{suffix}'
+    return f'{ENDPOINT_SCHEME_ID}:{oib}'
 
 
 def _resolve_issue_time(invoice, company) -> time:
@@ -68,6 +68,17 @@ def _company_address_for_ubl(company) -> tuple[str, str, str]:
     return street, city, postal_code
 
 
+ZERO_VAT_EXEMPTION_REASON = (
+    'Nije podložno oporezivanju sukladno čl. 33. st. 3. Zakona o PDV-u'
+)
+
+
+def _tax_category_for_rate(rate: Decimal) -> tuple[str, str | None, str, str]:
+    if rate > 0:
+        return 'S', None, 'VAT', hr_vat_name(rate)
+    return 'E', ZERO_VAT_EXEMPTION_REASON, 'VAT', 'HR:POVNAK'
+
+
 def invoice_to_ubl_document(invoice, company, partner) -> UblDocument:
     supplier_oib = _clean_oib(company.vat_number or '')
     customer_oib = _clean_oib(partner.tax_number or '')
@@ -75,19 +86,23 @@ def invoice_to_ubl_document(invoice, company, partner) -> UblDocument:
     supplier_street, supplier_city, supplier_postal = _company_address_for_ubl(company)
 
     lines: list[InvoiceLine] = []
-    tax_buckets: dict[Decimal, Decimal] = defaultdict(Decimal)
+    tax_buckets: dict[tuple[Decimal, str, str, str, str], Decimal] = defaultdict(Decimal)
 
     for index, item in enumerate(invoice.items.all(), start=1):
         line_net = (item.quantity or Decimal('0')) * (item.unit_price or Decimal('0'))
         rate = Decimal(str(item.tax_rate or 0))
-        tax_buckets[rate] += line_net
+        tax_category, exemption, tax_scheme, tax_name = _tax_category_for_rate(rate)
+        tax_buckets[(rate, tax_category, exemption or '', tax_scheme, tax_name)] += line_net
         lines.append(
             InvoiceLine(
                 line_id=str(index),
                 quantity=Decimal(str(item.quantity)),
                 line_extension_amount=line_net.quantize(Decimal('0.01')),
                 item_name=item.item_name,
-                tax_name=hr_vat_name(rate),
+                tax_category=tax_category,
+                tax_name=tax_name,
+                tax_scheme=tax_scheme,
+                tax_exemption_reason=exemption,
                 tax_percent=rate,
                 unit_price=Decimal(str(item.unit_price)),
                 classification_code='62.90.90',
@@ -95,13 +110,19 @@ def invoice_to_ubl_document(invoice, company, partner) -> UblDocument:
         )
 
     tax_subtotals = []
-    for rate, taxable in sorted(tax_buckets.items(), reverse=True):
+    for (rate, tax_category, exemption, tax_scheme, tax_name), taxable in sorted(
+        tax_buckets.items(), reverse=True
+    ):
         tax_amount = (taxable * rate / Decimal('100')).quantize(Decimal('0.01'))
         tax_subtotals.append(
             TaxSubtotal(
                 taxable_amount=taxable.quantize(Decimal('0.01')),
                 tax_amount=tax_amount,
+                category_id=tax_category,
                 percent=rate,
+                exemption_reason=exemption or None,
+                name=tax_name,
+                tax_scheme=tax_scheme,
             )
         )
 
@@ -116,6 +137,18 @@ def invoice_to_ubl_document(invoice, company, partner) -> UblDocument:
 
     payment_means = None
     iban = getattr(company, 'iban', '') or getattr(company, 'bank_account', '')
+    if not iban:
+        from payments.models import BankAccount
+
+        bank = (
+            BankAccount.all_objects.filter(tenant=invoice.tenant, is_active=True)
+            .exclude(iban__isnull=True)
+            .exclude(iban='')
+            .order_by('-id')
+            .first()
+        )
+        if bank:
+            iban = bank.iban
     if iban:
         payment_means = PaymentMeans(iban=iban)
 

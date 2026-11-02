@@ -11,5 +11,10 @@ urlpatterns = [
     path('reports/trial-balance/<int:year>/<int:month>/', views.trial_balance_export, name='trial_balance_export'),
     path('reports/bilanca/<int:year>/<int:month>/', views.bilanca_export, name='bilanca_export'),
     path('reports/rdg/<int:year>/<int:month>/', views.rdg_export, name='rdg_export'),
+    path(
+        'reports/cost-centers/<int:year>/<int:month>/',
+        views.cost_center_export,
+        name='cost_center_export',
+    ),
     path('reports/journal/<int:year>/<int:month>/', views.journal_export, name='journal_export'),
 ]

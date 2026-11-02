@@ -1,6 +1,20 @@
 from __future__ import annotations
 
+from domains.purchasing.services.direction import (
+    DIRECTION_REVIEW_REQUIRED,
+    DIRECTION_TENANT_NOT_ON_DOCUMENT,
+    DIRECTION_WRONG,
+    PartyFlags,
+    SOURCE_BUYER,
+    SOURCE_MANUAL,
+    classify_document,
+    load_company_identity,
+    normalize_parties,
+    party_candidate,
+    supplier_source_of,
+)
 from domains.purchasing.services.matching import parse_iso_date, parse_money, supplier_from_payload
+from domains.purchasing.services.expense_lines import allocated_ocr_line_views
 from domains.reporting.documents.snapshot import isoformat
 
 
@@ -33,20 +47,41 @@ def _duplicate_dto(run) -> dict:
     }
 
 
-def extracted_view(payload: dict) -> dict:
-    supplier = supplier_from_payload(payload or {})
+def _party_view(raw: dict, flags: PartyFlags, *, role: str, fallback_iban: str = '') -> dict:
+    candidate = party_candidate(role, raw, flags, fallback_iban=fallback_iban)
+    candidate.pop('role', None)
+    candidate.pop('blank', None)
+    candidate.pop('is_own_company', None)
+    candidate.pop('suspected_own_company', None)
+    return candidate
+
+
+def extracted_view(payload: dict, *, issuer_flags: PartyFlags | None = None, buyer_flags: PartyFlags | None = None) -> dict:
+    data = normalize_parties(payload or {})
+    supplier = supplier_from_payload(data)
+    issuer_raw = data.get('issuer') if isinstance(data.get('issuer'), dict) else {}
+    buyer_raw = data.get('buyer') if isinstance(data.get('buyer'), dict) else {}
+    fallback_iban = str(data.get('iban') or '')
     return {
         'supplier': supplier,
-        'invoice_number': str((payload or {}).get('invoice_number') or '').strip(),
-        'issue_date': str((payload or {}).get('issue_date') or '').strip(),
-        'due_date': (payload or {}).get('due_date'),
-        'currency': str((payload or {}).get('currency') or 'EUR').strip() or 'EUR',
-        'net_amount': str((payload or {}).get('net_amount') or ''),
-        'tax_amount': str((payload or {}).get('tax_amount') or ''),
-        'total_amount': str((payload or {}).get('total_amount') or ''),
-        'iban': supplier.get('iban') or str((payload or {}).get('iban') or ''),
-        'vat_breakdown': list((payload or {}).get('vat_breakdown') or []),
-        'line_items': list((payload or {}).get('line_items') or []),
+        'issuer': _party_view(
+            issuer_raw,
+            issuer_flags or PartyFlags(),
+            role='issuer',
+            fallback_iban=fallback_iban,
+        ),
+        'buyer': _party_view(buyer_raw, buyer_flags or PartyFlags(), role='buyer'),
+        'invoice_number': str(data.get('invoice_number') or '').strip(),
+        'issue_date': str(data.get('issue_date') or '').strip(),
+        'due_date': data.get('due_date'),
+        'currency': str(data.get('currency') or 'EUR').strip() or 'EUR',
+        'net_amount': str(data.get('net_amount') or ''),
+        'tax_amount': str(data.get('tax_amount') or ''),
+        'total_amount': str(data.get('total_amount') or ''),
+        'iban': supplier.get('iban') or fallback_iban,
+        'vat_breakdown': list(data.get('vat_breakdown') or []),
+        'line_items': list(data.get('line_items') or []),
+        'allocated_lines': allocated_ocr_line_views(data),
     }
 
 
@@ -80,7 +115,33 @@ def confirm_values(payload: dict, overrides: dict | None = None) -> dict:
     }
 
 
+def _direction_dto(payload: dict, result) -> dict:
+    data = normalize_parties(payload or {})
+    fallback_iban = str(data.get('iban') or '')
+    issuer_raw = data.get('issuer') if isinstance(data.get('issuer'), dict) else {}
+    buyer_raw = data.get('buyer') if isinstance(data.get('buyer'), dict) else {}
+    return {
+        'code': result.code,
+        'supplier_source': supplier_source_of(data),
+        'override_required': bool(
+            result.code == DIRECTION_TENANT_NOT_ON_DOCUMENT and result.identity.tax_known
+        ),
+        'unresolved': result.code in {
+            DIRECTION_REVIEW_REQUIRED,
+            DIRECTION_WRONG,
+        }
+        and supplier_source_of(data) not in {SOURCE_BUYER, SOURCE_MANUAL},
+        'party_candidates': [
+            party_candidate('issuer', issuer_raw, result.issuer_flags, fallback_iban=fallback_iban),
+            party_candidate('buyer', buyer_raw, result.buyer_flags),
+        ],
+    }
+
+
 def import_dto(run, *, created: bool | None = None) -> dict:
+    raw_payload = run.extracted_payload or {}
+    identity = load_company_identity(run.tenant)
+    result = classify_document(raw_payload, identity)
     payload = {
         'id': run.pk,
         'status': run.status,
@@ -92,7 +153,12 @@ def import_dto(run, *, created: bool | None = None) -> dict:
         'ocr_model': run.ocr_model,
         'ocr_schema_version': run.ocr_schema_version,
         'ocr_extracted_at': isoformat(run.ocr_extracted_at) if run.ocr_extracted_at else None,
-        'extracted': extracted_view(run.extracted_payload or {}),
+        'extracted': extracted_view(
+            raw_payload,
+            issuer_flags=result.issuer_flags,
+            buyer_flags=result.buyer_flags,
+        ),
+        'direction': _direction_dto(raw_payload, result),
         'warnings': list(run.warnings or []),
         'partner': _partner_dto(run),
         'duplicate': _duplicate_dto(run),

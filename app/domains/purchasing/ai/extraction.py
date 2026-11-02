@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from typing import Protocol
@@ -8,7 +9,11 @@ import requests
 from django.conf import settings
 
 from domains.purchasing.ai.render import RenderedPage, page_data_url
-from domains.purchasing.ai.schema import EXTRACT_PROMPT, INVOICE_JSON_SCHEMA, OCR_SCHEMA_VERSION
+from domains.purchasing.ai.schema import (
+    OCR_SCHEMA_VERSION,
+    INVOICE_JSON_SCHEMA,
+    build_extract_prompt,
+)
 
 
 class ExtractionError(Exception):
@@ -32,13 +37,25 @@ class ExtractionResult:
 
 
 class InvoiceExtractionProvider(Protocol):
-    def extract(self, pages: list[RenderedPage], *, filename: str) -> ExtractionResult: ...
+    def extract(
+        self,
+        pages: list[RenderedPage],
+        *,
+        filename: str,
+        prompt: str | None = None,
+    ) -> ExtractionResult: ...
 
 
 class FakeInvoiceExtractionProvider:
     provider_name = 'fake'
 
-    def extract(self, pages: list[RenderedPage], *, filename: str) -> ExtractionResult:
+    def extract(
+        self,
+        pages: list[RenderedPage],
+        *,
+        filename: str,
+        prompt: str | None = None,
+    ) -> ExtractionResult:
         behavior = getattr(settings, 'PURCHASING_OCR_FAKE_BEHAVIOR', 'ok')
         if behavior == 'timeout':
             raise ExtractionTimeout('OpenAI timeout')
@@ -48,7 +65,7 @@ class FakeInvoiceExtractionProvider:
         if not isinstance(payload, dict) or not payload:
             raise InvalidExtraction('Fake OCR payload nije postavljen.')
         return ExtractionResult(
-            payload=payload,
+            payload=copy.deepcopy(payload),
             provider=self.provider_name,
             model='fake',
             schema_version=OCR_SCHEMA_VERSION,
@@ -58,13 +75,19 @@ class FakeInvoiceExtractionProvider:
 class OpenAIInvoiceExtractionProvider:
     provider_name = 'openai'
 
-    def extract(self, pages: list[RenderedPage], *, filename: str) -> ExtractionResult:
+    def extract(
+        self,
+        pages: list[RenderedPage],
+        *,
+        filename: str,
+        prompt: str | None = None,
+    ) -> ExtractionResult:
         api_key = (getattr(settings, 'OPENAI_API_KEY', '') or '').strip()
         if not api_key:
             raise ExtractionError('OPENAI_API_KEY nije postavljen.')
         model = getattr(settings, 'OPENAI_OCR_MODEL', 'gpt-4.1-mini')
         timeout = int(getattr(settings, 'OPENAI_OCR_TIMEOUT_SECONDS', 60))
-        content = [{'type': 'input_text', 'text': EXTRACT_PROMPT}]
+        content = [{'type': 'input_text', 'text': prompt or build_extract_prompt()}]
         for page in pages:
             content.append({'type': 'input_image', 'image_url': page_data_url(page)})
         body = {
@@ -73,7 +96,7 @@ class OpenAIInvoiceExtractionProvider:
             'text': {
                 'format': {
                     'type': 'json_schema',
-                    'name': 'incoming_invoice_v1',
+                    'name': 'incoming_invoice_v2',
                     'strict': True,
                     'schema': INVOICE_JSON_SCHEMA,
                 }

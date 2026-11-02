@@ -27,6 +27,8 @@ from accounting.models import (
     FiscalPeriod,
     JournalEntry,
     JournalEntryLine,
+    OfficialDocument,
+    PrivateFundsClaim,
     SubledgerAllocation,
     SubledgerItem,
     SubmissionDestination,
@@ -50,7 +52,7 @@ from domains.reporting.documents.projection import (
     operational_outgoing,
     vat_amount_check,
 )
-from expenses.models import Expense, ExpenseAttachment, ExpenseCategory
+from expenses.models import Expense, ExpenseAttachment, ExpenseCategory, ExpenseLine
 from invoices.models import Invoice, InvoiceItem
 from partners.models import Partner, PartnerBankAccount
 from payments.models import BankAccount
@@ -229,7 +231,7 @@ class DocumentReadModelTests(TestCase):
         defaults.update(overrides)
         return Expense.all_objects.create(**defaults)
 
-    def _journal(self, source, *, status='posted', number='JE-1'):
+    def _journal(self, source, *, status='posted', number='JE-1', description='test'):
         ct = ContentType.objects.get_for_model(source)
         period, _ = FiscalPeriod.all_objects.get_or_create(
             tenant=source.tenant,
@@ -242,7 +244,7 @@ class DocumentReadModelTests(TestCase):
             entry_number=number,
             entry_date=date(2026, 5, 15),
             status=status,
-            description='test',
+            description=description,
             created_by=self.user,
             posted_by=self.user if status == 'posted' else None,
             posted_at=timezone.now() if status == 'posted' else None,
@@ -394,6 +396,110 @@ class DocumentReadModelTests(TestCase):
         self.assertEqual(explicit['value'], 'disputed')
         self.assertEqual(explicit['source'], 'as4_document_link')
 
+    def test_zero_vat_bank_expense_is_not_awaiting_ledger(self):
+        bank = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='OTP banka d.d.',
+            tax_number='12345678901',
+            partner_type='supplier',
+            status='active',
+            address='Ulica 3',
+            city='Zagreb',
+            postal_code='10000',
+        )
+        expense = self._expense(
+            status='paid',
+            supplier=bank,
+            amount=Decimal('23.20'),
+            tax_amount=Decimal('0.00'),
+            expense_number='T-BANK-FEE',
+        )
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['vat']['lifecycle']['value'], 'not_tax_active')
+        self.assertEqual(body['vat']['lifecycle']['source'], 'tax_classification')
+        self.assertIsNone(body['vat']['period']['value'])
+        self.assertEqual(body['vat']['period']['reason'], 'not_applicable')
+        self.assertNotIn('vat_ledger_missing', body['controls'])
+
+        taxable = self._expense(status='paid')
+        taxable_body = self._auth_client().get(f'/api/documents/incoming/{taxable.pk}/').json()
+        self.assertEqual(taxable_body['vat']['lifecycle']['value'], 'awaiting_ledger')
+        self.assertIn('vat_ledger_missing', taxable_body['controls'])
+
+    def test_incoming_paid_bank_matched_without_subledger_is_paid(self):
+        """Manual JE + bank match (e.g. uvoz vozila) — no AP subledger, still operational paid."""
+        expense = self._expense(status='paid', amount=Decimal('8000.00'), tax_amount=Decimal('0.00'))
+        purchase_je = self._journal(expense, number='JE-ASSET-1', description='Nabava OS')
+        vat_je = self._journal(expense, number='JE-ASSET-VAT', description='PDV reverse charge')
+        account = ChartOfAccounts.all_objects.filter(tenant=self.tenant).first()
+        self.assertIsNotNone(account)
+        JournalEntryLine.objects.create(
+            journal_entry=purchase_je,
+            account=account,
+            description='duguje',
+            debit_amount=Decimal('8000.00'),
+            credit_amount=Decimal('0.00'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=purchase_je,
+            account=account,
+            description='potražuje',
+            debit_amount=Decimal('0.00'),
+            credit_amount=Decimal('8000.00'),
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='EUR',
+            bank_name='OTP',
+            account_number='110',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-ASSET-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 22),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('8000.00'),
+            imported_by=self.user,
+        )
+        tx = BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 22),
+            amount=Decimal('8000.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='VW-CROSS',
+            match_status='matched',
+            matched_journal_entry=purchase_je,
+        )
+
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['operational_status']['value'], 'paid')
+        self.assertEqual(body['operational_status']['source'], 'bank_transaction')
+        self.assertNotIn('paid_status_subledger_missing', body['controls'])
+        self.assertEqual(body['status']['payment'], 'matched')
+        self.assertEqual(body['status']['posting'], 'posted')
+        # Prefer JE with bank match over sibling VAT JE as primary posting.
+        self.assertEqual(body['accounting']['journal_entry_id'], purchase_je.pk)
+        self.assertEqual(body['payment']['bank_transaction_id'], tx.pk)
+        self.assertTrue(body['payment']['matched'])
+        # vat_je remains linked as sibling (no crash / still detail OK)
+        self.assertEqual(vat_je.source_object_id, expense.pk)
+
+        proven = operational_incoming(
+            document=expense,
+            subledger=None,
+            disputed=False,
+            as_of_day=date(2026, 8, 19),
+            has_receipt_evidence=True,
+            posting=purchase_je,
+            bank_matched=True,
+        )
+        self.assertEqual(proven['value'], 'paid')
+        self.assertEqual(proven['source'], 'bank_transaction')
+
     def test_closed_subledger_with_allocation_no_bank_alarm(self):
         invoice = self._invoice(status='sent')
         item = self._subledger(invoice, status='closed', open_amount=Decimal('0'))
@@ -494,6 +600,32 @@ class DocumentReadModelTests(TestCase):
         )
         self.assertEqual(result, 'not_provable')
         body = self._auth_client().get(f'/api/documents/outgoing/{invoice.pk}/').json()
+        self.assertNotIn('vat_amount_mismatch', body['controls'])
+
+    def test_cvh_mixed_taxable_slice_is_not_amount_mismatch(self):
+        supplier = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='CVH STP "VODICE"',
+            tax_number='12345678903',
+            partner_type='supplier',
+            status='active',
+            address='Ulica 4',
+            city='Vodice',
+            postal_code='22211',
+        )
+        expense = self._expense(
+            status='paid',
+            supplier=supplier,
+            amount=Decimal('372.20'),
+            tax_amount=Decimal('7.49'),
+            expense_number='T-CVH-MIX',
+        )
+        entry = self._ledger(expense)
+        entry.base_amount = Decimal('29.96')
+        entry.vat_amount = Decimal('7.49')
+        entry.save(update_fields=['base_amount', 'vat_amount'])
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(body['vat']['lifecycle']['value'], 'in_ledger')
         self.assertNotIn('vat_amount_mismatch', body['controls'])
 
     def test_secondary_iban_no_warning(self):
@@ -597,6 +729,62 @@ class DocumentReadModelTests(TestCase):
             'has_pdf_xml': True,
         })
         self.assertIn('missing_due_date', alerts)
+
+    def test_missing_due_date_suppressed_when_paid(self):
+        expense = self._expense(due_date=None, status='paid')
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertNotIn('missing_due_date', alerts)
+
+    def test_missing_due_date_suppressed_when_subledger_closed(self):
+        expense = self._expense(due_date=None, status='approved')
+        sub = SimpleNamespace(status='closed', open_amount=Decimal('0.00'))
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': sub,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': True,
+        })
+        self.assertNotIn('missing_due_date', alerts)
+
+    def test_missing_pdf_xml_alerts_without_evidence(self):
+        expense = self._expense(due_date=date(2026, 7, 30), status='draft')
+        alerts, _ = collect_controls({
+            'document': expense,
+            'direction': 'incoming',
+            'partner': self.supplier,
+            'subledger': None,
+            'ledger_rows': [],
+            'as_of_day': date(2026, 8, 20),
+            'has_pdf_xml': False,
+        })
+        self.assertIn('missing_pdf_xml', alerts)
+
+    def test_as4_inbound_suppresses_missing_pdf_xml(self):
+        """Fiskalizacija 2 (AS4) is the e-invoice — PDF/XML control must not fire."""
+        expense = self._expense(due_date=None, status='draft')
+        self._as4_inbound_link(expense, ubl_xml='')
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertNotIn('missing_pdf_xml', body['controls'])
+        # Unpaid AS4 without DueDate in UBL still alerts on due date.
+        self.assertIn('missing_due_date', body['controls'])
+
+    def test_f1_csv_paid_suppresses_missing_pdf_and_due_date(self):
+        """F1 / prior intermediary import + paid: no PDF/XML or due-date alerts."""
+        expense = self._expense(due_date=None, status='paid', source='f1_csv')
+        body = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertNotIn('missing_pdf_xml', body['controls'])
+        self.assertNotIn('missing_due_date', body['controls'])
 
     def test_attachment_after_posting_is_notice_not_mismatch(self):
         invoice = self._invoice()
@@ -1012,6 +1200,31 @@ class DocumentReadModelTests(TestCase):
         self.assertIn('as_of', body)
         self.assertIn('EUR', body['summary']['by_currency'])
 
+    def test_kpi_is_single_eur_and_foreign_row_shows_book_gross(self):
+        euro_sign = self._expense(amount=Decimal('50.00'), currency='€', tax_amount=Decimal('0'))
+        dkk = self._expense(
+            amount=Decimal('731.11'),
+            currency='DKK',
+            tax_amount=Decimal('0'),
+            foreign_vat_amount=Decimal('146.22'),
+            foreign_gross_amount=Decimal('731.11'),
+            foreign_vat_country='DK',
+            foreign_vat_rate=Decimal('25.00'),
+            foreign_vat_treatment='expense',
+            fx_rate=Decimal('7.326486'),
+        )
+        body = self._auth_client().get('/api/documents/').json()
+        self.assertEqual(list(body['summary']['by_currency']), ['EUR'])
+        eur = body['summary']['by_currency']['EUR']
+        self.assertEqual(eur['incoming_count'], 2)
+        self.assertEqual(eur['incoming_gross'], '149.79')
+        row = next(item for item in body['results'] if item['id'] == dkk.pk)
+        self.assertEqual(row['amounts']['gross'], '731.11')
+        self.assertEqual(row['amounts']['currency'], 'DKK')
+        self.assertEqual(row['amounts']['book_gross'], '99.79')
+        sign_row = next(item for item in body['results'] if item['id'] == euro_sign.pk)
+        self.assertEqual(sign_row['amounts']['book_gross'], '50.00')
+
 
     def _super_inbound_link(self, expense, *, pdf_path='', ubl_xml='', guid=None):
         from super_integration.models import SuperDocumentLink
@@ -1375,6 +1588,23 @@ class DocumentReadModelTests(TestCase):
         self.assertIsNone(detail['totals']['prepaid'])
         self.assertEqual(detail['supplier']['id'], expense.supplier_id)
 
+    def test_incoming_detail_exposes_expense_lines_with_account(self):
+        expense = self._expense(amount=Decimal('130.00'), tax_amount=Decimal('26.00'))
+        line = ExpenseLine.all_objects.create(
+            expense=expense,
+            position=1,
+            description='ENC nadoplata',
+            net_amount=Decimal('80.00'),
+            vat_amount=Decimal('20.00'),
+            gross_amount=Decimal('100.00'),
+        )
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        self.assertEqual(len(detail['lines']), 1)
+        self.assertEqual(detail['lines'][0]['id'], line.pk)
+        self.assertEqual(detail['lines'][0]['name'], 'ENC nadoplata')
+        self.assertEqual(detail['lines'][0]['net_amount'], '80.00')
+        self.assertIsNone(detail['lines'][0]['posting_account'])
+
     def test_incoming_detail_cross_tenant_is_404(self):
         expense = self._expense()
         self._super_inbound_link(expense, ubl_xml=_PR_A_UBL)
@@ -1386,3 +1616,385 @@ class DocumentReadModelTests(TestCase):
             outsider.get(f'/api/documents/incoming/{expense.pk}/').status_code,
             404,
         )
+
+    def test_settlement_trail_bank_pfc_possible_duplicate_expense_paid(self):
+        expense = self._expense(amount=Decimal('33000.00'), tax_amount=Decimal('0.00'))
+        approved = self._journal(
+            expense,
+            number='JE-APP',
+            description='[expense_approved] T — 33000.00 EUR',
+        )
+        bank_je = self._journal(
+            expense,
+            number='JE-BANK',
+            description='[bank_reconcile:btx-1] expense Bank reconcile',
+        )
+        pfc_je = self._journal(
+            expense,
+            number='JE-PFC',
+            description='[private_funds:1] supplier_payment',
+        )
+        # Real private-funds JEs may omit expense GFK; allocation alone must classify.
+        JournalEntry.all_objects.filter(pk=pfc_je.pk).update(
+            source_content_type=None,
+            source_object_id=None,
+        )
+        paid_je = self._journal(
+            expense,
+            number='JE-PAID',
+            description='[expense_paid] T — 33000.00 EUR',
+        )
+        account = ChartOfAccounts.all_objects.filter(tenant=self.tenant).first()
+        JournalEntryLine.objects.create(
+            journal_entry=paid_je,
+            account=account,
+            debit_amount=Decimal('33000.00'),
+            credit_amount=Decimal('0.00'),
+        )
+        sub = self._subledger(
+            expense,
+            status='closed',
+            direction='payable',
+            open_amount=Decimal('0.00'),
+            journal_entry=approved,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=bank_je,
+            amount=Decimal('23100.00'),
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=pfc_je,
+            amount=Decimal('9900.00'),
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='Glavni',
+            bank_name='PBZ',
+            account_number='111',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-TRAIL-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 20),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('23100.00'),
+            imported_by=self.user,
+        )
+        tx = BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 20),
+            amount=Decimal('23100.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='doznaka',
+            counterparty_name='SaM Automobile',
+            match_status='matched',
+            matched_journal_entry=bank_je,
+        )
+        ante = Partner.all_objects.create(
+            tenant=self.tenant,
+            name='Ante Vrcan',
+            tax_number='11528564544',
+            partner_type='other',
+            status='active',
+            address='X',
+            city='Zagreb',
+            postal_code='10000',
+            country_code='HR',
+        )
+        expense_ct = ContentType.objects.get_for_model(Expense)
+        PrivateFundsClaim.all_objects.create(
+            tenant=self.tenant,
+            number='PFC-202605-0001',
+            claim_type=PrivateFundsClaim.CLAIM_SUPPLIER_PAYMENT,
+            partner=ante,
+            amount=Decimal('9900.00'),
+            currency='EUR',
+            claim_date=date(2026, 5, 20),
+            status=PrivateFundsClaim.STATUS_POSTED,
+            related_content_type=expense_ct,
+            related_object_id=expense.pk,
+            journal_entry=pfc_je,
+            created_by=self.user,
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        trail = detail['settlement_trail']
+        self.assertEqual(trail['totals']['obligation'], '33000.00')
+        self.assertEqual(trail['totals']['allocated'], '33000.00')
+        self.assertEqual(trail['totals']['open'], '0.00')
+        self.assertEqual(trail['obligation']['journal_entry_id'], approved.pk)
+        kinds = [row['kind'] for row in trail['closings']]
+        self.assertEqual(kinds, ['bank', 'private_funds'])
+        bank_row = trail['closings'][0]
+        self.assertEqual(bank_row['bank_transaction_id'], tx.pk)
+        self.assertEqual(bank_row['bank_statement_id'], statement.pk)
+        self.assertEqual(bank_row['amount'], '23100.00')
+        pfc_row = trail['closings'][1]
+        self.assertEqual(pfc_row['claim_number'], 'PFC-202605-0001')
+        self.assertEqual(pfc_row['partner_id'], ante.pk)
+        self.assertEqual(pfc_row['amount'], '9900.00')
+        self.assertEqual(len(trail['system_entries']), 1)
+        self.assertEqual(trail['system_entries'][0]['journal_entry_id'], paid_je.pk)
+        self.assertEqual(trail['system_entries'][0]['amount'], '33000.00')
+        codes = [w['code'] for w in trail['warnings']]
+        self.assertIn('possible_duplicate_expense_paid', codes)
+        self.assertEqual(detail['accounting']['journal_entry_id'], approved.pk)
+
+    def test_settlement_trail_partial_close_no_duplicate_warning(self):
+        expense = self._expense(amount=Decimal('100.00'), tax_amount=Decimal('0.00'))
+        approved = self._journal(
+            expense,
+            number='JE-P-APP',
+            description='[expense_approved] partial',
+        )
+        bank_je = self._journal(
+            expense,
+            number='JE-P-BANK',
+            description='[bank_reconcile:btx-2] partial',
+        )
+        self._journal(
+            expense,
+            number='JE-P-PAID',
+            description='[expense_paid] still open',
+        )
+        sub = self._subledger(
+            expense,
+            status='open',
+            direction='payable',
+            open_amount=Decimal('60.00'),
+            journal_entry=approved,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=bank_je,
+            amount=Decimal('40.00'),
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='Glavni2',
+            bank_name='PBZ',
+            account_number='112',
+            iban='HR6124070001100204772',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-TRAIL-2',
+            bank_account=bank_account,
+            statement_date=date(2026, 5, 20),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('40.00'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 5, 20),
+            amount=Decimal('40.00'),
+            currency='EUR',
+            transaction_type='debit',
+            description='partial',
+            match_status='matched',
+            matched_journal_entry=bank_je,
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        trail = detail['settlement_trail']
+        self.assertEqual(trail['totals']['open'], '60.00')
+        self.assertEqual(trail['totals']['allocated'], '40.00')
+        self.assertEqual([c['kind'] for c in trail['closings']], ['bank'])
+        self.assertEqual(trail['warnings'], [])
+        self.assertEqual(len(trail['system_entries']), 1)
+
+    def test_settlement_trail_other_kind_allocation_no_crash(self):
+        expense = self._expense(amount=Decimal('80.00'), tax_amount=Decimal('0.00'))
+        approved = self._journal(
+            expense,
+            number='JE-O-APP',
+            description='[expense_approved] other',
+        )
+        other_je = self._journal(
+            expense,
+            number='JE-O-MAN',
+            description='Manual settlement without bank or PFC',
+        )
+        sub = self._subledger(
+            expense,
+            status='closed',
+            direction='payable',
+            open_amount=Decimal('0.00'),
+            journal_entry=approved,
+        )
+        SubledgerAllocation.all_objects.create(
+            tenant=self.tenant,
+            subledger_item=sub,
+            journal_entry=other_je,
+            amount=Decimal('80.00'),
+        )
+
+        detail = self._auth_client().get(f'/api/documents/incoming/{expense.pk}/').json()
+        trail = detail['settlement_trail']
+        self.assertEqual(len(trail['closings']), 1)
+        self.assertEqual(trail['closings'][0]['kind'], 'other')
+        self.assertEqual(trail['closings'][0]['journal_entry_id'], other_je.pk)
+        self.assertIsNone(trail['closings'][0]['bank_transaction_id'])
+        self.assertIsNone(trail['closings'][0]['private_funds_claim_id'])
+        self.assertEqual(trail['warnings'], [])
+
+    def _official(self, **overrides):
+        defaults = {
+            'tenant': self.tenant,
+            'kind': OfficialDocument.KIND_TAX_DECISION,
+            'issuer': self.supplier,
+            'document_number': f'UP/I-{OfficialDocument.all_objects.filter(tenant=self.tenant).count() + 1}',
+            'issue_date': date(2026, 8, 3),
+            'amount': Decimal('10347.20'),
+            'currency': 'EUR',
+            'status': OfficialDocument.STATUS_REGISTERED,
+            'created_by': self.user,
+        }
+        defaults.update(overrides)
+        document = OfficialDocument.all_objects.create(**defaults)
+        document.original_file.save(
+            'rjesnje.pdf',
+            ContentFile(b'%PDF-1.4\ntrailer\n<<>>\n%%EOF\n'),
+            save=False,
+        )
+        document.original_filename = 'rjesnje.pdf'
+        document.content_type = 'application/pdf'
+        document.file_size = document.original_file.size
+        document.save()
+        return document
+
+    def test_official_incoming_filter_excludes_official(self):
+        document = self._official()
+        self._expense()
+        incoming = self._auth_client().get('/api/documents/?direction=incoming').json()
+        self.assertTrue(all(row['direction'] == 'incoming' for row in incoming['results']))
+        self.assertFalse(any(row['kind'] == 'official' for row in incoming['results']))
+        grouped = self._auth_client().get('/api/documents/?direction=incoming,official').json()
+        kinds = {row['kind'] for row in grouped['results']}
+        self.assertIn('official', kinds)
+        self.assertIn('expense', kinds)
+        only_off = self._auth_client().get('/api/documents/?direction=official').json()
+        self.assertGreaterEqual(only_off['count'], 1)
+        self.assertTrue(all(row['direction'] == 'official' for row in only_off['results']))
+        self.assertTrue(any(row['id'] == document.pk for row in only_off['results']))
+
+    def test_official_detail_and_pdf_download(self):
+        document = self._official()
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['kind'], 'official')
+        self.assertEqual(detail['direction'], 'official')
+        self.assertTrue(detail['pdf_available'])
+        self.assertEqual(detail['subledger']['open_amount']['reason'], 'not_recorded')
+        self.assertNotIn('issued_unposted', detail['controls'])
+        pdf = self._auth_client().get(f'/api/documents/official/{document.pk}/pdf/')
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf['Content-Type'], 'application/pdf')
+
+    def test_official_other_tenant_pdf_is_404(self):
+        document = self._official()
+        other_user = get_user_model().objects.create_user(username='off-x', password='test')
+        TenantMembership.objects.create(user=other_user, tenant=self.other, role='owner')
+        response = self._auth_client(other_user, host=OTHER_HOST).get(
+            f'/api/documents/official/{document.pk}/pdf/'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_official_unposted_has_no_issued_unposted_control(self):
+        document = self._official()
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['posting']['state']['value'], 'not_posted')
+        self.assertNotIn('issued_unposted', detail['controls'])
+        self.assertEqual(detail['operational_status']['value'], 'registered')
+
+    def test_official_bank_matched_posted_je_is_paid(self):
+        document = self._official()
+        je = self._journal(document, number='JE-OFF-PAY', description='PPMV')
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='EUR-OFF',
+            bank_name='OTP',
+            account_number='111',
+            iban='HR6124070001100204771',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-OFF-1',
+            bank_account=bank_account,
+            statement_date=date(2026, 8, 10),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('10347.20'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 8, 10),
+            amount=Decimal('10347.20'),
+            currency='EUR',
+            transaction_type='debit',
+            description='PPMV',
+            match_status='matched',
+            matched_journal_entry=je,
+        )
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['operational_status']['value'], 'paid')
+        self.assertEqual(detail['subledger']['open_amount']['reason'], 'not_recorded')
+
+    def test_official_open_ap_is_ssot_over_bank_match(self):
+        document = self._official()
+        je = self._journal(document, number='JE-OFF-AB', description='[official_document_posted] PPMV')
+        SubledgerItem.all_objects.create(
+            tenant=self.tenant,
+            partner=document.issuer,
+            direction='payable',
+            source_content_type=ContentType.objects.get_for_model(OfficialDocument),
+            source_object_id=document.pk,
+            journal_entry=je,
+            original_amount=document.amount,
+            open_amount=document.amount,
+            due_date=document.issue_date,
+            status='open',
+        )
+        bank_account = BankAccount.all_objects.create(
+            tenant=self.tenant,
+            account_name='EUR-OFF-AP',
+            bank_name='OTP',
+            account_number='222',
+            iban='HR6124070001100204772',
+        )
+        statement = BankStatement.all_objects.create(
+            tenant=self.tenant,
+            statement_number='ST-OFF-2',
+            bank_account=bank_account,
+            statement_date=date(2026, 8, 10),
+            opening_balance=Decimal('0.00'),
+            closing_balance=Decimal('10347.20'),
+            imported_by=self.user,
+        )
+        BankTransaction.all_objects.create(
+            tenant=self.tenant,
+            bank_statement=statement,
+            transaction_date=date(2026, 8, 10),
+            amount=Decimal('10347.20'),
+            currency='EUR',
+            transaction_type='debit',
+            description='PPMV',
+            match_status='matched',
+            matched_journal_entry=je,
+        )
+        detail = self._auth_client().get(f'/api/documents/official/{document.pk}/').json()
+        self.assertEqual(detail['operational_status']['value'], 'posted')
+        self.assertEqual(detail['operational_status']['source'], 'journal_entry')
+        self.assertEqual(detail['subledger']['state']['value'], 'open')
+        self.assertEqual(detail['subledger']['open_amount']['value'], '10347.20')

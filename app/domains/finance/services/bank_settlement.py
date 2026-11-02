@@ -13,8 +13,15 @@ from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
-from accounting.models import Deposit, JournalEntry, JournalEntryLine, PrivateFundsClaim, SubledgerItem
+from accounting.models import (
+    Deposit,
+    JournalEntry,
+    OfficialDocument,
+    PrivateFundsClaim,
+    SubledgerItem,
+)
 from accounting.services.analytics import get_or_create_analytic_for_partner
+from accounting.services.journal_lines import persist_journal_entry_line
 from accounting.services.posting import (
     get_or_create_fiscal_period,
     resolve_account,
@@ -62,6 +69,25 @@ def _bank_ledger_account(tenant, bank: BankAccount):
     return resolve_account(tenant, '1000')
 
 
+def _format_hr_amount(value) -> str:
+    quantized = Decimal(str(value)).quantize(Decimal('0.01'))
+    sign = '-' if quantized < 0 else ''
+    whole, frac = f'{abs(quantized):.2f}'.split('.')
+    groups = []
+    while whole:
+        groups.append(whole[-3:])
+        whole = whole[:-3]
+    return f'{sign}{".".join(reversed(groups))},{frac}'
+
+
+def bank_source_suffix(source_amount, source_currency) -> str:
+    """Kunski (ili drugi ne-EUR) iznos uz opis bankovne stavke temeljnice."""
+    code = (source_currency or '').strip().upper()
+    if code in ('', 'EUR') or source_amount is None:
+        return ''
+    return f' · {_format_hr_amount(source_amount)} {code}'
+
+
 def _money(value) -> Decimal:
     amount = Decimal(str(value)).quantize(Decimal('0.01'))
     if amount <= Decimal('0'):
@@ -99,13 +125,12 @@ def _existing_btx_entry(*, tenant, bank_transaction_id: int) -> JournalEntry | N
 
 
 def _mark_expense_paid_if_closed(*, tenant, expense: Expense) -> None:
-    item = get_subledger_item_for_source(tenant, expense)
-    if item is None or item.status != 'closed':
-        return
-    if expense.status == 'paid':
-        return
-    expense.status = 'paid'
-    expense.save(update_fields=['status', 'updated_at'])
+    from domains.finance.services.payable_documents import mark_expense_paid_if_closed
+
+    # Clearing entry already debited the supplier. Status paid must not
+    # fire the expense_paid rule, which would debit 2201 and credit the bank again.
+    expense._skip_auto_posting = True
+    mark_expense_paid_if_closed(tenant=tenant, expense=expense)
 
 
 def settle_open_item_from_bank(
@@ -119,6 +144,8 @@ def settle_open_item_from_bank(
     transaction_type: str,
     bank_transaction_id: int,
     locked_source=None,
+    source_amount=None,
+    source_currency=None,
 ) -> SettlementResult:
     """Finance use-case: settle open item and return the settlement JE for bank match.
 
@@ -142,6 +169,7 @@ def settle_open_item_from_bank(
         raise SettlementConflict('missing_source', 'Izvor stavke nije dostupan.')
 
     model = subledger_item.source_content_type.model
+    bank_suffix = bank_source_suffix(source_amount, source_currency)
     if model == 'deposit':
         if amount != subledger_item.open_amount:
             raise SettlementBadRequest(
@@ -197,6 +225,7 @@ def settle_open_item_from_bank(
             amount=amount,
             settlement_date=settlement_date,
             bank_transaction_id=bank_transaction_id,
+            bank_suffix=bank_suffix,
         )
         return SettlementResult(journal_entry=entry, source_type='invoice', source_id=source.pk)
 
@@ -211,6 +240,7 @@ def settle_open_item_from_bank(
             amount=amount,
             settlement_date=settlement_date,
             bank_transaction_id=bank_transaction_id,
+            bank_suffix=bank_suffix,
         )
         return SettlementResult(journal_entry=entry, source_type='expense', source_id=source.pk)
 
@@ -225,10 +255,30 @@ def settle_open_item_from_bank(
             amount=amount,
             settlement_date=settlement_date,
             bank_transaction_id=bank_transaction_id,
+            bank_suffix=bank_suffix,
         )
         return SettlementResult(
             journal_entry=entry,
             source_type='privatefundsclaim',
+            source_id=source.pk,
+        )
+
+    if model == 'officialdocument':
+        if transaction_type != 'debit':
+            raise SettlementBadRequest('direction_mismatch', 'Obveza zahtijeva terećenje.')
+        entry = _settle_official_document(
+            tenant=tenant,
+            user=user,
+            document=source,
+            bank_account=bank_account,
+            amount=amount,
+            settlement_date=settlement_date,
+            bank_transaction_id=bank_transaction_id,
+            bank_suffix=bank_suffix,
+        )
+        return SettlementResult(
+            journal_entry=entry,
+            source_type='officialdocument',
             source_id=source.pk,
         )
 
@@ -244,6 +294,7 @@ def _settle_invoice(
     amount,
     settlement_date,
     bank_transaction_id: int,
+    bank_suffix: str = '',
 ):
     payment = Payment.all_objects.create(
         tenant=tenant,
@@ -279,14 +330,14 @@ def _settle_invoice(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
-        description='Naplata — banka',
+        description=f'Naplata — banka{bank_suffix}',
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=customer,
         analytic_account=analytic,
@@ -310,6 +361,7 @@ def _settle_expense(
     amount,
     settlement_date,
     bank_transaction_id: int,
+    bank_suffix: str = '',
 ):
     partner = expense.supplier
     if partner is None:
@@ -331,7 +383,7 @@ def _settle_expense(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=payable,
         analytic_account=analytic,
@@ -339,10 +391,10 @@ def _settle_expense(
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
-        description='Plaćanje — banka',
+        description=f'Plaćanje — banka{bank_suffix}',
         debit_amount=Decimal('0'),
         credit_amount=amount,
     )
@@ -351,6 +403,59 @@ def _settle_expense(
     if allocated is None:
         raise SettlementConflict('allocation_failed', 'Alokacija saldakonta nije uspjela.')
     _mark_expense_paid_if_closed(tenant=tenant, expense=expense)
+    return entry
+
+
+def _settle_official_document(
+    *,
+    tenant,
+    user,
+    document: OfficialDocument,
+    bank_account,
+    amount,
+    settlement_date,
+    bank_transaction_id: int,
+    bank_suffix: str = '',
+):
+    partner = document.issuer
+    if partner is None:
+        raise SettlementBadRequest('missing_partner', 'Službeni dokument nema izdavatelja.')
+    bank_coa = _bank_ledger_account(tenant, bank_account)
+    analytic = get_or_create_analytic_for_partner(tenant, partner, synthetic_code='2201')
+    payable = analytic.chart_account
+    marker = bank_reconcile_marker(bank_transaction_id)
+    entry = JournalEntry.all_objects.create(
+        tenant=tenant,
+        entry_number=_next_entry_number(tenant, settlement_date),
+        entry_date=settlement_date,
+        status='draft',
+        description=f'{marker} officialdocument-{document.pk} Bank reconcile — {document.document_number}',
+        reference=document.document_number or '',
+        is_auto=True,
+        source_content_type=ContentType.objects.get_for_model(OfficialDocument),
+        source_object_id=document.pk,
+        fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
+        created_by=user,
+    )
+    persist_journal_entry_line(
+        journal_entry=entry,
+        account=payable,
+        analytic_account=analytic,
+        description='Plaćanje obveze',
+        debit_amount=amount,
+        credit_amount=Decimal('0'),
+    )
+    persist_journal_entry_line(
+        journal_entry=entry,
+        account=bank_coa,
+        description=f'Plaćanje — banka{bank_suffix}',
+        debit_amount=Decimal('0'),
+        credit_amount=amount,
+    )
+    entry.post(user)
+    allocated = allocate_payment(tenant, source=document, journal_entry=entry, amount=amount)
+    if allocated is None:
+        raise SettlementConflict('allocation_failed', 'Alokacija saldakonta nije uspjela.')
     return entry
 
 
@@ -363,6 +468,7 @@ def _settle_private_funds_claim(
     amount,
     settlement_date,
     bank_transaction_id: int,
+    bank_suffix: str = '',
 ):
     """Refund private funds payable: Dr 2309-P / Cr bank + allocate claim item."""
     if claim.status != PrivateFundsClaim.STATUS_POSTED:
@@ -387,7 +493,7 @@ def _settle_private_funds_claim(
         fiscal_period=get_or_create_fiscal_period(tenant, settlement_date),
         created_by=user,
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=payable,
         analytic_account=analytic,
@@ -395,10 +501,10 @@ def _settle_private_funds_claim(
         debit_amount=amount,
         credit_amount=Decimal('0'),
     )
-    JournalEntryLine.objects.create(
+    persist_journal_entry_line(
         journal_entry=entry,
         account=bank_coa,
-        description='Povrat — banka',
+        description=f'Povrat — banka{bank_suffix}',
         debit_amount=Decimal('0'),
         credit_amount=amount,
     )

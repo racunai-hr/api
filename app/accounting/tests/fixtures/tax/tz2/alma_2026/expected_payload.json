@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "mapping_version": 1,
+  "period_from": "2026-01-01",
+  "period_to": "2026-12-31",
+  "taxpayer": {
+    "first_name": "ALMA",
+    "last_name": "ČIZMIĆ",
+    "oib": "20501805574",
+    "municipality_code": "500",
+    "city": "VODICE",
+    "street": "ULICA BRIBIRSKIH KNEZOVA",
+    "house_number": "0009"
+  },
+  "podatak01": 10,
+  "podatak02": "5.97",
+  "podatak03": "59.70",
+  "podatak04": 0,
+  "podatak17": "1.99",
+  "podatak25": "59.70",
+  "podatak31": "59.70",
+  "podatak32": "0",
+  "podatak34": "1",
+  "podatak35": "19.90",
+  "podatak36": "17360.00"
+}

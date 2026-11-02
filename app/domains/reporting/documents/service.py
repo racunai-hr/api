@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Sum
 from django.http import Http404
 
-from accounting.models import Deposit, SubledgerItem
+from accounting.models import Deposit, OfficialDocument, SubledgerItem
 from expenses.models import Expense, ExpenseAttachment
 from invoices.models import Invoice
 
@@ -20,6 +20,7 @@ from domains.reporting.documents.query import (
     filtered_deposits,
     filtered_expenses,
     filtered_invoices,
+    filtered_official,
     paginate_union,
     union_rows,
 )
@@ -32,24 +33,30 @@ def _keys_from_union_page(page_rows) -> list[tuple[str, int]]:
 
 
 def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
-    from django.db.models import Count
+    from decimal import Decimal
 
-    from domains.reporting.documents.projection import money
+    from domains.reporting.documents.projection import book_eur_amount, money
 
     invoices = filtered_invoices(tenant, filters, today)
     expenses = filtered_expenses(tenant, filters, today)
     deposits = filtered_deposits(tenant, filters, today)
+    official = filtered_official(tenant, filters, today)
     invoice_ct = ContentType.objects.get_for_model(Invoice)
     expense_ct = ContentType.objects.get_for_model(Expense)
     deposit_ct = ContentType.objects.get_for_model(Deposit)
+    official_ct = ContentType.objects.get_for_model(OfficialDocument)
 
     inv_count = invoices.count()
     inv_gross = invoices.aggregate(total=Sum('total_amount'))['total']
     dep_count = deposits.count()
     dep_gross = deposits.aggregate(total=Sum('amount'))['total']
-    exp_by_currency = list(
-        expenses.values('currency').annotate(count=Count('id'), total=Sum('amount'))
-    )
+    incoming_count = 0
+    incoming_gross = Decimal('0.00')
+    for document in list(expenses) + list(official):
+        incoming_count += 1
+        booked = book_eur_amount(document)
+        if booked is not None:
+            incoming_gross += booked
     open_ar_inv = SubledgerItem.all_objects.filter(
         tenant=tenant,
         direction='receivable',
@@ -65,42 +72,34 @@ def _kpi(tenant, filters: DocumentListFilters, today: date) -> dict:
         source_object_id__in=deposits.values('pk'),
     ).aggregate(total=Sum('open_amount'))['total']
     open_ar = (open_ar_inv or 0) + (open_ar_dep or 0)
-    open_ap = SubledgerItem.all_objects.filter(
+    open_ap_exp = SubledgerItem.all_objects.filter(
         tenant=tenant,
         direction='payable',
         status__in=('open', 'partial'),
         source_content_type=expense_ct,
         source_object_id__in=expenses.values('pk'),
     ).aggregate(total=Sum('open_amount'))['total']
+    open_ap_off = SubledgerItem.all_objects.filter(
+        tenant=tenant,
+        direction='payable',
+        status__in=('open', 'partial'),
+        source_content_type=official_ct,
+        source_object_id__in=official.values('pk'),
+    ).aggregate(total=Sum('open_amount'))['total']
+    open_ap = (open_ap_exp or 0) + (open_ap_off or 0)
 
-    by_currency: dict[str, dict] = {}
-    eur = by_currency.setdefault('EUR', {
-        'outgoing_count': 0,
-        'incoming_count': 0,
-        'outgoing_gross': '0.00',
-        'incoming_gross': '0.00',
-        'open_receivables': '0.00',
-        'open_payables': '0.00',
-    })
-    eur['outgoing_count'] = inv_count + dep_count
-    eur['outgoing_gross'] = money((inv_gross or 0) + (dep_gross or 0))
-    eur['open_receivables'] = money(open_ar)
-
-    for row in exp_by_currency:
-        currency = row['currency'] or 'EUR'
-        bucket = by_currency.setdefault(currency, {
-            'outgoing_count': 0,
-            'incoming_count': 0,
-            'outgoing_gross': '0.00',
-            'incoming_gross': '0.00',
-            'open_receivables': '0.00',
-            'open_payables': '0.00',
-        })
-        bucket['incoming_count'] = row['count']
-        bucket['incoming_gross'] = money(row['total'] or 0)
-    if 'EUR' in by_currency:
-        by_currency['EUR']['open_payables'] = money(open_ap or 0)
-    return {'by_currency': by_currency}
+    return {
+        'by_currency': {
+            'EUR': {
+                'outgoing_count': inv_count + dep_count,
+                'incoming_count': incoming_count,
+                'outgoing_gross': money((inv_gross or 0) + (dep_gross or 0)),
+                'incoming_gross': money(incoming_gross),
+                'open_receivables': money(open_ar),
+                'open_payables': money(open_ap or 0),
+            },
+        },
+    }
 
 
 def list_documents(tenant, filters: DocumentListFilters) -> dict:
@@ -124,7 +123,7 @@ def list_documents(tenant, filters: DocumentListFilters) -> dict:
 
 
 def get_document_detail(tenant, direction: str, pk: int) -> dict:
-    if direction not in ('outgoing', 'incoming', 'deposit'):
+    if direction not in ('outgoing', 'incoming', 'deposit', 'official'):
         raise Http404()
     with read_snapshot() as as_of:
         today = as_of_date(as_of)
@@ -132,6 +131,8 @@ def get_document_detail(tenant, direction: str, pk: int) -> dict:
             model = Invoice
         elif direction == 'incoming':
             model = Expense
+        elif direction == 'official':
+            model = OfficialDocument
         else:
             model = Deposit
         exists = model.all_objects.filter(tenant=tenant, pk=pk).exists()

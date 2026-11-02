@@ -7,7 +7,7 @@
   "entries": [
     {
       "ledger_type": "I-RA",
-      "vat_box": "101",
+      "vat_box": "103",
       "entry_date": "2026-05-20",
       "net_amount": "20000.00",
       "vat_amount": "0.00",
@@ -17,7 +17,7 @@
     },
     {
       "ledger_type": "I-RA",
-      "vat_box": "101",
+      "vat_box": "103",
       "entry_date": "2026-05-28",
       "net_amount": "-5000.00",
       "vat_amount": "0.00",

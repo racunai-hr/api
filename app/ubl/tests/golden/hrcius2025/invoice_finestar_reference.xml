@@ -1,6 +1,41 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:sac="urn:oasis:names:specification:ubl:schema:xsd:SignatureAggregateComponents-2" xmlns:sig="urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2">
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:hrextac="urn:mfin.gov.hr:schema:xsd:HRExtensionAggregateComponents-1" xmlns:sac="urn:oasis:names:specification:ubl:schema:xsd:SignatureAggregateComponents-2" xmlns:sig="urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2">
   <ext:UBLExtensions>
+    <ext:UBLExtension>
+      <ext:ExtensionContent>
+        <hrextac:HRFISK20Data>
+          <hrextac:HRTaxTotal>
+            <cbc:TaxAmount currencyID="EUR">38.00</cbc:TaxAmount>
+            <hrextac:HRTaxSubtotal>
+              <cbc:TaxableAmount currencyID="EUR">100.00</cbc:TaxableAmount>
+              <cbc:TaxAmount currencyID="EUR">25.00</cbc:TaxAmount>
+              <hrextac:HRTaxCategory>
+                <cbc:ID>S</cbc:ID>
+                <cbc:Percent>25.00</cbc:Percent>
+                <hrextac:HRTaxScheme>
+                  <cbc:ID>VAT</cbc:ID>
+                </hrextac:HRTaxScheme>
+              </hrextac:HRTaxCategory>
+            </hrextac:HRTaxSubtotal>
+            <hrextac:HRTaxSubtotal>
+              <cbc:TaxableAmount currencyID="EUR">100.00</cbc:TaxableAmount>
+              <cbc:TaxAmount currencyID="EUR">13.00</cbc:TaxAmount>
+              <hrextac:HRTaxCategory>
+                <cbc:ID>S</cbc:ID>
+                <cbc:Percent>13.00</cbc:Percent>
+                <hrextac:HRTaxScheme>
+                  <cbc:ID>VAT</cbc:ID>
+                </hrextac:HRTaxScheme>
+              </hrextac:HRTaxCategory>
+            </hrextac:HRTaxSubtotal>
+          </hrextac:HRTaxTotal>
+          <hrextac:HRLegalMonetaryTotal>
+            <cbc:TaxExclusiveAmount currencyID="EUR">200.00</cbc:TaxExclusiveAmount>
+            <hrextac:OutOfScopeOfVATAmount currencyID="EUR">0.00</hrextac:OutOfScopeOfVATAmount>
+          </hrextac:HRLegalMonetaryTotal>
+        </hrextac:HRFISK20Data>
+      </ext:ExtensionContent>
+    </ext:UBLExtension>
     <ext:UBLExtension>
       <ext:ExtensionContent>
         <sig:UBLDocumentSignatures>
@@ -23,6 +58,9 @@
       <cac:PartyIdentification>
         <cbc:ID>9934:11528564544::HR99:12345</cbc:ID>
       </cac:PartyIdentification>
+      <cac:PartyName>
+        <cbc:Name>Test Kupac d.o.o.</cbc:Name>
+      </cac:PartyName>
       <cac:PostalAddress>
         <cbc:StreetName>Ilica 21</cbc:StreetName>
         <cbc:CityName>Zagreb</cbc:CityName>
@@ -57,6 +95,9 @@
       <cac:PartyIdentification>
         <cbc:ID>9934:99999999994::HR99:98765</cbc:ID>
       </cac:PartyIdentification>
+      <cac:PartyName>
+        <cbc:Name>Testni kupac</cbc:Name>
+      </cac:PartyName>
       <cac:PostalAddress>
         <cbc:StreetName>SAVSKA CESTA 1</cbc:StreetName>
         <cbc:CityName>Zagreb</cbc:CityName>
@@ -138,7 +179,7 @@
       <cac:ClassifiedTaxCategory>
         <cbc:ID>S</cbc:ID>
         <cbc:Name>HR:PDV13</cbc:Name>
-        <cbc:Percent>13</cbc:Percent>
+        <cbc:Percent>13.00</cbc:Percent>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>
@@ -161,7 +202,7 @@
       <cac:ClassifiedTaxCategory>
         <cbc:ID>S</cbc:ID>
         <cbc:Name>HR:PDV25</cbc:Name>
-        <cbc:Percent>25</cbc:Percent>
+        <cbc:Percent>25.00</cbc:Percent>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>

@@ -5,20 +5,24 @@ from __future__ import annotations
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Prefetch
 
 from accounting.models import (
     Deposit,
     JournalEntry,
     JournalEntryLine,
+    OfficialDocument,
+    PrivateFundsClaim,
     SubledgerAllocation,
     SubledgerItem,
     SubmissionEvent,
     VATLedgerEntry,
     VATReturn,
 )
+from accounting.services.journal_markers import extract_document_type
 from banking.models import BankTransaction
 from banking.provider_models import PaymentOrder
-from expenses.models import Expense, ExpenseAttachment
+from expenses.models import Expense, ExpenseAttachment, ExpenseLine
 from fiscal_gateway.models import As4DocumentLink, FiscalSubmissionLog
 from integrations.models import IntegrationOutboxMessage
 from invoices.models import Invoice, InvoiceItem
@@ -36,9 +40,11 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     outgoing_ids = [pk for direction, pk in keys if direction == 'outgoing']
     incoming_ids = [pk for direction, pk in keys if direction == 'incoming']
     deposit_ids = [pk for direction, pk in keys if direction == 'deposit']
+    official_ids = [pk for direction, pk in keys if direction == 'official']
     invoice_ct = _ct(Invoice)
     expense_ct = _ct(Expense)
     deposit_ct = _ct(Deposit)
+    official_ct = _ct(OfficialDocument)
 
     invoices = {
         inv.pk: inv
@@ -50,12 +56,23 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         exp.pk: exp
         for exp in Expense.all_objects.filter(tenant=tenant, pk__in=incoming_ids).select_related(
             'supplier', 'created_by', 'category',
+        ).prefetch_related(
+            Prefetch(
+                'lines',
+                queryset=ExpenseLine.all_objects.select_related('posting_account').order_by('position'),
+            ),
         )
     }
     deposits = {
         dep.pk: dep
         for dep in Deposit.all_objects.filter(tenant=tenant, pk__in=deposit_ids).select_related(
             'partner', 'created_by', 'return_bank_account',
+        )
+    }
+    official_docs = {
+        doc.pk: doc
+        for doc in OfficialDocument.all_objects.filter(tenant=tenant, pk__in=official_ids).select_related(
+            'issuer', 'created_by', 'related_fixed_asset', 'posting_profile',
         )
     }
     items_by_invoice = defaultdict(list)
@@ -70,6 +87,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         {inv.company_to_id for inv in invoices.values()}
         | {exp.supplier_id for exp in expenses.values()}
         | {dep.partner_id for dep in deposits.values()}
+        | {doc.issuer_id for doc in official_docs.values()}
     )
     partners = {
         p.pk: p
@@ -94,9 +112,11 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     je_out = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), invoice_ct, outgoing_ids)
     je_in = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), expense_ct, incoming_ids)
     je_dep = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), deposit_ct, deposit_ids)
+    je_off = _gfk_map(JournalEntry.all_objects.select_related('fiscal_period'), official_ct, official_ids)
     sub_out = _gfk_map(SubledgerItem.all_objects, invoice_ct, outgoing_ids)
     sub_in = _gfk_map(SubledgerItem.all_objects, expense_ct, incoming_ids)
     sub_dep = _gfk_map(SubledgerItem.all_objects, deposit_ct, deposit_ids)
+    sub_off = _gfk_map(SubledgerItem.all_objects, official_ct, official_ids)
     vat_out = _gfk_map(
         VATLedgerEntry.all_objects.select_related('vat_period'),
         invoice_ct,
@@ -110,7 +130,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
 
     je_ids = [
         e.pk
-        for rows in list(je_out.values()) + list(je_in.values()) + list(je_dep.values())
+        for rows in list(je_out.values()) + list(je_in.values()) + list(je_dep.values()) + list(je_off.values())
         for e in rows
     ]
     lines_by_je = defaultdict(list)
@@ -119,12 +139,83 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
 
     sub_ids = [
         s.pk
-        for rows in list(sub_out.values()) + list(sub_in.values()) + list(sub_dep.values())
+        for rows in list(sub_out.values()) + list(sub_in.values()) + list(sub_dep.values()) + list(sub_off.values())
         for s in rows
     ]
     alloc_by_sub = defaultdict(list)
-    for alloc in SubledgerAllocation.all_objects.filter(tenant=tenant, subledger_item_id__in=sub_ids):
+    for alloc in SubledgerAllocation.all_objects.filter(
+        tenant=tenant, subledger_item_id__in=sub_ids,
+    ).select_related('journal_entry', 'subledger_item__source_content_type'):
         alloc_by_sub[alloc.subledger_item_id].append(alloc)
+
+    alloc_by_je = {}
+    for rows in alloc_by_sub.values():
+        for alloc in rows:
+            if alloc.journal_entry_id:
+                alloc_by_je[alloc.journal_entry_id] = alloc
+    incoming_je_ids = [entry.pk for rows in je_in.values() for entry in rows]
+    missing_je_ids = [pk for pk in incoming_je_ids if pk not in alloc_by_je]
+    if missing_je_ids:
+        for alloc in SubledgerAllocation.all_objects.filter(
+            tenant=tenant, journal_entry_id__in=missing_je_ids,
+        ).select_related('journal_entry', 'subledger_item__source_content_type'):
+            alloc_by_je[alloc.journal_entry_id] = alloc
+
+    storno_source_ids = []
+    for alloc in alloc_by_je.values():
+        je = alloc.journal_entry
+        if je is not None and je.source_content_type_id == expense_ct.id and je.source_object_id:
+            storno_source_ids.append(je.source_object_id)
+    storno_expenses = {
+        exp.pk: exp
+        for exp in Expense.all_objects.filter(
+            tenant=tenant, pk__in=storno_source_ids, amount__lt=0,
+        )
+    }
+    storno_by_je = {}
+    for alloc in alloc_by_je.values():
+        je = alloc.journal_entry
+        exp = storno_expenses.get(je.source_object_id) if je is not None else None
+        if exp is not None and je.source_content_type_id == expense_ct.id:
+            storno_by_je[je.pk] = {'id': exp.pk, 'number': exp.expense_number}
+
+    reversal_targets = []
+    reversal_target_ids = []
+    for exp in expenses.values():
+        if exp.amount >= 0:
+            continue
+        for je in je_in.get(exp.pk, []):
+            if extract_document_type(je.description or '') != 'expense_approved':
+                continue
+            alloc = alloc_by_je.get(je.pk)
+            item = alloc.subledger_item if alloc is not None else None
+            if item is None or item.source_content_type_id != expense_ct.id:
+                continue
+            reversal_targets.append((exp.pk, item.source_object_id))
+            reversal_target_ids.append(item.source_object_id)
+    reversal_numbers = {
+        row.pk: row.expense_number
+        for row in Expense.all_objects.filter(tenant=tenant, pk__in=reversal_target_ids)
+    }
+    reversal_by_expense = {
+        exp_id: {'id': target_id, 'number': reversal_numbers[target_id]}
+        for exp_id, target_id in reversal_targets
+        if target_id in reversal_numbers
+    }
+
+    # Allocation settlement JEs may omit expense/invoice GFK (e.g. private_funds
+    # postings). Include them so bank/PFC reverse lookups still classify closings.
+    settlement_je_ids = list(
+        {
+            *je_ids,
+            *(
+                alloc.journal_entry_id
+                for rows in alloc_by_sub.values()
+                for alloc in rows
+                if alloc.journal_entry_id
+            ),
+        }
+    )
 
     payments_by_invoice = defaultdict(list)
     for pay in Payment.all_objects.filter(tenant=tenant, related_invoice_id__in=outgoing_ids):
@@ -137,10 +228,18 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
     ):
         bank_by_payment[tx.matched_payment_id].append(tx)
     bank_by_je = defaultdict(list)
-    for tx in BankTransaction.all_objects.filter(tenant=tenant, matched_journal_entry_id__in=je_ids).select_related(
-        'bank_statement__bank_account'
-    ):
-        bank_by_je[tx.matched_journal_entry_id].append(tx)
+    if settlement_je_ids:
+        for tx in BankTransaction.all_objects.filter(
+            tenant=tenant, matched_journal_entry_id__in=settlement_je_ids,
+        ).select_related('bank_statement__bank_account'):
+            bank_by_je[tx.matched_journal_entry_id].append(tx)
+
+    pfc_by_je = defaultdict(list)
+    if settlement_je_ids:
+        for claim in PrivateFundsClaim.all_objects.filter(
+            tenant=tenant, journal_entry_id__in=settlement_je_ids,
+        ).select_related('partner'):
+            pfc_by_je[claim.journal_entry_id].append(claim)
 
     orders_by_payment = {}
     for order in PaymentOrder.all_objects.filter(tenant=tenant, payment_id__in=payment_ids):
@@ -194,6 +293,7 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'invoices': invoices,
         'expenses': expenses,
         'deposits': deposits,
+        'official_docs': official_docs,
         'items_by_invoice': items_by_invoice,
         'attachments_by_expense': attachments_by_expense,
         'partners': partners,
@@ -202,16 +302,22 @@ def load_page_relations(tenant, keys: list[tuple[str, int]]):
         'je_out': je_out,
         'je_in': je_in,
         'je_dep': je_dep,
+        'je_off': je_off,
         'sub_out': sub_out,
         'sub_in': sub_in,
         'sub_dep': sub_dep,
+        'sub_off': sub_off,
         'vat_out': vat_out,
         'vat_in': vat_in,
         'lines_by_je': lines_by_je,
         'alloc_by_sub': alloc_by_sub,
+        'alloc_by_je': alloc_by_je,
+        'storno_by_je': storno_by_je,
+        'reversal_by_expense': reversal_by_expense,
         'payments_by_invoice': payments_by_invoice,
         'bank_by_payment': bank_by_payment,
         'bank_by_je': bank_by_je,
+        'pfc_by_je': pfc_by_je,
         'orders_by_payment': orders_by_payment,
         'as4_out': _as4_map(invoice_ct, outgoing_ids),
         'as4_in': _as4_map(expense_ct, incoming_ids),

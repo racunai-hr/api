@@ -53,8 +53,8 @@ class ZpFixtureContractTests(SimpleTestCase):
         goods, services = _sum_rows_goods_services(expected['rows'])
         self.assertEqual(goods, Decimal('15000.00'))
         self.assertEqual(services, Decimal('0.00'))
-        self.assertEqual(Decimal(data['pdv']['fields']['101']), goods)
-        self.assertEqual(Decimal(data['pdv']['fields']['103']), services)
+        self.assertEqual(Decimal(data['pdv']['fields']['103']), goods)
+        self.assertEqual(Decimal(data['pdv']['fields']['104']), services)
 
     def test_multiple_eu_partners_totals(self):
         data = load_scenario('multiple_eu_partners')
@@ -77,7 +77,7 @@ class ZpFixtureContractTests(SimpleTestCase):
         data = load_scenario('pdv_mismatch_101_103')
         self.assertFalse(data['pdv']['must_match_zp_totals'])
         goods, services = _sum_rows_goods_services(data['expected']['rows'])
-        self.assertNotEqual(Decimal(data['pdv']['fields']['101']), goods)
+        self.assertNotEqual(Decimal(data['pdv']['fields']['103']), goods)
 
     def test_period_correction_versions(self):
         data = load_scenario('period_correction')

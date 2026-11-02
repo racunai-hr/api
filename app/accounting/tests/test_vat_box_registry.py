@@ -69,9 +69,14 @@ class VATBoxRegistryTests(SimpleTestCase):
                     BoxValueSource.AGGREGATE_BASE,
                     BoxValueSource.AGGREGATE_VAT,
                     BoxValueSource.COMPUTED_VAT_DUE,
+                    BoxValueSource.TOTAL_I,
+                    BoxValueSource.TOTAL_I_PLUS_II,
                 }:
                     self.assertEqual(definition.field_type, 'scalar')
-                elif definition.value_source == BoxValueSource.BOOLEAN_NO_OUTPUT:
+                elif definition.value_source in {
+                    BoxValueSource.BOOLEAN_NO_OUTPUT,
+                    BoxValueSource.BOOLEAN_TRUE,
+                }:
                     self.assertEqual(definition.field_type, 'bool')
                 elif definition.value_source == BoxValueSource.ZERO:
                     self.assertIn(definition.field_type, ('scalar', 'bool'))
@@ -88,10 +93,16 @@ class VATBoxRegistryTests(SimpleTestCase):
     def test_registry_value_sources_are_explicit(self):
         allowed = set(BoxValueSource)
         special_codes = {
+            '000': BoxValueSource.TOTAL_I_PLUS_II,
+            '100': BoxValueSource.TOTAL_I,
+            '103': BoxValueSource.AGGREGATE_BASE,
+            '104': BoxValueSource.AGGREGATE_BASE,
+            '105': BoxValueSource.AGGREGATE_BASE,
+            '109': BoxValueSource.AGGREGATE_BASE,
             '200': BoxValueSource.CATEGORY_TOTAL_OUTPUT,
             '300': BoxValueSource.CATEGORY_TOTAL_INPUT,
             '400': BoxValueSource.COMPUTED_VAT_DUE,
-            '660': BoxValueSource.BOOLEAN_NO_OUTPUT,
+            '660': BoxValueSource.BOOLEAN_TRUE,
             '701': BoxValueSource.MARGIN_PAIR,
             '702': BoxValueSource.MARGIN_PAIR,
             '703': BoxValueSource.MARGIN_PAIR,
@@ -122,7 +133,7 @@ class VATBoxRegistryTests(SimpleTestCase):
             self.assertTrue(definition.mapping_rule, msg=f'Box {code} requires mapping_rule')
 
     def test_eu_outbound_boxes_are_implemented(self):
-        for code in ('101', '103'):
+        for code in ('103', '104', '105', '109'):
             definition = next(item for item in VAT_BOX_REGISTRY if item.code == code)
             self.assertTrue(definition.implemented, msg=f'Box {code} must be implemented')
             self.assertTrue(definition.mapping_rule, msg=f'Box {code} requires mapping_rule')

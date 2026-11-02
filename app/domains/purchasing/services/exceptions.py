@@ -46,6 +46,30 @@ class PartnerRequired(PurchasingConflict):
         super().__init__('partner_required', 'Partner mora biti spojen prije potvrde računa.')
 
 
+class DirectionUnresolved(PurchasingConflict):
+    def __init__(self):
+        super().__init__(
+            'direction_unresolved',
+            'Smjer dokumenta nije riješen. Odaberite dobavljača ili odbacite nacrt.',
+        )
+
+
+class DirectionOverrideRequired(PurchasingConflict):
+    def __init__(self):
+        super().__init__(
+            'direction_override_required',
+            'Kupac nije prepoznat po OIB-u. Potvrdite da je izdavatelj stvarni dobavljač.',
+        )
+
+
+class OwnCompanySupplier(PurchasingConflict):
+    def __init__(self):
+        super().__init__(
+            'own_company_supplier',
+            'Dobavljač ne može biti vaša tvrtka. Odaberite izdavatelja s računa ili unesite podatke ručno.',
+        )
+
+
 class PurchasingBadRequest(Exception):
     """400 with a stable code (ADR-0023 country / MDM write)."""
 

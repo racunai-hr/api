@@ -15,6 +15,7 @@ from accounting.services.tax_shadow.adapters import adapt_reversal_entry
 from accounting.services.tax_shadow.reversal_relevance import assess_reversal_relevance
 from domains.tax.classification.contracts import OriginTaxOwner, Outcome, TaxRelevance
 from domains.tax.classification.engine import classify
+from expenses.models import Expense, ExpenseCategory
 from invoices.models import Invoice
 from partners.models import Partner
 from tenants.models import Tenant
@@ -39,8 +40,34 @@ class ReversalRelevanceTests(TestCase):
             postal_code='10000',
         )
         cls.invoice_ct = ContentType.objects.get_for_model(Invoice)
+        cls.supplier = Partner.all_objects.create(
+            tenant=cls.tenant,
+            name='Dobavljač',
+            tax_number='98765432109',
+            partner_type='supplier',
+            status='active',
+            address='Ulica 2',
+            city='Zagreb',
+            postal_code='10000',
+        )
+        cls.category = ExpenseCategory.all_objects.create(tenant=cls.tenant, name='Ostalo')
+        cls.expense_ct = ContentType.objects.get_for_model(Expense)
         cls.period = VATPeriod.all_objects.create(
             tenant=cls.tenant, year=2026, month=7, status='open',
+        )
+
+    def _expense(self, *, number='T-2026-0021', status='paid'):
+        return Expense.all_objects.create(
+            tenant=self.tenant,
+            expense_number=number,
+            status=status,
+            category=self.category,
+            supplier=self.supplier,
+            amount=Decimal('82.95'),
+            tax_amount=Decimal('16.59'),
+            expense_date=date(2026, 8, 6),
+            description='Ulazni račun',
+            created_by=self.user,
         )
 
     def _account(self, code):
@@ -495,3 +522,132 @@ class ReversalRelevanceTests(TestCase):
         )
         assessment = assess_reversal_relevance(partial, effects_present=False, effects_ambiguous=False)
         self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+
+    def test_expense_paid_without_pdv_accounts_not_tax_relevant(self):
+        expense = self._expense(number='T-2026-paid')
+        entry = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202608-paid',
+            entry_date=date(2026, 8, 21),
+            status='posted',
+            description='[expense_paid] T-2026-paid - 82.95 EUR',
+            created_by=self.user,
+            source_content_type=self.expense_ct,
+            source_object_id=expense.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=entry, account=self._account('2201'), debit_amount=Decimal('82.95'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=entry, account=self._account('1000'), credit_amount=Decimal('82.95'),
+        )
+        assessment = assess_reversal_relevance(entry, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.NOT_TAX_RELEVANT)
+        self.assertEqual(assessment.origin_tax_owner, OriginTaxOwner.NONE)
+        reversal = entry.reverse(self.user)
+        document = adapt_reversal_entry(reversal, period=self.period)
+        result = classify(document)
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'REV_NOT_TAX_RELEVANT')
+
+    def test_expense_paid_with_pdv_account_stays_undetermined(self):
+        expense = self._expense(number='T-2026-paid-vat')
+        entry = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202608-paid-vat',
+            entry_date=date(2026, 8, 21),
+            status='posted',
+            description='[expense_paid] T-2026-paid-vat - 82.95 EUR',
+            created_by=self.user,
+            source_content_type=self.expense_ct,
+            source_object_id=expense.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=entry, account=self._account('1400'), debit_amount=Decimal('16.59'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=entry, account=self._account('2201'), credit_amount=Decimal('16.59'),
+        )
+        assessment = assess_reversal_relevance(entry, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+        self.assertEqual(assessment.origin_tax_owner, OriginTaxOwner.EXPENSE)
+
+    def test_expense_approved_repost_with_live_replacement_not_tax_relevant(self):
+        expense = self._expense(number='T-2026-0021')
+        original = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202608-0008',
+            entry_date=date(2026, 8, 6),
+            status='posted',
+            description='[expense_approved] T-2026-0021 - 82.95 EUR',
+            created_by=self.user,
+            source_content_type=self.expense_ct,
+            source_object_id=expense.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=original, account=self._account('4120'), debit_amount=Decimal('66.36'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=original, account=self._account('1400'), debit_amount=Decimal('16.59'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=original, account=self._account('2201'), credit_amount=Decimal('82.95'),
+        )
+        reversal = original.reverse(self.user)
+        replacement = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202608-0030',
+            entry_date=date(2026, 8, 24),
+            status='posted',
+            description='[expense_approved] T-2026-0021 - 82.95 EUR',
+            created_by=self.user,
+            source_content_type=self.expense_ct,
+            source_object_id=expense.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('4120'), debit_amount=Decimal('66.36'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('1400'), debit_amount=Decimal('16.59'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=replacement, account=self._account('2201'), credit_amount=Decimal('82.95'),
+        )
+        assessment = assess_reversal_relevance(original, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.NOT_TAX_RELEVANT)
+        self.assertEqual(assessment.origin_tax_owner, OriginTaxOwner.NONE)
+        document = adapt_reversal_entry(reversal, period=self.period)
+        result = classify(document)
+        self.assertEqual(result.outcome, Outcome.NOT_TAX_RELEVANT)
+        self.assertEqual(result.rule_code, 'REV_NOT_TAX_RELEVANT')
+
+    def test_expense_approved_without_replacement_stays_undetermined(self):
+        expense = self._expense(number='T-2026-bare', status='approved')
+        original = JournalEntry.all_objects.create(
+            tenant=self.tenant,
+            entry_number='202608-bare',
+            entry_date=date(2026, 8, 6),
+            status='posted',
+            description='[expense_approved] T-2026-bare - 82.95 EUR',
+            created_by=self.user,
+            source_content_type=self.expense_ct,
+            source_object_id=expense.pk,
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=original, account=self._account('4120'), debit_amount=Decimal('66.36'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=original, account=self._account('1400'), debit_amount=Decimal('16.59'),
+        )
+        JournalEntryLine.objects.create(
+            journal_entry=original, account=self._account('2201'), credit_amount=Decimal('82.95'),
+        )
+        reversal = original.reverse(self.user)
+        assessment = assess_reversal_relevance(original, effects_present=False, effects_ambiguous=False)
+        self.assertEqual(assessment.tax_relevance, TaxRelevance.UNDETERMINED)
+        self.assertEqual(assessment.origin_tax_owner, OriginTaxOwner.EXPENSE)
+        document = adapt_reversal_entry(reversal, period=self.period)
+        result = classify(document)
+        self.assertEqual(result.outcome, Outcome.REVIEW_REQUIRED)
+        self.assertEqual(result.rule_code, 'REVERSAL_TAX_OWNER_UNDETERMINED')
+        self.assertEqual(result.rows, ())

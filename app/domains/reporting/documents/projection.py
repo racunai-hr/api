@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from accounting.models import VATEntryCategory, VATReturnStatus
+from accounting.services.tax_forms.pdv.mapping import cvh_mixed_25_amounts, is_cvh_stp_supplier
 from accounting.services.tax_forms.pdv.supply_procedure import VatSupplyProcedure
 from domains.finance.services.aging import aging_bucket_for_days
 from domains.reporting.documents.provenance import provenanced
@@ -62,13 +63,70 @@ def money(value) -> str | None:
     return str(Decimal(value).quantize(Decimal('0.01')))
 
 
+_EUR_CURRENCY_CODES = frozenset({'EUR', '€', 'EURO'})
+
+
+def is_eur_currency(code: str | None) -> bool:
+    return (code or 'EUR').strip().upper() in _EUR_CURRENCY_CODES
+
+
+def book_eur_amount(document) -> Decimal | None:
+    """Knjigovodstveni bruto u EUR. Strani PDV ide preko tečaja dokumenta."""
+    from accounting.services.foreign_vat import foreign_posting_amounts
+
+    posted = foreign_posting_amounts(document)
+    if posted is not None and posted['gross'] > 0:
+        return posted['gross']
+    amount = getattr(document, 'total_amount', None)
+    if amount is None:
+        amount = getattr(document, 'amount', None)
+    if amount is None:
+        return None
+    gross = Decimal(amount)
+    currency = getattr(document, 'currency', None)
+    if is_eur_currency(currency):
+        return gross.quantize(Decimal('0.01'))
+    if (currency or '').strip().upper() == 'HRK':
+        from accounting.services.fx import to_eur_amount
+
+        return to_eur_amount(gross, 'HRK')
+    rate = getattr(document, 'fx_rate', None)
+    if rate is None or Decimal(rate) <= 0:
+        return None
+    foreign_gross = getattr(document, 'foreign_gross_amount', None)
+    source = Decimal(foreign_gross) if foreign_gross is not None else gross
+    return (source / Decimal(rate)).quantize(Decimal('0.01'))
+
+
 def _canonical_tax_date(direction: str, document) -> date | None:
     if direction == 'outgoing':
         return document.service_date or None
     return None
 
 
-def vat_lifecycle(*, direction: str, document, ledger_rows: list) -> dict:
+def expense_vat_not_applicable(document) -> bool:
+    """True when the classifier excludes a tax-active expense from the VAT book.
+
+    Bank fees, insurance premiums and Swiss telecom with no charged VAT are
+    NOT_TAX_RELEVANT. They have no ledger row by design, not because evidence is pending.
+    """
+    expense_date = getattr(document, 'expense_date', None)
+    if expense_date is None:
+        return False
+    from types import SimpleNamespace
+
+    from accounting.services.tax_shadow.adapters import adapt_expense
+    from domains.tax.classification.contracts import Outcome
+    from domains.tax.classification.engine import classify
+
+    period = SimpleNamespace(year=expense_date.year, month=expense_date.month)
+    result = classify(adapt_expense(document, period=period))
+    return result.outcome == Outcome.NOT_TAX_RELEVANT
+
+
+def vat_lifecycle(*, direction: str, document, ledger_rows: list, not_tax_relevant: bool = False) -> dict:
+    if not_tax_relevant:
+        return provenanced('not_tax_active', source='tax_classification')
     status = document.status
     active = invoice_tax_active(status) if direction == 'outgoing' else expense_tax_active(status)
     if not active:
@@ -100,6 +158,16 @@ def vat_amount_check(*, direction: str, document, ledger_rows: list, items: list
         doc_vat = document.tax_amount
     led_base = sum((row.base_amount for row in ledger_rows), Decimal('0'))
     led_vat = sum((row.vat_amount for row in ledger_rows), Decimal('0'))
+    if (
+        direction != 'outgoing'
+        and abs(led_vat - doc_vat) <= MONEY_TOLERANCE
+        and is_cvh_stp_supplier(getattr(document, 'supplier', None))
+    ):
+        split = cvh_mixed_25_amounts(base_amount=doc_base, vat_amount=doc_vat)
+        if split is not None:
+            taxable_base, vat = split
+            if abs(led_base - taxable_base) <= MONEY_TOLERANCE and abs(led_vat - vat) <= MONEY_TOLERANCE:
+                return None
     if abs(led_base - doc_base) > MONEY_TOLERANCE or abs(led_vat - doc_vat) > MONEY_TOLERANCE:
         return 'mismatch'
     return None
@@ -267,9 +335,17 @@ def operational_incoming(
     disputed: bool,
     as_of_day: date,
     has_receipt_evidence: bool,
+    posting=None,
+    bank_matched: bool = False,
+    applied_reversal: bool = False,
+    closed_by_storno: bool = False,
 ) -> dict:
     if document.status == 'rejected':
         return provenanced('rejected', source='document_read_model')
+    if applied_reversal and Decimal(getattr(document, 'amount', 0) or 0) < 0:
+        return provenanced('reversed', source='subledger_allocation')
+    if closed_by_storno:
+        return provenanced('reversed', source='subledger_allocation')
     if disputed:
         return provenanced('disputed', source='as4_document_link')
     if _subledger_settled(subledger):
@@ -277,6 +353,13 @@ def operational_incoming(
     if subledger is not None and subledger.status == 'partial':
         return provenanced('partially_paid', source='document_read_model')
     if document.status == 'paid' and subledger is None:
+        # Manual asset / JE+bank close without AP subledger (e.g. uvoz vozila).
+        if (
+            bank_matched
+            and posting is not None
+            and getattr(posting, 'status', None) == 'posted'
+        ):
+            return provenanced('paid', source='bank_transaction')
         return provenanced(None, reason='not_provable')
     openish = _subledger_openish(subledger)
     if openish and document.due_date and document.due_date < as_of_day:
@@ -294,6 +377,45 @@ def operational_incoming(
     if document.status == 'paid':
         return provenanced(None, reason='not_provable')
     return provenanced(document.status, source='document_status')
+
+
+def operational_official(*, document, posting=None, bank_matched: bool = False, subledger=None) -> dict:
+    if document.status == 'cancelled':
+        return provenanced('cancelled', source='document_status')
+    if subledger is not None and getattr(subledger, 'status', None) != 'cancelled':
+        if _subledger_settled(subledger):
+            return provenanced('paid', source='subledger_item')
+        if subledger.status == 'partial':
+            return provenanced('partially_paid', source='subledger_item')
+        if posting is not None and getattr(posting, 'status', None) == 'posted':
+            return provenanced('posted', source='journal_entry')
+        return provenanced('unpaid', source='subledger_item')
+    if (
+        bank_matched
+        and posting is not None
+        and getattr(posting, 'status', None) == 'posted'
+    ):
+        return provenanced('paid', source='bank_transaction')
+    if posting is not None and getattr(posting, 'status', None) == 'posted':
+        return provenanced('posted', source='journal_entry')
+    if document.status == 'registered':
+        return provenanced('registered', source='document_status')
+    if document.status == 'draft':
+        return provenanced('draft', source='document_status')
+    return provenanced(document.status, source='document_status')
+
+
+def collect_official_controls(document, *, has_pdf: bool) -> list[str]:
+    alerts: list[str] = []
+    if document.issuer_id is None:
+        alerts.append('missing_partner_or_oib')
+    if not (document.document_number or '').strip() or not document.issue_date:
+        alerts.append('missing_document_number_or_date')
+    if document.amount is None or document.amount <= Decimal('0'):
+        alerts.append('missing_amount')
+    if not has_pdf:
+        alerts.append('missing_pdf_xml')
+    return alerts
 
 
 def operational_deposit(*, document, subledger) -> dict:
@@ -340,7 +462,9 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
 
     if partner_tax_identity_missing(partner):
         alerts.append('missing_partner_or_oib')
-    if not document.due_date:
+    # Due date matters for open payables; settled/paid invoices do not need it.
+    is_settled = document.status == 'paid' or _subledger_settled(subledger)
+    if not document.due_date and not is_settled:
         alerts.append('missing_due_date')
     if not has_pdf_xml:
         alerts.append('missing_pdf_xml')
@@ -361,7 +485,7 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
                 alerts.append('vat_header_mismatch')
 
     active = invoice_tax_active(document.status) if direction == 'outgoing' else expense_tax_active(document.status)
-    if active and not ledger_rows:
+    if active and not ledger_rows and not ctx.get('vat_not_applicable'):
         alerts.append('vat_ledger_missing')
     if vat_period_mismatch(direction=direction, document=document, ledger_rows=ledger_rows):
         alerts.append('vat_period_mismatch')
@@ -388,7 +512,14 @@ def collect_controls(ctx: dict) -> tuple[list[str], list[str]]:
         alerts.append('overdue_unpaid')
     if document.status == 'paid':
         if subledger is None:
-            alerts.append('paid_status_subledger_missing')
+            # Bank-matched posted JE is settlement evidence without AP subledger
+            # (manual asset purchase / uvoz vozila).
+            if not (
+                bank_matched
+                and posting is not None
+                and getattr(posting, 'status', None) == 'posted'
+            ):
+                alerts.append('paid_status_subledger_missing')
         elif subledger.status in ('open', 'partial') and (
             subledger.open_amount is not None and subledger.open_amount > MONEY_TOLERANCE
         ):

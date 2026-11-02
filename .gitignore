@@ -21,6 +21,9 @@ venv/
 
 *.log
 .cursor/
+
+# Local scratch invoices (not product assets)
+/app/.temp/telecom26/
 .vscode/
 .idea/
 .DS_Store

@@ -16,21 +16,46 @@ from config.schema_common import ERROR_400, ERROR_401, ERROR_404, ERROR_409, ERR
 from domains.purchasing.api.authentication import PurchasingJWTAuthentication
 from domains.purchasing.api.permissions import TenantPurchasingWritePermission
 from domains.purchasing.api.schema import (
+    ApplySupplierSerializer,
     ConfirmInvoiceImportSerializer,
     CreatePartnerFromImportSerializer,
+    EracunInboundImportResponseSerializer,
+    EracunInboxRefreshResponseSerializer,
+    EracunRejectionRequestSerializer,
+    EracunRejectionResponseSerializer,
+    ExpenseCategoryListSerializer,
+    ExpenseCategoryPatchSerializer,
+    ExpenseCategorySerializer,
     IncomingInvoiceImportSerializer,
     PurchasingConflictSerializer,
 )
 from domains.purchasing.services.confirm import confirm_invoice_import
+from domains.finance.api.accounting_review_schema import (
+    AccountingReviewRequestSerializer,
+    AccountingReviewSerializer,
+)
+from domains.purchasing.services.expense_categories import (
+    list_expense_categories,
+    update_expense_category,
+)
 from domains.purchasing.services.exceptions import PurchasingBadRequest, PurchasingConflict
+from domains.finance.services.account_resolver import ExpenseAccountResolutionError
 from domains.purchasing.services.invoice_import import (
     apply_partner_updates,
+    apply_supplier,
     create_partner_from_import,
     discard_invoice_import,
     get_invoice_import,
     retry_invoice_import,
     submit_invoice_import,
 )
+from expenses.models import Expense
+from integrations.services.inbound_eracun_sync import (
+    EracunSyncError,
+    import_available_inbound_eracun,
+    refresh_inbound_inbox,
+)
+from integrations.services.inbound_rejection import InboundRejectionError, submit_eracun_rejection
 
 
 def _require_tenant(request):
@@ -182,6 +207,36 @@ class InvoiceImportCreatePartnerView(_PurchasingApiView):
             raise ValidationError({'detail': str(exc)}) from exc
 
 
+class InvoiceImportApplySupplierView(_PurchasingApiView):
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_invoice_imports_apply_supplier',
+        request=ApplySupplierSerializer,
+        responses={
+            200: IncomingInvoiceImportSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request, pk: int):
+        ser = ApplySupplierSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                apply_supplier(
+                    tenant=_require_tenant(request),
+                    import_id=pk,
+                    data=ser.validated_data,
+                )
+            )
+        except PurchasingConflict as exc:
+            return _conflict(exc)
+        except PurchasingBadRequest as exc:
+            return _bad_request(exc)
+
+
 class InvoiceImportApplyPartnerUpdatesView(_PurchasingApiView):
     @extend_schema(
         tags=['purchasing'],
@@ -218,17 +273,25 @@ class InvoiceImportConfirmView(_PurchasingApiView):
         },
     )
     def post(self, request, pk: int):
+        ser = ConfirmInvoiceImportSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
         try:
             return Response(
                 confirm_invoice_import(
                     tenant=_require_tenant(request),
                     import_id=pk,
                     actor=request.user,
-                    data=request.data,
+                    data=ser.validated_data,
                 )
             )
         except PurchasingConflict as exc:
             return _conflict(exc)
+        except PurchasingBadRequest as exc:
+            return _bad_request(exc)
+        except ExpenseAccountResolutionError as exc:
+            if getattr(exc, 'message_dict', None):
+                return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except DjangoValidationError as exc:
             return Response({'detail': _error_detail(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
@@ -250,3 +313,194 @@ class InvoiceImportDiscardView(_PurchasingApiView):
             return Response(discard_invoice_import(tenant=_require_tenant(request), import_id=pk))
         except PurchasingConflict as exc:
             return _conflict(exc)
+
+
+def _require_idempotency_key(request) -> str:
+    key = (request.headers.get('Idempotency-Key') or request.META.get('HTTP_IDEMPOTENCY_KEY') or '').strip()
+    if not key:
+        raise ValidationError({'Idempotency-Key': 'Header Idempotency-Key je obavezan.'})
+    return key
+
+
+class ExpenseCategoryListView(_PurchasingApiView):
+    http_method_names = ['get', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_expense_categories_list',
+        responses={200: ExpenseCategoryListSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def get(self, request):
+        return Response(list_expense_categories(tenant=_require_tenant(request)))
+
+
+class ExpenseCategoryDetailView(_PurchasingApiView):
+    http_method_names = ['patch', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_expense_categories_partial_update',
+        request=ExpenseCategoryPatchSerializer,
+        responses={
+            200: ExpenseCategorySerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+        },
+    )
+    def patch(self, request, pk: int):
+        ser = ExpenseCategoryPatchSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            return Response(
+                update_expense_category(
+                    tenant=_require_tenant(request),
+                    category_id=pk,
+                    **{
+                        key: ser.validated_data[key]
+                        for key in ('default_account_id', 'default_cost_center_id')
+                        if key in ser.validated_data
+                    },
+                )
+            )
+        except ExpenseAccountResolutionError as exc:
+            if getattr(exc, 'message_dict', None):
+                return Response({'detail': exc.message_dict}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EracunInboundImportView(_PurchasingApiView):
+    """Import gateway inbox documents into draft expenses. No provider round-trip."""
+
+    http_method_names = ['post', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_eracun_inbound_import',
+        request=None,
+        responses={
+            200: EracunInboundImportResponseSerializer,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+            502: PurchasingConflictSerializer,
+            503: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request):
+        tenant = _require_tenant(request)
+        try:
+            body = import_available_inbound_eracun(tenant)
+        except EracunSyncError as exc:
+            return Response({'code': exc.code, 'detail': exc.detail}, status=exc.http_status)
+        return Response(body, status=status.HTTP_200_OK)
+
+
+class EracunInboxRefreshView(_PurchasingApiView):
+    """Ask the gateway to reconcile against the provider. Imports nothing."""
+
+    http_method_names = ['post', 'head', 'options']
+
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_eracun_inbox_refresh',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=None,
+        responses={
+            200: EracunInboxRefreshResponseSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+            502: PurchasingConflictSerializer,
+            503: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request):
+        tenant = _require_tenant(request)
+        idempotency_key = _require_idempotency_key(request)
+        try:
+            body = refresh_inbound_inbox(tenant, idempotency_key=idempotency_key)
+        except EracunSyncError as exc:
+            return Response({'code': exc.code, 'detail': exc.detail}, status=exc.http_status)
+        return Response(body, status=status.HTTP_200_OK)
+
+
+class ExpenseEracunRejectionView(_PurchasingApiView):
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_expenses_eracun_rejection',
+        parameters=[
+            OpenApiParameter(
+                name='Idempotency-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+            ),
+        ],
+        request=EracunRejectionRequestSerializer,
+        responses={
+            202: EracunRejectionResponseSerializer,
+            400: ERROR_400,
+            401: ERROR_401,
+            404: ERROR_404,
+            409: PurchasingConflictSerializer,
+            502: PurchasingConflictSerializer,
+        },
+    )
+    def post(self, request, pk: int):
+        tenant = _require_tenant(request)
+        expense = Expense.all_objects.filter(tenant=tenant, pk=pk).first()
+        if expense is None:
+            raise Http404()
+        serializer = EracunRejectionRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            idempotency_key = _require_idempotency_key(request)
+            body = submit_eracun_rejection(
+                expense,
+                reason_code=serializer.validated_data['reason_code'],
+                reason_text=serializer.validated_data.get('reason_text') or '',
+                idempotency_key=idempotency_key,
+            )
+        except InboundRejectionError as exc:
+            status_code = (
+                status.HTTP_502_BAD_GATEWAY
+                if exc.http_status == 502
+                else (
+                    status.HTTP_400_BAD_REQUEST
+                    if exc.http_status == 400
+                    else status.HTTP_409_CONFLICT
+                )
+            )
+            return Response({'code': exc.code, 'detail': exc.detail}, status=status_code)
+        return Response(body, status=status.HTTP_202_ACCEPTED)
+
+
+class InvoiceImportAccountingReviewView(_PurchasingApiView):
+    @extend_schema(
+        tags=['purchasing'],
+        operation_id='purchasing_invoice_import_accounting_review',
+        request=AccountingReviewRequestSerializer,
+        responses={200: AccountingReviewSerializer, 401: ERROR_401, 404: ERROR_404},
+    )
+    def post(self, request, pk: int):
+        from domains.finance.services.accounting_review import review_invoice_import
+        from expenses.models import IncomingInvoiceImport
+
+        ser = AccountingReviewRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        tenant = _require_tenant(request)
+        run = IncomingInvoiceImport.all_objects.filter(tenant=tenant, pk=pk).first()
+        if run is None:
+            raise Http404()
+        return Response(
+            review_invoice_import(tenant, run, ser.validated_data.get('answers'), request.user)
+        )

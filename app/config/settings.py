@@ -18,6 +18,7 @@ SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
+JOPPD_SUBMIT_ENABLED = env.bool('JOPPD_SUBMIT_ENABLED', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
@@ -35,6 +36,8 @@ TENANT_LEGACY_HOST_MAP = {
     'erp.finestar.hr': 'finestar',
 }
 TENANT_DEFAULT_SLUG = env('TENANT_DEFAULT_SLUG', default='')
+# Local develop only: honour X-Tenant-Slug when Host cannot carry the tenant.
+TENANT_ALLOW_HEADER_OVERRIDE = env.bool('TENANT_ALLOW_HEADER_OVERRIDE', default=False)
 TENANT_SESSION_KEY = 'active_tenant_id'
 TENANT_INVITATION_EXPIRY_DAYS = 7
 TENANT_TRAEFIK_DYNAMIC_PATH = env(
@@ -94,6 +97,9 @@ LOCAL_APPS = [
     'ubl',
     'super_integration',
     'fiscal_gateway',
+
+    # HR / plaće
+    'payroll',
 ]
 
 # Također zakomentaj:
@@ -187,6 +193,7 @@ BANKING_IMPORT_MAX_BYTES = env.int('BANKING_IMPORT_MAX_BYTES', default=20 * 1024
 # Purchasing OCR (Purchasing AI)
 OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
 OPENAI_OCR_MODEL = env('OPENAI_OCR_MODEL', default='gpt-4.1-mini')
+OPENAI_ACCOUNT_SUGGESTION_MODEL = env('OPENAI_ACCOUNT_SUGGESTION_MODEL', default='gpt-6-luna')
 OPENAI_OCR_TIMEOUT_SECONDS = env.int('OPENAI_OCR_TIMEOUT_SECONDS', default=60)
 PURCHASING_OCR_PROVIDER = env('PURCHASING_OCR_PROVIDER', default='openai')
 PURCHASING_OCR_FAKE_BEHAVIOR = env('PURCHASING_OCR_FAKE_BEHAVIOR', default='ok')
@@ -212,7 +219,7 @@ if _HAS_DRF_SPECTACULAR:
 SPECTACULAR_SETTINGS = {
     'TITLE': 'računAI API',
     'DESCRIPTION': (
-        'Tenant JWT REST ugovor za auth, documents, banking, partners, finance i purchasing. '
+        'Tenant JWT REST ugovor za auth, documents, banking, partners, finance, assets, purchasing i tax. '
         'Fiscal/intermediary i AS4 nisu dio ove sheme. '
         'openapi.yaml je generirani artefakt — ne uređivati ručno.'
     ),
@@ -226,7 +233,9 @@ SPECTACULAR_SETTINGS = {
         {'name': 'banking', 'description': 'Banking operational API (ADR-0021)'},
         {'name': 'partners', 'description': 'Partner MDM API (ADR-0022)'},
         {'name': 'finance', 'description': 'Finance partner projections (ADR-0022)'},
+        {'name': 'assets', 'description': 'Assets — dugotrajna imovina i amortizacija (ADR-0010)'},
         {'name': 'purchasing', 'description': 'Purchasing OCR ulaznih računa'},
+        {'name': 'tax', 'description': 'Tax PDV Razdoblja read-model'},
     ],
     'POSTPROCESSING_HOOKS': [
         'drf_spectacular.hooks.postprocess_schema_enums',
@@ -235,6 +244,12 @@ SPECTACULAR_SETTINGS = {
     'PREPROCESSING_HOOKS': [
         'config.openapi_hooks.preprocess_exclude_non_contract',
     ],
+    # Two serializers name the field "kind" with different choice sets.
+    # Without overrides spectacular emits Kind130Enum/Kind748Enum and --fail-on-warn.
+    'ENUM_NAME_OVERRIDES': {
+        'KindEnum': ['invoice', 'expense', 'deposit', 'official'],
+        'CostCenterKindEnum': ['location', 'object', 'overhead', 'group'],
+    },
 }
 
 # Register OpenApiAuthenticationExtension subclasses (requires drf-spectacular).
@@ -265,9 +280,11 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://[\w-]+\.racunai\.hr$",
 ]
 # Browser preflight for JWT banking writes sends Idempotency-Key.
+# x-tenant-slug is the local-dev tenant adapter (see TENANT_ALLOW_HEADER_OVERRIDE).
 CORS_ALLOW_HEADERS = (
     *default_headers,
     "idempotency-key",
+    "x-tenant-slug",
 )
 # Keep short so allow-headers fixes are not stuck in browser preflight cache for a day.
 CORS_PREFLIGHT_MAX_AGE = 600
@@ -296,8 +313,7 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 SUPER_DEFAULT_API_BASE_URL = env('SUPER_DEFAULT_API_BASE_URL', default='https://apitest.super.hr')
 # Human portal base for integration.external_view_url (fail closed if empty / unconfirmed).
 SUPER_PORTAL_BASE_URL = env('SUPER_PORTAL_BASE_URL', default='')
-# Rollback flag: allow SUPER eRačun when DIRECT config is missing (M1.7 deprecation).
-USE_SUPER_ERACUN_FALLBACK = env.bool('USE_SUPER_ERACUN_FALLBACK', default=True)
+# M1.7: removed — SUPER eRačun is never resolved in racunai-api (gateway-only via intermediary).
 
 # Fiskalizacija 2.0 (CIS) — defaulti za Docker mount /run/secrets/fiscal-cert
 FISCAL_CERT_P12_PATH = env(
@@ -306,6 +322,13 @@ FISCAL_CERT_P12_PATH = env(
 )
 FISCAL_CERT_P12_PASSWORD = env('FISCAL_CERT_P12_PASSWORD', default='')
 MPS_SERVICE_URL = env('MPS_SERVICE_URL', default='http://racunai_mps:8000')
+GATEWAY_JWT_SECRET = env('GATEWAY_JWT_SECRET', default='')
+GATEWAY_JWT_ISS = env('GATEWAY_JWT_ISS', default='racunai-api')
+GATEWAY_JWT_AUD = env('GATEWAY_JWT_AUD', default='racunai-intermediary')
+# Safety guard: inbound eRačun sync writes Expense rows from live provider data.
+# Off by default — enable only where that write is wanted.
+ERACUN_INBOUND_SYNC_ENABLED = env.bool('ERACUN_INBOUND_SYNC_ENABLED', default=False)
+ERACUN_INBOUND_IMPORT_LIMIT = env.int('ERACUN_INBOUND_IMPORT_LIMIT', default=25)
 FISCAL_CIS_ENV = env('FISCAL_CIS_ENV', default='demo')
 FISCAL_CIS_ENDPOINT = env('FISCAL_CIS_ENDPOINT', default='')
 FISCAL_CIS_VERIFY_SSL = env.bool('FISCAL_CIS_VERIFY_SSL', default=False)

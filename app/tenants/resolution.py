@@ -69,6 +69,22 @@ def resolve_tenant_from_host(host):
     return None
 
 
+def header_tenant_override(request):
+    """Local develop only: explicit tenant via X-Tenant-Slug.
+
+    Returns (present, tenant). When present is True and tenant is None,
+    the caller must 404 — never fall back to host/TENANT_DEFAULT_SLUG.
+    """
+    if not (settings.DEBUG and getattr(settings, 'TENANT_ALLOW_HEADER_OVERRIDE', False)):
+        return False, None
+    slug = (request.META.get('HTTP_X_TENANT_SLUG') or '').strip().lower()
+    if not slug:
+        return False, None
+    if slug in get_reserved_slugs():
+        return True, None
+    return True, Tenant.objects.filter(slug=slug, is_active=True).first()
+
+
 def resolve_platform_tenant(request):
     """Pick tenant on admin.racunai.hr from session or user membership."""
     session_key = getattr(settings, 'TENANT_SESSION_KEY', 'active_tenant_id')

@@ -10,6 +10,9 @@ from domains.banking.api.views import (
     StatementImportCreateView,
     StatementImportDetailView,
     StatementListView,
+    ExpenseCloseCandidatesView,
+    ExpenseCloseFromBankView,
+    TransactionSupplierPrepaymentView,
     TransactionListView,
     TransactionMatchView,
     TransactionOpenItemCandidatesView,
@@ -42,6 +45,21 @@ urlpatterns = [
         'banking/transactions/<int:pk>/reconcile-open-item/',
         TransactionReconcileOpenItemView.as_view(),
         name='banking-transaction-reconcile-open-item',
+    ),
+    path(
+        'banking/transactions/<int:pk>/supplier-prepayment/',
+        TransactionSupplierPrepaymentView.as_view(),
+        name='banking-transaction-supplier-prepayment',
+    ),
+    path(
+        'banking/expenses/<int:pk>/close-candidates/',
+        ExpenseCloseCandidatesView.as_view(),
+        name='banking-expense-close-candidates',
+    ),
+    path(
+        'banking/expenses/<int:pk>/close-from-bank/',
+        ExpenseCloseFromBankView.as_view(),
+        name='banking-expense-close-from-bank',
     ),
     path('banking/payment-orders/', PaymentOrderListView.as_view(), name='banking-payment-orders'),
     path(

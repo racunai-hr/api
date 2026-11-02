@@ -48,11 +48,9 @@ class Command(BaseCommand):
         year = options['year']
         month = options['month']
 
-        period, _ = VATPeriod.all_objects.get_or_create(
-            tenant=tenant,
-            year=year,
-            month=month,
-        )
+        from accounting.services.vat import get_or_create_vat_period
+
+        period = get_or_create_vat_period(tenant, year, month)
 
         timings: dict[str, float] = {}
 
