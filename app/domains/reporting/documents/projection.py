@@ -411,7 +411,7 @@ def collect_official_controls(document, *, has_pdf: bool) -> list[str]:
         alerts.append('missing_partner_or_oib')
     if not (document.document_number or '').strip() or not document.issue_date:
         alerts.append('missing_document_number_or_date')
-    if document.amount is None or document.amount <= Decimal('0'):
+    if document.kind != 'other' and (document.amount is None or document.amount <= Decimal('0')):
         alerts.append('missing_amount')
     if not has_pdf:
         alerts.append('missing_pdf_xml')

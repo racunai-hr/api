@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounting.models import JournalEntry, OfficialDocument
+from domains.reporting.documents.projection import collect_official_controls
 from partners.models import Partner
 from tenants.models import Tenant, TenantMembership
 
@@ -189,6 +190,50 @@ class OfficialDocumentWriteTests(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_other_archive_with_zero_amount_registers(self):
+        body = self._payload(
+            official_kind='other',
+            document_number='7428243',
+            amount='0',
+            reference='Potvrda o primitku dokumentacije za 2022.',
+            notes='',
+        )
+        body['register'] = 'true'
+        body['file'] = self._pdf('FINA-GFI-2022.pdf')
+        response = self.client.post('/api/finance/official-documents/', body, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['status'], 'registered')
+        self.assertEqual(response.data['amount'], '0.00')
+        document = OfficialDocument.all_objects.get(pk=response.data['id'])
+        self.assertIn('FINA-GFI-2022.pdf', document.original_file.name)
+        self.assertNotIn('missing_amount', collect_official_controls(document, has_pdf=True))
+
+    def test_tax_decision_rejects_zero_amount(self):
+        response = self.client.post(
+            '/api/finance/official-documents/',
+            self._payload(amount='0'),
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['code'], 'invalid_amount')
+
+    def test_zero_amount_archive_cannot_be_posted(self):
+        body = self._payload(
+            official_kind='other',
+            document_number='RGFI-2022-BILANCA',
+            amount='0.00',
+        )
+        body['register'] = 'true'
+        body['file'] = self._pdf()
+        created = self.client.post('/api/finance/official-documents/', body, format='multipart')
+        self.assertEqual(created.status_code, 201, created.data)
+        response = self.client.post(
+            f'/api/finance/official-documents/{created.data["id"]}/post/',
+            HTTP_IDEMPOTENCY_KEY='archive-zero-post',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['code'], 'invalid_amount')
 
     def test_other_tenant_is_404(self):
         created = self.client.post('/api/finance/official-documents/', self._payload(), format='json')
