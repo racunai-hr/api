@@ -50,12 +50,12 @@ class OfficialDocumentBadRequest(Exception):
         self.detail = detail
 
 
-def _money(value) -> Decimal:
+def _money(value, *, allow_zero: bool = False) -> Decimal:
     try:
         amount = Decimal(str(value))
     except (InvalidOperation, TypeError) as exc:
         raise OfficialDocumentBadRequest('invalid_amount', 'Iznos mora biti decimalni broj.') from exc
-    if amount <= Decimal('0'):
+    if amount < Decimal('0') or (amount == Decimal('0') and not allow_zero):
         raise OfficialDocumentBadRequest('invalid_amount', 'Iznos mora biti veći od nule.')
     return amount.quantize(Decimal('0.01'))
 
@@ -287,7 +287,10 @@ def create_official_document(*, tenant, data: dict, file=None, user=None) -> dic
         raise OfficialDocumentBadRequest('invalid_document_number', 'document_number je obavezan.')
     issue_date = _parse_date(data.get('issue_date'), field='issue_date')
     due_date = _parse_date(data.get('due_date'), field='due_date', required=False)
-    amount = _money(data.get('amount'))
+    amount = _money(
+        data.get('amount'),
+        allow_zero=(kind == OfficialDocument.KIND_OTHER),
+    )
     currency = (data.get('currency') or 'EUR').strip().upper() or 'EUR'
     if len(currency) != 3:
         raise OfficialDocumentBadRequest('invalid_currency', 'Valuta mora imati 3 znaka.')
@@ -343,7 +346,9 @@ def register_official_document(*, tenant, document_id: int, file=None) -> dict:
             'incomplete',
             'Za registraciju su obavezni izdavatelj, broj i datum dokumenta.',
         )
-    if document.amount is None or document.amount <= Decimal('0'):
+    if document.amount is None or document.amount < Decimal('0'):
+        raise OfficialDocumentBadRequest('invalid_amount', 'Iznos mora biti veći od nule.')
+    if document.kind != OfficialDocument.KIND_OTHER and document.amount <= Decimal('0'):
         raise OfficialDocumentBadRequest('invalid_amount', 'Iznos mora biti veći od nule.')
     document.status = OfficialDocument.STATUS_REGISTERED
     document.save(update_fields=['status', 'updated_at'])
@@ -491,6 +496,11 @@ def post_official_document(*, tenant, document_id: int, user) -> dict:
         raise OfficialDocumentConflict(
             'invalid_status',
             'Knjiži je dopušten samo za registrirani dokument.',
+        )
+    if document.amount is None or document.amount <= Decimal('0'):
+        raise OfficialDocumentBadRequest(
+            'invalid_amount',
+            'Knjiženje zahtijeva iznos veći od nule.',
         )
     ensure_default_official_document_posting_profiles(tenant)
     profile = document.posting_profile

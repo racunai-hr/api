@@ -2243,8 +2243,9 @@ class OfficialDocument(TenantMixin, models.Model):
     amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
+        validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name='Iznos',
+        help_text='Arhiva (kind=other) smije biti 0. Porezno rješenje i knjiženje traže iznos veći od nule.',
     )
     currency = models.CharField(max_length=3, default='EUR', verbose_name='Valuta')
     status = models.CharField(
